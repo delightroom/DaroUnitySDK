@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UXML xmlns="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+
+  <!-- Header. All visible text is set in C# from DaroImLocalization, so the
+       UXML carries no localizable copy beyond names. Logo image is also
+       assigned in C# (LoadAsset<Texture2D>) so the UXML stays asset-free. -->
+  <VisualElement class="im-header">
+    <VisualElement class="im-header-left">
+      <Image name="im-logo" class="im-logo"/>
+      <Label name="im-title-label" class="im-title"/>
+    </VisualElement>
+    <VisualElement class="im-header-right">
+      <Label name="im-os-warning-label" class="im-os-warning im-hidden"/>
+      <uie:EnumField name="im-lang-field" class="im-lang-field"/>
+    </VisualElement>
+  </VisualElement>
+
+  <!-- No-settings panel (visible when DaroSettings asset doesn't exist).
+       Plain Label + USS warning style — uie:HelpBox is unregistered in
+       Unity 6 UXML schema (UxmlElementAttribute migration). -->
+  <VisualElement name="im-no-settings-panel" class="im-section">
+    <Label name="im-nosettings-warning-label" class="im-warning-text"/>
+    <Button name="im-create-settings-btn" class="im-action-btn"/>
+  </VisualElement>
+
+  <!-- Settings panel (hidden until settings found; toggled by C#) -->
+  <VisualElement name="im-settings-panel" class="im-hidden">
+
+    <Foldout name="im-foldout-settings" value="true" class="im-foldout">
+      <Label name="im-asset-path-label" class="im-asset-path"/>
+
+      <!-- Mediation: v1 single-value (MAX) — hidden via USS until v2 introduces AdMob -->
+      <VisualElement name="im-mediation-section" class="im-section im-hidden">
+        <Label name="im-section-mediation-title" class="im-section-title"/>
+        <uie:EnumField name="im-mediation-field" binding-path="mediation"/>
+      </VisualElement>
+
+      <!-- iOS group. TextField is the runtime UnityEngine.UIElements version
+           (registered in Unity 2019.1+) — Editor.UIElements.TextField is
+           unregistered in Unity 6 UXML schema. ObjectField/EnumField stay
+           as Editor-only. -->
+      <VisualElement name="im-ios-group" class="im-section im-platform-group">
+        <Label name="im-section-ios-title" class="im-section-title"/>
+        <TextField       name="im-ios-appkey-field"  binding-path="iosDaroAppKey"/>
+        <uie:ObjectField name="im-ios-keyfile-field" binding-path="iosKeyFile"/>
+        <VisualElement class="im-row">
+          <Button name="im-validate-ios-btn" class="im-action-btn"/>
+          <Label  name="im-validate-ios-result" class="im-validate-result"/>
+        </VisualElement>
+        <TextField       name="im-ios-admob-field"   binding-path="iosAdMobAppId"/>
+        <TextField       name="im-ios-att-field"     binding-path="attPromptDescription" multiline="true"/>
+      </VisualElement>
+
+      <!-- Android group -->
+      <VisualElement name="im-android-group" class="im-section im-platform-group">
+        <Label name="im-section-android-title" class="im-section-title"/>
+        <TextField       name="im-android-appkey-field"  binding-path="androidDaroAppKey"/>
+        <uie:ObjectField name="im-android-keyfile-field" binding-path="androidKeyFile"/>
+        <VisualElement class="im-row">
+          <Button name="im-validate-android-btn" class="im-action-btn"/>
+          <Label  name="im-validate-android-result" class="im-validate-result"/>
+        </VisualElement>
+      </VisualElement>
+    </Foldout>
+
+    <Foldout name="im-foldout-nativedeps" value="true" class="im-foldout">
+      <VisualElement class="im-section im-row">
+        <Button name="im-resolve-android-btn" class="im-action-btn"/>
+        <Button name="im-resolve-ios-btn"     class="im-action-btn"/>
+      </VisualElement>
+    </Foldout>
+
+    <Foldout name="im-foldout-validation" value="true" class="im-foldout">
+      <VisualElement class="im-section">
+        <Button name="im-validate-btn" class="im-action-btn"/>
+        <VisualElement name="im-validation-list" class="im-validation-list"/>
+      </VisualElement>
+    </Foldout>
+
+    <!-- AI Integration Helper — toggle that injects an integration-KB pointer
+         into the consumer project's CLAUDE.md so AI coding agents auto-discover
+         the SDK's Documentation~/ knowledge base on session cold-start. The
+         toggle's binding-path is on enableAiIntegrationHelper; the ChangeEvent
+         handler (C#) reconciles the marker block in CLAUDE.md. The notice
+         Label is hidden by default and shown only when CLAUDE.md is missing. -->
+    <Foldout name="im-foldout-aihelper" value="true" class="im-foldout">
+      <VisualElement class="im-section">
+        <Toggle name="im-ai-helper-toggle" binding-path="enableAiIntegrationHelper"/>
+        <Label  name="im-ai-helper-help"   class="im-ai-help"/>
+        <Label  name="im-ai-helper-notice" class="im-warning-text im-hidden"/>
+      </VisualElement>
+    </Foldout>
+
+  </VisualElement>
+
+</UXML>

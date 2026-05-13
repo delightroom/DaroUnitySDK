@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dependencies>
+    <!--
+        Daro Unity SDK — MAX mediation variant (Reward).
+
+        Top-level artifacts only. Sub-network adapters and runtime support
+        libraries are pinned transitively by each artifact's metadata.
+        1:1 lock rule: one Daro version pins the full sub-network set.
+
+        iOS: DaroMObjCBridge (Obj-C compatible wrapper xcframework for DaroM,
+             MAX variant) — stable 1.1.51, GitHub release artifact via
+             `:http =>` source. Bridge xcframework is self-contained; do NOT
+             list DaroMAds (Swift-only, not callable from .mm shim — would
+             install a duplicate). Transitively declares AppLovinSDK 13.4.0 +
+             15 AppLovinMediation* adapters (Google/Facebook/ByteDance/InMobi/
+             Vungle/Fyber/Mintegral/AmazonAdMarketplace/Verve/IronSource/
+             UnityAds/Smaato/Moloco/Line/Chartboost) + AmazonPublisherServicesSDK.
+             Min iOS 13.0, static_framework: false (dynamic) → consumer
+             Podfile needs `use_frameworks!`. See sketch CD-1, CD-10.
+
+        Android: so.daro:daro-m on Maven Central — daro-core resolves
+                 transitively via daro-m's POM (per Daro guide
+                 guide.daro.so/ko/sdk-integration/android, Reward tab —
+                 the dependencies block declares only daro-m).
+
+                 Sub-network maven repos (7) are declared inside the
+                 androidPackage's <repositories> block so EDM4U owns the
+                 merge: Mode 1 (Unity ≤ 2022.x + Custom Template ON) injects
+                 into mainTemplate.gradle / settingsTemplate.gradle; Mode 2
+                 (Unity 2023.1+ no template) uses them at resolve time and
+                 downloads AARs into Assets/Plugins/Android/Repos/. Either
+                 way the SDK author's job ends with this declaration —
+                 post-process patching the exported settings.gradle would
+                 duplicate EDM4U's merge layer.
+
+                 Out-of-scope for EDM4U (handled by DaroAndroidPostProcessor):
+                 root buildscript.classpath (so.daro:daro-plugin +
+                 AppLovinQualityServiceGradlePlugin) and the matching
+                 buildscript.repositories AppLovin maven URL — gradle
+                 plugin classpath is not an artifact dependency.
+
+                 Consumer app minSdk 23.
+    -->
+    <iosPods>
+        <iosPod name="DaroMObjCBridge" version="1.1.51" />
+    </iosPods>
+    <androidPackages>
+        <androidPackage spec="so.daro:daro-m:1.3.6">
+            <repositories>
+                <repository>https://artifacts.applovin.com/android</repository>
+                <repository>https://android-sdk.is.com</repository>
+                <repository>https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea</repository>
+                <repository>https://maven.ogury.co</repository>
+                <repository>https://artifact.bytedance.com/repository/pangle</repository>
+                <repository>https://s3.amazonaws.com/smaato-sdk-releases/</repository>
+                <repository>https://cboost.jfrog.io/artifactory/chartboost-ads/</repository>
+            </repositories>
+        </androidPackage>
+    </androidPackages>
+</dependencies>

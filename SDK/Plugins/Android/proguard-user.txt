@@ -1,0 +1,21 @@
+# Daro Unity SDK — supplemental R8 / ProGuard keep rules.
+#
+# Unity 6 automatically merges any `proguard-user.txt` placed under
+# Plugins/Android/ into the consumer's Gradle build.
+#
+# Shim keeps (`so.daro.unity.*`) live inside daro-android-wrapper.aar's
+# embedded `proguard.txt` (consumerProguardFiles in build.gradle.kts) —
+# they're applied automatically when consumer Gradle includes the AAR.
+# This file only carries keeps that the AAR cannot embed:
+
+# ── Native model classes accessed via JNI field reads ───────────────────────
+# The shim's listener implementations read `err.code`, `err.message`,
+# `err.latency`, `error.message`, `adInfo.latency`, `rewardItem.type`,
+# `rewardItem.amount`. R8 may rename these getters under aggressive minify
+# settings; pin them. These types belong to daro-m, not the shim, so they
+# can't ride in the shim's AAR proguard.txt.
+
+-keep class droom.daro.core.model.DaroAdLoadError { *; }
+-keep class droom.daro.core.model.DaroAdDisplayFailError { *; }
+-keep class droom.daro.core.model.DaroAdInfo { *; }
+-keep class droom.daro.core.model.DaroRewardedAd$DaroRewardedItem { *; }

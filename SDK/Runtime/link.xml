@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    IL2CPP stripping defense (sketch CD-8). Preserves the entire Daro.Internal
+    namespace so [DllImport("__Internal")] / [MonoPInvokeCallback] methods
+    in DaroIOSPlatform are not stripped from release builds. UPM autodiscovers
+    link.xml from the Runtime/ folder.
+
+    Combined with [Preserve] on the OnNativeEvent callback method itself —
+    aggressive Unity 6 IL2CPP configurations have been observed to strip
+    [MonoPInvokeCallback] methods despite namespace preservation, so the
+    belt-and-suspenders posture is intentional.
+-->
+<linker>
+  <assembly fullname="Daro.Runtime">
+    <namespace fullname="Daro.Internal" preserve="all" />
+  </assembly>
+</linker>
