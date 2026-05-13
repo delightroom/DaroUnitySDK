@@ -77,12 +77,11 @@
       </VisualElement>
     </Foldout>
 
-    <!-- AI Integration Helper — toggle that injects an integration-KB pointer
-         into the consumer project's CLAUDE.md so AI coding agents auto-discover
-         the SDK's Documentation~/ knowledge base on session cold-start. The
-         toggle's binding-path is on enableAiIntegrationHelper; the ChangeEvent
-         handler (C#) reconciles the marker block in CLAUDE.md. The notice
-         Label is hidden by default and shown only when CLAUDE.md is missing. -->
+    <!-- AI Integration Helper — toggle that injects an integration-KB directive
+         into existing agent-instruction files (CLAUDE.md / AGENTS.md) so AI
+         coding agents auto-discover the SDK's Documentation~/ knowledge base
+         on session cold-start. The ChangeEvent handler reconciles marker
+         blocks; the notice Label is shown when neither target file exists. -->
     <Foldout name="im-foldout-aihelper" value="true" class="im-foldout">
       <VisualElement class="im-section">
         <Toggle name="im-ai-helper-toggle" binding-path="enableAiIntegrationHelper"/>

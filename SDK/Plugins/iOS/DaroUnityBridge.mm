@@ -94,7 +94,7 @@ static NSMutableDictionary<NSString*, DaroUnityAdEntry*>* s_appOpen;
 static void EnsureInitialized(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        s_adQueue       = dispatch_queue_create("com.delightroom.daro.unity.ads", DISPATCH_QUEUE_SERIAL);
+        s_adQueue       = dispatch_queue_create("so.daro.unity.ads", DISPATCH_QUEUE_SERIAL);
         s_interstitials = [NSMutableDictionary dictionary];
         s_rewarded      = [NSMutableDictionary dictionary];
         s_appOpen       = [NSMutableDictionary dictionary];

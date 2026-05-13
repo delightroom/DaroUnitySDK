@@ -68,7 +68,7 @@ namespace Daro.Internal
 
             if (_disposed) yield break;
 
-            var success = Random.value < successRate;
+            var success = DaroEditorMockProbability.RollSuccess(successRate);
             if (success)
             {
                 _loaded = true;

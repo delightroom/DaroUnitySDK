@@ -6,8 +6,8 @@ namespace Daro.Internal
     /// <summary>
     /// Platform resolver. Selects the <see cref="IDaroPlatform"/> implementation for the
     /// current runtime: <see cref="DaroEditorPlatform"/> under <c>UNITY_EDITOR</c>, and
-    /// (in Phase 4) <c>DaroIOSPlatform</c> / <c>DaroAndroidPlatform</c> on device builds.
-    /// See native-bridge-architecture.md §1 (Architecture Overview) and §2.5.
+    /// <c>DaroIOSPlatform</c> / <c>DaroAndroidPlatform</c> on device builds.
+    /// See docs/overview.md and docs/features/native-bridge.md.
     /// </summary>
     /// <remarks>
     /// Static cache is cleared via <see cref="ResetStatics"/>, invoked by

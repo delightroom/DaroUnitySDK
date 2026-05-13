@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// Rewarded ad instance. See native-bridge-architecture.md §2.4.
+    /// Rewarded ad instance. See docs/overview.md for the public API contract.
     /// Mirrors <see cref="DaroInterstitialAd"/> with an extra
     /// <see cref="OnEarnedReward"/> event and <see cref="SetCustomData"/> method.
     /// </summary>

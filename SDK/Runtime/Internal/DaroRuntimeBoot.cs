@@ -6,8 +6,7 @@ namespace Daro.Internal
 {
     /// <summary>
     /// Single entry point that resets all Daro SDK static state on runtime startup
-    /// (Editor play-mode enter or device build launch). See
-    /// native-bridge-architecture.md §6.4.
+    /// (Editor play-mode enter or device build launch). See docs/overview.md.
     /// </summary>
     /// <remarks>
     /// Without this, a second Editor play session reuses the destroyed-GameObject

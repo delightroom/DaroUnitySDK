@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// Interstitial ad instance. See native-bridge-architecture.md §2.4.
+    /// Interstitial ad instance. See docs/overview.md for the public API contract.
     /// One instance per <c>adUnitId</c>; duplicate construction replaces the
     /// prior instance (platform layer destroys + recreates the native handle,
     /// registry overwrites the mapping).

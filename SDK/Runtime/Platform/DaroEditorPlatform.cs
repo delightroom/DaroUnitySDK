@@ -9,13 +9,13 @@ namespace Daro.Internal
 {
     /// <summary>
     /// In-Editor mock implementation of <see cref="IDaroPlatform"/> backed by
-    /// <see cref="DaroEditorSettings"/>. See native-bridge-architecture.md §5.
+    /// <see cref="DaroEditorSettings"/>. See docs/features/native-bridge.md.
     /// </summary>
     /// <remarks>
     /// <para>Simulates native callback latency via coroutines launched on the hidden
     /// <see cref="MainThreadDispatcher"/> GameObject. Events fire through
     /// <see cref="MainThreadDispatcher.Enqueue(Action)"/> — even though coroutines run
-    /// on the main thread — so reentrancy semantics match the Phase 4 native shim flow
+    /// on the main thread — so reentrancy semantics match the native shim flow
     /// (§6.6).</para>
     ///
     /// <para>Error-code surfacing: <see cref="DaroEditorSettings.loadErrorCode"/> and
@@ -458,7 +458,7 @@ namespace Daro.Internal
 
             if (state.Destroyed) yield break;
 
-            var success = UnityEngine.Random.value < successRate;
+            var success = DaroEditorMockProbability.RollSuccess(successRate);
             if (success)
             {
                 state.Loaded = true;
@@ -538,7 +538,7 @@ namespace Daro.Internal
 
             if (state.Destroyed) yield break;
 
-            var success = UnityEngine.Random.value < showSuccessRate;
+            var success = DaroEditorMockProbability.RollSuccess(showSuccessRate);
             if (!success)
             {
                 var mapped = DaroAdErrorCodeMapper.ToDisplayErrorCode(showErrorCode);

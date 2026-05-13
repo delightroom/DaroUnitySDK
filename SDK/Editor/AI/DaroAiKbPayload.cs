@@ -19,10 +19,10 @@ namespace Daro.Editor
 
 This project uses the **Daro Unity SDK** for mobile advertising. Before writing or modifying any ad-related code (ad integration, lifecycle, events, dispose), **you MUST read the integration knowledge base first**:
 
-- **Entry**: `Packages/com.delightroom.daro.unity/Documentation~/index.md`
-- **Common patterns** (lifecycle / events / dispose / anti-pattern): `Packages/com.delightroom.daro.unity/Documentation~/integration.md`
-- **Format specifics**: `Packages/com.delightroom.daro.unity/Documentation~/ad-formats/{interstitial,rewarded,appopen}.md`
-- **API reference**: `Packages/com.delightroom.daro.unity/Documentation~/api-reference.md`
+- **Entry**: `Packages/so.daro.unity/Documentation~/index.md`
+- **Common patterns** (lifecycle / events / dispose / anti-pattern): `Packages/so.daro.unity/Documentation~/integration.md`
+- **Format specifics**: `Packages/so.daro.unity/Documentation~/ad-formats/{interstitial,rewarded,appopen}.md`
+- **API reference**: `Packages/so.daro.unity/Documentation~/api-reference.md`
 
 The KB is the source of truth for SDK usage patterns — every code sample is distilled from `Samples/DaroExample/`, not invented. Do not guess method signatures, event names, or enum values; look them up in `api-reference.md`. Follow the lifecycle / event subscription / dispose discipline exactly as documented. If you find yourself uncertain about Daro SDK behavior, re-read the relevant KB file before answering or editing code.";
     }

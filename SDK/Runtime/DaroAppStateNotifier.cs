@@ -7,7 +7,7 @@ namespace Daro
 {
     /// <summary>
     /// Static event surface for app background/foreground transitions.
-    /// See native-bridge-architecture.md §2.6. Typical use: trigger
+    /// See docs/overview.md for the public API contract. Typical use: trigger
     /// <c>DaroAppOpenAd.Show()</c> on foreground return.
     /// </summary>
     /// <remarks>

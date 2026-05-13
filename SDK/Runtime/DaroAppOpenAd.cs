@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// App Open ad instance. See native-bridge-architecture.md §2.4 and §6.2.
+    /// App Open ad instance. See docs/overview.md for the public API contract.
     /// Identical event set to <see cref="DaroInterstitialAd"/>; no reward event.
     /// Typical use: show on foreground return via
     /// <see cref="DaroAppStateNotifier.OnAppStateChanged"/>.

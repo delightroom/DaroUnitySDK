@@ -9,7 +9,7 @@ namespace Daro.Internal
     /// Thread-safe map from <c>(format, adUnitId)</c> to the live
     /// ad instance, used by the platform event plumbing in
     /// <c>DaroSdk.InitializeAsync</c> to route native callbacks to
-    /// the correct ad object. See native-bridge-architecture.md §2.4.
+    /// the correct ad object. See docs/overview.md and docs/features/native-bridge.md.
     /// </summary>
     /// <remarks>
     /// <para>Instances are stored as <see cref="WeakReference"/> so a
@@ -31,8 +31,8 @@ namespace Daro.Internal
     /// <c>Create*</c> call; the registry simply overwrites the
     /// mapping here.</para>
     ///
-    /// <para>For Phase 2 (Editor mock) all callbacks arrive on the
-    /// main thread; Phase 4 will see real native callbacks that may
+    /// <para>For the Editor mock, all callbacks arrive on the
+    /// main thread; native callbacks may
     /// originate on worker threads. The <see cref="ConcurrentDictionary{TKey,TValue}"/>
     /// plus the <see cref="WeakReference"/> wrapper cover both cases.</para>
     /// </remarks>

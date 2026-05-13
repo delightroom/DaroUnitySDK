@@ -28,7 +28,7 @@ namespace Daro.Editor
     // misplacement surfaces early.
     internal static class DaroSettingsLocator
     {
-        internal const string ConfigKey = "com.delightroom.daro.unity/settings";
+        internal const string ConfigKey = "so.daro.unity/settings";
 
         internal static DaroSettings FindOrNull() => FindOrNull(out _);
 

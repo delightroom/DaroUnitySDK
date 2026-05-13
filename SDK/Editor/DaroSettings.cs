@@ -38,10 +38,10 @@ namespace Daro.Editor
         public Daro.DaroEditorSettings editorMock;  // created by another agent in Daro.Runtime
 
         [Header("AI Assistant")]
-        // Toggling on writes a marker-wrapped pointer line to the consumer project's
-        // CLAUDE.md so AI coding agents (Claude Code etc.) auto-discover the SDK's
-        // Documentation~/ knowledge base on session cold-start. Off cleans the marker
-        // block, leaves the rest of CLAUDE.md untouched. See SDK/Editor/AI/.
+        // Toggling on writes a marker-wrapped directive block to existing
+        // agent-instruction files (CLAUDE.md / AGENTS.md) so AI coding agents
+        // auto-discover the SDK's Documentation~/ knowledge base on session
+        // cold-start. Off cleans only the marker block. See SDK/Editor/AI/.
         public bool enableAiIntegrationHelper;
     }
 }

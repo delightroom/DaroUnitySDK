@@ -1,5 +1,5 @@
 {
-  "name": "com.delightroom.daro.unity",
+  "name": "so.daro.unity",
   "version": "0.0.2",
   "displayName": "Daro Unity SDK",
   "description": "Daro ad mediation adapter for Unity (MAX variant). Supports Android and iOS.",

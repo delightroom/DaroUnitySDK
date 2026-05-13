@@ -84,7 +84,7 @@ namespace Daro.Editor
             ["assetPath.unsaved"]         = "(unsaved)",
             ["os.windowsWarning"]         = "Running on Windows — iOS build validation is host-limited.",
             ["os.iosResolveTooltip"]      = "iOS CocoaPods resolution requires macOS.",
-            ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI assets missing. Reimport com.delightroom.daro.unity package.",
+            ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI assets missing. Reimport so.daro.unity package.",
 
             // --- validator messages (msg + hint per CheckId) ---
             ["v.any.settings.msg"]        = "DaroSettings asset not found.",
@@ -150,7 +150,7 @@ namespace Daro.Editor
             ["assetPath.unsaved"]         = "(저장되지 않음)",
             ["os.windowsWarning"]         = "Windows 환경 — iOS 빌드 검증은 호스트 제한됩니다.",
             ["os.iosResolveTooltip"]      = "iOS CocoaPods Resolve는 macOS에서만 동작합니다.",
-            ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI 에셋 누락. com.delightroom.daro.unity 패키지를 다시 임포트하세요.",
+            ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI 에셋 누락. so.daro.unity 패키지를 다시 임포트하세요.",
 
             // --- validator messages (msg + hint per CheckId) ---
             ["v.any.settings.msg"]        = "DaroSettings 에셋을 찾을 수 없습니다.",

@@ -7,7 +7,8 @@ using Daro.Internal;
 namespace Daro
 {
     /// <summary>
-    /// Static facade for the Daro Unity SDK. See native-bridge-architecture.md §2.3.
+    /// Static facade for the Daro Unity SDK. See docs/overview.md for the
+    /// public API contract and docs/features/native-bridge.md for platform behavior.
     /// Privacy / log settings should be configured before <see cref="InitializeAsync"/>.
     /// </summary>
     public static class DaroSdk

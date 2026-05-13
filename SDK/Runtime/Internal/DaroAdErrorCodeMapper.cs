@@ -5,10 +5,10 @@ namespace Daro.Internal
 {
     /// <summary>
     /// Maps raw native <see cref="int"/> error codes (DaroSDK <c>DaroError.Code.rawValue</c>)
-    /// to typed Unity enums. See native-bridge-architecture.md §4.2.
+    /// to typed Unity enums. See docs/features/native-bridge.md.
     /// </summary>
     /// <remarks>
-    /// <para>Both the Editor mock (<c>DaroEditorPlatform</c>) and the Phase 4 iOS/Android
+    /// <para>The Editor mock (<c>DaroEditorPlatform</c>) and the iOS/Android
     /// shims route raw codes through this mapper. Using <see cref="Enum.IsDefined"/>
     /// ensures that codes newly added to DaroSDK — or Android-specific codes that do not
     /// overlap with iOS's numbering — fall back to <c>Unspecified</c> instead of producing

@@ -10,7 +10,7 @@ namespace Daro.Internal
 {
     /// <summary>
     /// Hidden <see cref="MonoBehaviour"/> that drains a thread-safe action queue
-    /// on the Unity main thread. See native-bridge-architecture.md §3.3 and §6.3.
+    /// on the Unity main thread. See docs/features/event-handler.md.
     /// </summary>
     /// <remarks>
     /// Native callbacks arrive on unspecified background threads. They enqueue
@@ -116,7 +116,7 @@ namespace Daro.Internal
 
         /// <summary>
         /// Start a coroutine on the hidden dispatcher GameObject. Used by the
-        /// Editor mock platform (§5) — and, during Phase 4, by any SDK-internal
+        /// Editor mock platform — and by any SDK-internal
         /// code that needs a coroutine host without the consumer having to
         /// supply one. Noop if <see cref="EnsureCreated"/> has not been called
         /// or the dispatcher is shutting down.
