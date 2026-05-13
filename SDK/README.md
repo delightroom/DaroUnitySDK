@@ -1,21 +1,40 @@
 # Daro Unity SDK
 
-Unity SDK for Daro. Target platforms: **Android, iOS**.
+[English](README.md) | [한국어](README.ko.md)
 
-## Minimum Unity version
+Daro ad mediation adapter for Unity. This package is the MAX (AppLovin) mediation variant and supports Android and iOS.
 
-**Unity 2019.4 LTS or newer.** Aligned with AdMob mediation Unity SDK support floor. `package.json` declares `"unity": "2019.4"`.
+## Installation
 
-This folder is the UPM package root. Sample Unity projects in this repo (under `Samples/<name>/`) consume it via `file:` path in their `Packages/manifest.json`:
+The recommended installation path is the bootstrap installer.
 
-```json
-"com.delightroom.daro.unity": "file:../../SDK"
-```
+1. Download `DaroPackageInstaller.unitypackage` from the Daro website or from this repository's GitHub Releases.
+2. Import it into your Unity project.
+3. The installer patches `Packages/manifest.json` with the OpenUPM scoped registry, EDM4U, and `com.delightroom.daro.unity`.
+4. After installation, open **Assets > Daro > Integration Manager** to validate project setup.
+
+## Requirements
+
+- Unity 2019.4 LTS or newer
+- Android Build Support and/or iOS Build Support for your target platforms
+- EDM4U, installed by the bootstrap installer
 
 ## Dependencies
 
-- **EDM4U** (`com.google.external-dependency-manager`) — resolves native Android/iOS dependencies from `Editor/*Dependencies.xml`.
+- Android uses a prebuilt Unity wrapper AAR plus native mediation dependencies resolved by EDM4U.
+- iOS dependencies are resolved through EDM4U/CocoaPods during Xcode project generation.
 
-## Integration guide
+## Supported ad formats
 
-See [`docs/integration.md`](../docs/integration.md) in the repo for the consumer setup flow (DaroSettings → key files → EDM4U resolve → SDK init → ad load/show).
+- Interstitial
+- Rewarded
+- App Open
+- Banner
+- Native
+- Light Popup
+
+## Documentation
+
+- [Documentation index](https://github.com/delightroom/DaroUnitySDK/tree/main/SDK/Documentation~)
+- [Integration guide](https://github.com/delightroom/DaroUnitySDK/blob/main/SDK/Documentation~/integration.md)
+- [API reference](https://github.com/delightroom/DaroUnitySDK/blob/main/SDK/Documentation~/api-reference.md)
