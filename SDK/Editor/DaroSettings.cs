@@ -38,10 +38,20 @@ namespace Daro.Editor
         public Daro.DaroEditorSettings editorMock;  // created by another agent in Daro.Runtime
 
         [Header("AI Assistant")]
-        // Toggling on writes a marker-wrapped directive block to existing
-        // agent-instruction files (CLAUDE.md / AGENTS.md) so AI coding agents
-        // auto-discover the SDK's Documentation~/ knowledge base on session
-        // cold-start. Off cleans only the marker block. See SDK/Editor/AI/.
+        // Toggling on guides AI coding agents (Claude Code / Codex / Cursor /
+        // Cline) to read the SDK's integration knowledge base on session
+        // cold-start. Three-layer reconcile, all env-signal gated — see
+        // DaroAiKbBootstrap + SDK/Editor/AI/:
+        //   - KB copy: mirrors `<package>/Documentation~/` into
+        //     `<project>/.daro/integration-kb/` so directive paths stay
+        //     stable across UPM install methods.
+        //   - Own-file directives: vendor-owned files at `.claude/rules/`,
+        //     `.cursor/rules/`, `.clinerules/` — written only when the tool's
+        //     env signal (parent indicator dir) is present.
+        //   - Marker inject: marker-wrapped directive block into root
+        //     `AGENTS.md` (Codex; inject-into-existing-file only).
+        // Off cleans everything. Legacy root CLAUDE.md marker is swept
+        // automatically.
         public bool enableAiIntegrationHelper;
     }
 }

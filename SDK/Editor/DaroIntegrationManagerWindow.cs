@@ -181,52 +181,60 @@ namespace Daro.Editor
             });
         }
 
-        // AI Integration Helper toggle — on ChangeEvent, reconciles the marker
-        // block across all detected agent-instruction files (CLAUDE.md /
-        // AGENTS.md). Binding-path on the Toggle already persists the bool
-        // field; this callback adds the file I/O side-effect + notice +
-        // validation refresh.
-        //
-        // Policy (D8): if no agent-instruction file exists at the project
-        // root, the toggle still flips ON — the notice + validator
-        // "any.aiKbMarker" Warn surface the out-of-sync state. We do NOT
-        // auto-create either file (avoid surprise).
+        // AI Integration Helper toggle — on ChangeEvent, runs the
+        // canonical reconcile sequence (see DaroAiKbReconciler) against the
+        // new toggle value, then refreshes UI state. The reconcile body
+        // itself — legacy CLAUDE.md sweep, KB copy, marker inject,
+        // env-gated own-file Apply/Clean — lives in DaroAiKbReconciler so
+        // Bootstrap and this toggle handler stay in sync.
         private void WireAiHelper()
         {
             if (_aiHelperToggle == null) return;
             _aiHelperToggle.RegisterValueChangedCallback(evt =>
             {
-                if (evt.newValue)
-                {
-                    // Inject into every existing target file.
-                    foreach (var path in DaroAiKbTargets.ExistingPaths())
-                        DaroAiKbInjector.Apply(path, DaroAiKbPayload.DirectiveBlock);
-                    // If no target exists, the notice fires (UpdateAiHelperNotice below).
-                }
-                else
-                {
-                    // Strip the marker from all candidate paths (Clean no-ops on missing).
-                    foreach (var path in DaroAiKbTargets.AllPaths())
-                        DaroAiKbInjector.Clean(path);
-                }
+                DaroAiKbReconciler.ReconcileSync(evt.newValue);
                 _serializedSettings?.ApplyModifiedProperties();
                 UpdateAiHelperNotice();
                 RefreshValidation();
             });
         }
 
-        // Notice visible only when the toggle is ON but neither CLAUDE.md
-        // nor AGENTS.md exists at the consumer project root. Called from
-        // CreateGUI / Bind / toggle ChangeEvent / OnLanguageChanged so the
-        // label always reflects current state.
+        // Notice visible when the toggle is ON and at least one observable
+        // issue exists: no AI agent environment signaled (so reconciliation
+        // is a no-op), or a Cline single-file conflict (own-file axis
+        // blocked for Cline only). Called from CreateGUI / Bind / toggle
+        // ChangeEvent / OnLanguageChanged so the label always reflects
+        // current state.
         private void UpdateAiHelperNotice()
         {
             if (_aiHelperNotice == null) return;
             var toggleOn = _settings != null && _settings.enableAiIntegrationHelper;
-            var noTargets = !DaroAiKbTargets.AnyExists();
-            if (toggleOn && noTargets)
+            if (!toggleOn)
             {
-                _aiHelperNotice.text = DaroImLocalization.Get("ai.noAgentFile");
+                _aiHelperNotice.AddToClassList("im-hidden");
+                return;
+            }
+
+            string text = null;
+            var root = DaroProjectRoot.Path;
+
+            // No env signal anywhere — nothing to reconcile.
+            if (!DaroAiKbTargets.AnyEnvSignal())
+                text = DaroImLocalization.Get("ai.noAgentEnv");
+
+            // Cline `.clinerules` single-file conflict — own-file axis blocked for Cline.
+            foreach (var target in DaroAiKbTargets.OwnFileTargets)
+            {
+                var conflict = target.ConflictGuard?.Invoke(root);
+                if (string.IsNullOrEmpty(conflict)) continue;
+                var conflictMsg = DaroImLocalization.Get("ai.clineFileMode");
+                text = string.IsNullOrEmpty(text) ? conflictMsg : text + "\n" + conflictMsg;
+                break;
+            }
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                _aiHelperNotice.text = text;
                 _aiHelperNotice.RemoveFromClassList("im-hidden");
             }
             else

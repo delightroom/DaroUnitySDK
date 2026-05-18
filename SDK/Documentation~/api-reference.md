@@ -121,6 +121,213 @@ namespace Daro
 
 > AppOpen's canonical trigger is `DaroAppStateNotifier.OnAppStateChanged` on the Foreground transition with `IsReady()` then `Show()`. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
 
+## DaroBannerAd
+
+Persistent native overlay — different lifecycle from fullscreen formats. See [`ad-formats/banner.md`](ad-formats/banner.md).
+
+```csharp
+namespace Daro
+{
+    public sealed class DaroBannerAd : IDisposable
+    {
+        // --- construction ---
+        public DaroBannerAd(
+            string adUnitId,
+            DaroBannerSize size = DaroBannerSize.Standard,
+            DaroBannerPosition position = DaroBannerPosition.BottomCenter,
+            string? placement = null);
+
+        // --- properties ---
+        public string             AdUnitId  { get; }
+        public string?            Placement { get; }
+        public DaroBannerSize     Size      { get; }
+        public DaroBannerPosition Position  { get; }   // updated via SetPosition
+
+        // --- methods ---
+        public void Load();                                  // async — result via OnAdLoaded / OnAdFailedToLoad
+        public bool IsReady();                               // never throws; false after Dispose
+        public void Show();                                  // throws InvalidOperationException when !IsReady()
+                                                             // OnAdShown fires SYNCHRONOUSLY inside this call
+        public void Hide();                                  // remove overlay, pause refresh; ad stays loaded
+        public void SetPosition(DaroBannerPosition pos);     // immediate if shown, else applied on next Show
+        public void Dispose();                               // idempotent; subsequent Load/Show/Hide → ObjectDisposedException
+
+        // --- events (6, all main-thread; no OnAdFailedToShow, no OnAdDismissed) ---
+        public event Action<DaroAdInfo>      OnAdLoaded;
+        public event Action<DaroAdLoadError> OnAdFailedToLoad;
+        public event Action<DaroAdInfo>      OnAdShown;        // synchronous from Show()
+        public event Action<DaroAdInfo>      OnAdClicked;
+        public event Action<DaroAdInfo>      OnAdImpression;
+        public event Action<DaroAdInfo>      OnAdHidden;
+    }
+}
+```
+
+### DaroBannerSize
+
+```csharp
+public enum DaroBannerSize
+{
+    Standard = 0,   // 320×50 dp
+    Mrec     = 1,   // 300×250 dp
+}
+```
+
+### DaroBannerPosition
+
+```csharp
+public enum DaroBannerPosition
+{
+    TopLeft      = 0,
+    TopCenter    = 1,
+    TopRight     = 2,
+    BottomLeft   = 3,
+    BottomCenter = 4,
+    BottomRight  = 5,
+}
+```
+
+Six gravity-anchored presets. Pixel-exact custom position is not in v1.
+
+## DaroNativeAd
+
+Publisher-rendered ad with asset payload. See [`ad-formats/native.md`](ad-formats/native.md).
+
+```csharp
+namespace Daro
+{
+    public sealed class DaroNativeAd : IDisposable
+    {
+        // --- construction ---
+        public DaroNativeAd(string adUnitId, string? placement = null);
+
+        // --- properties ---
+        public string            AdUnitId  { get; }
+        public string?           Placement { get; }
+        public Vector2Int        IconSize  { get; set; }     // default (200, 200); set BEFORE Load
+        public DaroNativeAdInfo? Info      { get; }          // null until OnAdLoaded; cleared on failed reload + Dispose
+        public bool              IsReady   { get; }          // property (not method) — false after Dispose
+
+        // --- methods ---
+        public void Load();                  // honors IconSize; result via OnAdLoaded / OnAdFailedToLoad
+        public void NotifyVisible();         // impression signal; no-op after Dispose
+        public void NotifyHidden();          // no-op after Dispose
+        public void NotifyClicked();         // trigger SDK click chain; no-op after Dispose
+        public void Dispose();               // idempotent; destroys Info.Icon / Info.MediaImage Texture2Ds
+
+        // --- events (4, all main-thread; no Show/Dismissed/FailedToShow/Expired) ---
+        public event Action<DaroAdInfo>      OnAdLoaded;
+        public event Action<DaroAdLoadError> OnAdFailedToLoad;
+        public event Action<DaroAdInfo>      OnAdImpression;
+        public event Action<DaroAdInfo>      OnAdClicked;
+    }
+}
+```
+
+> **Multi-instance**: same `adUnitId` on N instances yields N independent native ads. Natural fit for feed / list UIs.
+
+### DaroNativeAdInfo
+
+Asset payload. All fields nullable — not every ad has every asset. Texture2D fields are owned by the `DaroNativeAd` instance.
+
+```csharp
+public sealed class DaroNativeAdInfo
+{
+    public string?    Title        { get; }
+    public string?    Body         { get; }
+    public string?    CallToAction { get; }
+    public Texture2D? Icon         { get; }
+    public Texture2D? MediaImage   { get; }   // Android v1: always null
+}
+```
+
+### DaroNativeAdView
+
+`MonoBehaviour` slot-path bridge (legacy uGUI). Attach to a prefab, wire inspector slots, call `LoadFor(ad)` then `Bind(ad)` after `OnAdLoaded`.
+
+```csharp
+namespace Daro
+{
+    [AddComponentMenu("Daro/Native Ad View")]
+    public sealed class DaroNativeAdView : MonoBehaviour
+    {
+        // --- inspector slots (all optional, legacy UnityEngine.UI) ---
+        public UnityEngine.UI.Text?     TitleText;
+        public UnityEngine.UI.Text?     BodyText;
+        public UnityEngine.UI.RawImage? IconImage;
+        public UnityEngine.UI.Button?   CtaButton;
+        public UnityEngine.UI.RawImage? MediaContainer;
+
+        // --- methods ---
+        public void ApplySizeHints(DaroNativeAd ad);   // IconImage RectTransform → ad.IconSize
+        public void LoadFor(DaroNativeAd ad);          // ApplySizeHints + ad.Load(). Recommended slot-path entry.
+        public void Bind(DaroNativeAd ad);             // populate slots + wire CtaButton.onClick; requires ad.IsReady
+        public void Unbind();                          // clear slots + remove click listener
+    }
+}
+```
+
+> Auto lifecycle: `Bind()` on an active view or `OnEnable` → `ad.NotifyVisible()`, `OnDisable` → `ad.NotifyHidden()`, `OnDestroy` → `Unbind()`.
+
+## DaroLightPopupAd
+
+Modal popup with construct-baked options. Interstitial-style lifecycle. See [`ad-formats/light-popup.md`](ad-formats/light-popup.md).
+
+```csharp
+namespace Daro
+{
+    public sealed class DaroLightPopupAd : IDisposable
+    {
+        // --- construction ---
+        public DaroLightPopupAd(
+            string adUnitId,
+            DaroLightPopupAdOptions? options = null,    // null → daro defaults
+            string? placement = null);
+
+        // --- properties ---
+        public string  AdUnitId  { get; }
+        public string? Placement { get; }
+
+        // --- methods ---
+        public void Load();
+        public bool IsReady();                      // method (not property); false after Dispose
+        public void Show();                         // throws InvalidOperationException when !IsReady()
+        public void Dispose();                      // idempotent
+
+        // --- events (7, all main-thread — same shape as Interstitial) ---
+        public event Action<DaroAdInfo>         OnAdLoaded;
+        public event Action<DaroAdLoadError>    OnAdFailedToLoad;
+        public event Action<DaroAdInfo>         OnAdShown;
+        public event Action<DaroAdDisplayError> OnAdFailedToShow;
+        public event Action<DaroAdInfo>         OnAdClicked;
+        public event Action<DaroAdInfo>         OnAdImpression;
+        public event Action<DaroAdInfo>         OnAdDismissed;
+    }
+}
+```
+
+### DaroLightPopupAdOptions
+
+Color + label customization. `class` (not struct) — field initializers carry daro defaults. Use C# object-initializer to override selectively.
+
+```csharp
+public sealed class DaroLightPopupAdOptions
+{
+    public Color32 BackgroundColor            = new Color32(0x12, 0x14, 0x16, 0xB2);
+    public Color32 ContainerColor             = new Color32(0x12, 0x14, 0x16, 0xFF);
+    public Color32 AdMarkLabelTextColor       = new Color32(0xF7, 0xFA, 0xFF, 0xFF);
+    public Color32 AdMarkLabelBackgroundColor = new Color32(0x3E, 0x43, 0x4F, 0xFF);
+    public Color32 TitleColor                 = new Color32(0xF7, 0xFA, 0xFF, 0xFF);
+    public Color32 BodyColor                  = new Color32(0xB6, 0xBE, 0xCC, 0xFF);
+    public Color32 CtaBackgroundColor         = new Color32(0xEB, 0x26, 0x40, 0xFF);
+    public Color32 CtaTextColor               = new Color32(0xFF, 0xFF, 0xFF, 0xFF);
+    public Color32 CloseButtonColor           = new Color32(0xF7, 0xFA, 0xFF, 0xFF);
+    public string  CloseButtonText            = "Close";
+}
+```
+
+> **Bake-at-construct**: options are forwarded to the native layer once at constructor time. Post-construct mutations are not propagated. To change colors, `Dispose()` the instance and construct a new one.
+
 ## DaroAppStateNotifier
 
 ```csharp
@@ -214,6 +421,8 @@ public enum DaroAdFormat
 }
 ```
 
+Surfaced as `DaroAdInfo.AdFormat` on every event payload. Banner / Native / LightPopup are view-based formats with different lifecycle shapes than the three fullscreen formats — pre-read the matching `ad-formats/<format>.md`.
+
 ### DaroAdLoadErrorCode
 
 ```csharp
@@ -257,5 +466,9 @@ public enum DaroAdDisplayErrorCode
 - **`Dispose()` is idempotent**. Calling it twice is safe.
 - **Finalizer ensures native handles are released** even if you forget `Dispose()`, but the timing is non-deterministic.
 - **AppOpen + Android 1.3.6**: `OnAdLoaded` can be swallowed by an internal preload race. Poll `IsReady()` instead. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
+- **Banner `OnAdShown` is synchronous** — emitted from inside `Show()` itself, not from a native callback. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
+- **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
+- **Native textures are owned by the instance**: `Info.Icon` / `Info.MediaImage` are destroyed by `Dispose()`. Do not retain past disposal.
+- **LightPopup options are baked at construct time**: post-construct mutations of `DaroLightPopupAdOptions` are not propagated. Dispose + reconstruct to change colors.
 
-<!-- source: SDK/Runtime/DaroSdk.cs, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/DaroRewardedAd.cs, SDK/Runtime/DaroAppOpenAd.cs, SDK/Runtime/DaroAppStateNotifier.cs, SDK/Runtime/Models/{DaroAdInfo,DaroAdLoadError,DaroAdDisplayError,DaroAdLoadErrorCode,DaroAdDisplayErrorCode,DaroLogLevel,DaroAdFormat,DaroRewardItem}.cs, SDK/Runtime/AssemblyInfo.cs, docs/features/native-bridge.md -->
+<!-- source: SDK/Runtime/DaroSdk.cs, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/DaroRewardedAd.cs, SDK/Runtime/DaroAppOpenAd.cs, SDK/Runtime/DaroBannerAd.cs, SDK/Runtime/DaroBannerSize.cs, SDK/Runtime/DaroBannerPosition.cs, SDK/Runtime/DaroNativeAd.cs, SDK/Runtime/DaroNativeAdView.cs, SDK/Runtime/DaroNativeAdInfo.cs, SDK/Runtime/DaroLightPopupAd.cs, SDK/Runtime/DaroLightPopupAdOptions.cs, SDK/Runtime/DaroAppStateNotifier.cs, SDK/Runtime/Models/{DaroAdInfo,DaroAdLoadError,DaroAdDisplayError,DaroAdLoadErrorCode,DaroAdDisplayErrorCode,DaroLogLevel,DaroAdFormat,DaroRewardItem}.cs, SDK/Runtime/AssemblyInfo.cs, docs/features/native-bridge.md -->

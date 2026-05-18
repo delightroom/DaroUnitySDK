@@ -573,4 +573,64 @@ void DaroUnity_DestroyAppOpen(const char* adUnitId) {
     });
 }
 
+// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called
+// from C# `DaroIOSPlatform.DestroyAll` (csharp-runtime-hook task wires the
+// DllImport). Runs on app-quit / Unity-runtime-teardown after C# side has
+// already set `DaroAdInstanceRegistry._isShuttingDown=true` — so even
+// in-flight callbacks would null-route through the C# Find gate. This
+// function actively releases native resources (dict entries, attached views)
+// to limit grace-period background work + visual artifacts.
+//
+// Per goal §Best-effort: hygiene tier, not production-critical (mobile hard
+// kill is OS-reaped). Helper-dispatcher pattern (plan decision 2026-05-14):
+// fullscreen dicts cleared here directly; entry-aware formats delegate to
+// per-shim-file helpers declared in DaroUnityBridgeInternal.h.
+//
+// Caller contract: must NOT be invoked from s_adQueue context — would deadlock
+// (this function's own dispatch_sync + each helper's dispatch_sync). C#
+// DllImport callers run on Unity main / worker, never on s_adQueue.
+void DaroUnity_DestroyAll(void) {
+    EnsureInitialized();   // defensive — quit hook may fire before any ad
+                            // create (e.g. user quits before first
+                            // Initialize / ad request)
+    DaroLogD(@"Bridge", @"DestroyAll start");
+
+    // Fullscreen formats: dict-nil only (D-iOS-fullscreen-skip in plan §2).
+    // No entry-level destroyed flag — delegates hold adUnitId, not entry
+    // state, so late callbacks are covered by C# DaroAdInstanceRegistry
+    // Find gate (set by caller before this function runs).
+    dispatch_sync(s_adQueue, ^{
+        NSUInteger fullscreenCount =
+            s_interstitials.count + s_rewarded.count + s_appOpen.count;
+        [s_interstitials removeAllObjects];
+        [s_rewarded      removeAllObjects];
+        [s_appOpen       removeAllObjects];
+        DaroLogD(@"Bridge", @"DestroyAll cleared %lu fullscreen entries",
+                 (unsigned long)fullscreenCount);
+    });
+
+    // Entry-guarded / view-attached formats: delegate to per-shim helpers.
+    // Each helper takes its own s_adQueue dispatch_sync — DO NOT wrap these
+    // in an outer sync block (re-entrant deadlock).
+    //
+    // Per-helper @try/@catch so one helper throwing (NSException from a
+    // misbehaving entry during teardown) doesn't skip the rest. Same
+    // best-effort hygiene contract as the Android Dispose() per-object
+    // isolation. Failures emit via DaroLogW and continue.
+    @try { DaroUnityNativeAd_DestroyAll(); }
+    @catch (NSException* e) {
+        DaroLogW(@"Bridge", @"NativeAd_DestroyAll threw: %@ — continuing", e.reason ?: e.name);
+    }
+    @try { DaroUnityBanner_DestroyAll(); }
+    @catch (NSException* e) {
+        DaroLogW(@"Bridge", @"Banner_DestroyAll threw: %@ — continuing", e.reason ?: e.name);
+    }
+    @try { DaroUnityLightPopup_DestroyAll(); }
+    @catch (NSException* e) {
+        DaroLogW(@"Bridge", @"LightPopup_DestroyAll threw: %@ — continuing", e.reason ?: e.name);
+    }
+
+    DaroLogD(@"Bridge", @"DestroyAll complete");
+}
+
 }  // extern "C"

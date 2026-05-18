@@ -18,6 +18,13 @@ namespace Daro.Internal
         // ── SDK lifecycle ─────────────────────────────────────────────────
         Task InitializeAsync(DaroSdkInitParams initParams);
 
+        // SDK-internal teardown trigger. Called by DaroSdk.MarkShuttingDown
+        // on app-quit / Unity-runtime-teardown. Clears all live native ad
+        // objects + attached views (per platform's own DestroyAll semantics);
+        // best-effort — must not throw. Idempotent — safe to call twice.
+        // See docs/dev/native-object-lifecycle-cleanup/tasks/teardown-contract.md.
+        void DestroyAll();
+
         // ── Runtime settings ──────────────────────────────────────────────
         void SetUserId(string userId);
         void SetAppMuted(bool muted);

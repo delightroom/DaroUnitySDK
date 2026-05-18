@@ -61,6 +61,13 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroAppOpenAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            {
+                DaroLog.Warn("AppOpen",
+                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToLoad(preconditionError);
+                return;
+            }
             DaroLog.Verbose("AppOpen", $"Load adUnit='{AdUnitId}'");
             DaroPlatform.Current.LoadAppOpen(AdUnitId);
         }

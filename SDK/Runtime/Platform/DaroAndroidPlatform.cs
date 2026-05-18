@@ -373,24 +373,87 @@ namespace Daro.Internal
 
         // ── Full platform teardown ───────────────────────────────────────────
 
+        /// <summary>
+        /// IDaroPlatform-level teardown trigger. Called by
+        /// <c>DaroSdk.MarkShuttingDown</c> on app-quit / Unity-runtime-teardown.
+        /// Best-effort: never throws (DaroLog.Exception isolates). Idempotent
+        /// via the <c>_disposed</c> gate inside <see cref="Dispose"/>.
+        /// </summary>
+        /// <remarks>
+        /// Plan deviation 2026-05-14: original plan §3 specified
+        /// <c>_bridge.CallStatic("destroyAll")</c> forward-defined for the
+        /// android-destroy-all task. Discovery during impl: <see cref="Dispose"/>
+        /// already exists with the per-instance iteration + dict clear pattern
+        /// the sketch §iOS-shim mirrored (originally orphan — never wired up).
+        /// Wrapping it here drops the forward-define coupling — no new Kotlin
+        /// method needed for csharp-runtime-hook to ship.
+        /// </remarks>
+        public void DestroyAll()
+        {
+            DaroLog.Verbose("Sdk", $"Platform[Android].DestroyAll _adObjects={_adObjects.Count} _proxies={_proxies.Count}");
+            try
+            {
+                Dispose();
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Sdk", e);
+            }
+
+            // Native ad per-instance handle pattern (sketch CD-8) bypasses
+            // _adObjects, so Dispose() above doesn't reach live native ads.
+            // android-destroy-all task adds Kotlin DaroUnityBridge.destroyAll
+            // which iterates a static registry of live DaroUnityNativeAd
+            // instances. Order: per-instance dispose (above) first, then
+            // native ad sweep — mirrors iOS helper-dispatcher pattern.
+            //
+            // Note: `_bridge` was disposed by Dispose() above. We create a
+            // fresh AndroidJavaClass handle for the sweep call — bridge is
+            // a stateless static object in Kotlin, so a new JNI handle
+            // resolves to the same backing class.
+            try
+            {
+                using var bridge = new AndroidJavaClass("so.daro.unity.DaroUnityBridge");
+                bridge.CallStatic("destroyAll");
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Sdk", e);
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;  // Layer 2 armed — all proxy callbacks short-circuit.
 
+            // Per-object try/catch so a single ad's destroy throw (e.g.
+            // AndroidJavaException bubbling up from Kotlin shim, or a
+            // bridge-call mid-teardown) doesn't halt the rest of the loop —
+            // without it, partial-cleanup state leaks views / dict entries /
+            // bridge handles across the remaining ads.
             foreach (var kv in _adObjects)
             {
-                kv.Value.Call("destroy");
-                kv.Value.Dispose();
+                try
+                {
+                    kv.Value.Call("destroy");
+                    kv.Value.Dispose();
+                }
+                catch (Exception e)
+                {
+                    DaroLog.Exception("Sdk", e);
+                }
             }
             _adObjects.Clear();
 
             // AndroidJavaProxy is not IDisposable — JNI ref released on GC.
             _proxies.Clear();
 
-            _activity?.Dispose();
-            _application?.Dispose();
-            _bridge.Dispose();
+            // Same isolation discipline for the singleton JNI handles —
+            // one misbehaving Dispose() must not skip the rest.
+            try { _activity?.Dispose(); }    catch (Exception e) { DaroLog.Exception("Sdk", e); }
+            try { _application?.Dispose(); } catch (Exception e) { DaroLog.Exception("Sdk", e); }
+            try { _bridge.Dispose(); }       catch (Exception e) { DaroLog.Exception("Sdk", e); }
         }
 
         // ─────────────────────────────────────────────────────────────────────

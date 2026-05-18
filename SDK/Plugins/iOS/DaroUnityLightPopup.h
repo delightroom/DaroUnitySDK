@@ -4,7 +4,7 @@
 //  Unity build system requires a header alongside each iOS native plugin .mm
 //  for plugin discovery. NOT a public include — paired with .mm only.
 //
-//  Sketch: docs/dev/light-popup-ios/sketch-light-popup-ios.md §"DaroUnityLightPopup.h"
+//  See docs/features/native-bridge.md (Light Popup / iOS).
 //
 #pragma once
 

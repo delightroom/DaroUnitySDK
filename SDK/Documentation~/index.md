@@ -9,17 +9,23 @@ Read this first when integrating the Daro Unity SDK into a game project. Every c
   - [`ad-formats/interstitial.md`](ad-formats/interstitial.md) — fullscreen interrupt ad
   - [`ad-formats/rewarded.md`](ad-formats/rewarded.md) — user-initiated reward video
   - [`ad-formats/appopen.md`](ad-formats/appopen.md) — auto-shown on foreground return
+  - [`ad-formats/banner.md`](ad-formats/banner.md) — persistent overlay at top/bottom of screen
+  - [`ad-formats/native.md`](ad-formats/native.md) — publisher-rendered ad in your own Unity UI
+  - [`ad-formats/light-popup.md`](ad-formats/light-popup.md) — modal popup with customizable colors
+- **Troubleshooting**: [`troubleshooting.md`](troubleshooting.md) — first-response diagnostics for no-fill, invalid ad unit, consent / ATT, iOS signing, EDM4U, stale exports.
 - **API reference**: [`api-reference.md`](api-reference.md) — exact public C# types, methods, events, and enums.
 
-## Covered scope (v0)
+## Covered scope
 
 | Ad format | KB | Notes |
 |---|---|---|
 | Interstitial | ✓ | fullscreen, the simplest pattern |
 | Rewarded | ✓ | Interstitial + `OnEarnedReward` / `SetCustomData` |
 | AppOpen | ✓ | foreground-return auto-trigger; Android cache race notes inside |
-| Banner / Native / LightPopup | (phase 2) | view-based — see `Samples/DaroExample/Assets/Scripts/` demos |
-| Failure-mode diagnostic (no-fill / cert / consent) | (phase 2) | mediation debugging playbook |
+| Banner | ✓ | persistent native overlay; Load / Show / Hide / Dispose lifecycle |
+| Native | ✓ | publisher-renders pattern; slot-path (`DaroNativeAdView`) + raw path; multi-instance |
+| LightPopup | ✓ | modal Dialog (Android) / present (iOS) with 9-color + close-label options |
+| Failure-mode diagnostic | ✓ | [troubleshooting.md](troubleshooting.md) |
 
 ## Integration principles (TL;DR)
 
@@ -30,4 +36,4 @@ Read this first when integrating the Daro Unity SDK into a game project. Every c
 5. **Guard `Show()` with `IsReady()`** (or at minimum a null check on the instance). Showing before loading raises `InvalidOperationException` or surfaces `OnAdFailedToShow`.
 6. **AppOpen is the exception to manual `Show()`**: subscribe to `DaroAppStateNotifier.OnAppStateChanged` and `Show()` on the Foreground transition rather than wiring it to a user-facing button.
 
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (Interstitial 427-438, Rewarded 462-474, AppOpen 528-579), SDK/Runtime/DaroSdk.cs, SDK/Runtime/Daro*Ad.cs, docs/features/native-bridge.md -->
+<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (Interstitial 427-438, Rewarded 462-474, AppOpen 528-579, Banner 603-663, LightPopup 665-730), Samples/DaroExample/Assets/Scripts/Runtime/NativeAdTests/NativeAdManualTest.cs, SDK/Runtime/DaroSdk.cs, SDK/Runtime/Daro*Ad.cs, docs/features/native-bridge.md -->

@@ -3,7 +3,7 @@
 //  Light Popup ObjC++ shim — wraps DaroObjCLightPopupAdLoader + DaroObjCLightPopupAd
 //  + DaroObjCLightPopupConfiguration (DaroMObjCBridge module) for Unity.
 //  Parallel to Android's DaroUnityLightPopupAd.kt; full design in
-//  docs/dev/light-popup-ios/sketch-light-popup-ios.md.
+//  See docs/features/native-bridge.md (Light Popup / iOS).
 //
 //  Lifecycle (sketch §"Sequence Diagrams — Load → Show → Dismiss"):
 //
@@ -335,6 +335,36 @@ void DaroUnity_DestroyLightPopup(const char* adUnitId) {
     });
     dispatch_async(s_adQueue, ^{
         s_lightPopups[unit] = nil;   // ARC releases loader + ad + delegates + config
+    });
+}
+
+// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by
+// DaroUnity_DestroyAll (DaroUnityBridge.mm). A2 invariant: set
+// entry.destroyed=YES for every live entry BEFORE clearing the dict.
+//
+// No view removal (D-iOS-lightpopup-modal in plan §2): modal presentation
+// lives inside MAX SDK's own controller — force-dismiss during teardown is
+// risky w.r.t. MAX internals. Currently presented modal will stay until
+// natural dismiss / ARC release after the entry strong-refs (in MAX) drop.
+// Mobile hard kill OS-reaps the process; only iOS willTerminate ~5s grace
+// has the visual artifact risk (deferred — out of sprint scope).
+//
+// Caller contract: must NOT be invoked from s_adQueue context — would deadlock.
+void DaroUnityLightPopup_DestroyAll(void) {
+    dispatch_sync(s_adQueue, ^{
+        NSUInteger entryCount = s_lightPopups.count;
+        if (entryCount == 0) {
+            DaroLogD(@"LightPopup", @"DestroyAll noop (no entries)");
+            return;
+        }
+
+        for (DaroUnityLightPopupEntry* entry in s_lightPopups.allValues) {
+            entry.destroyed = YES;   // A2: armed before dict ref release
+        }
+        [s_lightPopups removeAllObjects];
+
+        DaroLogD(@"LightPopup", @"DestroyAll cleared %lu entries",
+                 (unsigned long)entryCount);
     });
 }
 

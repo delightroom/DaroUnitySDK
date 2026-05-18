@@ -2,7 +2,7 @@
 //  DaroUnityNativeAd.mm
 //  Native ad ObjC++ shim — wraps DaroObjCNativeView (DaroMObjCBridge module)
 //  for Unity. Parallel to Android's DaroUnityNativeAd.kt; full design in
-//  docs/dev/native-ad-ios/sketch-native-ad-ios.md.
+//  See docs/features/native-bridge.md (Native ad / iOS).
 //
 //  Lifecycle (sketch §5):
 //    Create        → entry slot only, no view yet
@@ -128,7 +128,13 @@ static const double kIconPollIntervalSec = 0.2;
 
 - (void)nativeViewDidLoad:(DaroObjCNativeView*)view
                    adInfo:(DaroObjCAdInfo*)adInfo {
-    if (self.entry.destroyed) return;
+    // A2 retention precondition (teardown-contract §iOS concurrency model):
+    // snapshot weak self.entry to a strong local at entry of every callback.
+    // Without this, dict-slot release inside DaroUnity_NativeAd_Destroy can
+    // drop the last strong ref to entry, turning subsequent self.entry into
+    // a nil weak read — and `nil.destroyed` returns NO, defeating the guard.
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
 
     // Order-fix: reset loadedEmitted at the start of EVERY load delivery —
     // covers daro-internal refresh-driven loads (CommonAdNativeView's
@@ -139,35 +145,38 @@ static const double kIconPollIntervalSec = 0.2;
     // (line 187, which triggers this delegate). So pendingImpression at this
     // point was queued for THIS cycle and must survive the reset to flush
     // after adLoaded emits.
-    self.entry.loadedEmitted = NO;
+    entry.loadedEmitted = NO;
 
-    [self scrapeAndDeliver:self.entry adInfo:adInfo attempt:0];
+    [self scrapeAndDeliver:entry adInfo:adInfo attempt:0];
 }
 
 - (void)nativeView:(DaroObjCNativeView*)view
   didFailWithError:(NSError*)error {
-    if (self.entry.destroyed) return;
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToLoad\",\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
     if (s_nativeAdCallback) {
-        s_nativeAdCallback(self.entry.handleId, [json UTF8String], NULL, 0);
+        s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
     }
 }
 
 - (void)nativeViewDidClick:(DaroObjCNativeView*)view
                     adInfo:(DaroObjCAdInfo*)adInfo {
-    if (self.entry.destroyed) return;
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adClicked\"%@}", LatencyField(adInfo)];
     if (s_nativeAdCallback) {
-        s_nativeAdCallback(self.entry.handleId, [json UTF8String], NULL, 0);
+        s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
     }
 }
 
 - (void)nativeViewDidRecordImpression:(DaroObjCNativeView*)view
                                adInfo:(DaroObjCAdInfo*)adInfo {
-    if (self.entry.destroyed) return;
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
 
     // Order-fix: ALWAYS queue impression. MAX's didPayRevenue fires
     // synchronously during renderAd (CommonAdNativeView.swift:185), which
@@ -178,7 +187,7 @@ static const double kIconPollIntervalSec = 0.2;
     // loads, so the queue depth stays at 0 or 1 and the queued impression
     // always belongs to the in-flight load. scrapeAndDeliver flushes it
     // after adLoaded emits.
-    self.entry.pendingImpression = adInfo;
+    entry.pendingImpression = adInfo;
 }
 
 // CD-6 icon scrape with 5×200ms polling fallback. iOS MAX adapters mostly
@@ -405,13 +414,26 @@ void DaroUnity_NativeAd_NotifyClicked(int handleId) {
 
 void DaroUnity_NativeAd_Destroy(int handleId) {
     NSNumber* key = @(handleId);
-    dispatch_async(s_adQueue, ^{
+    // A2 invariant (teardown-contract §iOS concurrency model): destroyed=YES
+    // must be observable to delegate callbacks BEFORE this function returns
+    // to C#. With dispatch_async the block runs after the return, leaving a
+    // window where a delegate fires on main with destroyed=NO (race B in
+    // teardown-contract §A2 commentary). dispatch_sync forces the flag-set
+    // to happen synchronously on s_adQueue.
+    //
+    // Caller contract: Destroy must NOT be called from s_adQueue context —
+    // would deadlock. C# DllImport callers run on Unity main or worker
+    // threads, never on s_adQueue.
+    dispatch_sync(s_adQueue, ^{
         DaroUnityNativeAdEntry* entry = s_nativeAds[key];
         if (!entry) return;   // unknown handleId — silent no-op (idempotent;
                               // C# side has _disposed gate)
 
-        entry.destroyed = YES;   // Layer-1 armed — in-flight delegate
-                                  // callbacks short-circuit
+        entry.destroyed = YES;   // A2: first observable teardown step.
+                                  // ObjC `atomic` accessor provides seq-cst
+                                  // cross-queue visibility; main-queue
+                                  // delegates reading `entry.destroyed`
+                                  // after this point see YES.
         DaroObjCNativeView*    nativeView = entry.nativeView;
         DaroUnityNativeAdHost* host       = entry.host;
 
@@ -422,12 +444,52 @@ void DaroUnity_NativeAd_Destroy(int handleId) {
             //   DaroAdNativeView (internal) deinit → DaroAdNativeLoader deinit
             //   (cancels pending continuation, but does NOT call
             //   MANativeAdLoader.destroyAd: on _loadedAd — see
-            //   docs/dev/native-ad-ios/source-verification-notes.md V2.
+            //   docs/features/native-bridge.md Native ad / iOS notes.
             //   Per-dispose MAAd leak risk is quantified at smoke time, not
             //   worked around in v1).
         });
 
-        s_nativeAds[key] = nil;   // ARC drops entry + delegate + view tree
+        s_nativeAds[key] = nil;   // A2: dict ref release AFTER destroyed=YES.
+                                  // ARC drops entry + delegate + view tree
+                                  // once the captured `nativeView`/`host`
+                                  // strong refs above also release.
+    });
+}
+
+// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by
+// DaroUnity_DestroyAll (DaroUnityBridge.mm) on app-quit / Unity-runtime-teardown.
+// A2 invariant: set entry.destroyed=YES for every live entry BEFORE clearing
+// the dict, so any in-flight delegate callback (which holds a strong-local
+// snapshot of entry per §iOS concurrency model retention contract) reads YES
+// and bails before reaching DaroDispatch.
+//
+// Caller contract: must NOT be invoked from s_adQueue context — would deadlock.
+void DaroUnityNativeAd_DestroyAll(void) {
+    dispatch_sync(s_adQueue, ^{
+        NSUInteger entryCount = s_nativeAds.count;
+        if (entryCount == 0) {
+            DaroLogD(@"Native", @"DestroyAll noop (no entries)");
+            return;
+        }
+
+        NSMutableArray<UIView*>* viewsToRemove = [NSMutableArray array];
+        for (DaroUnityNativeAdEntry* entry in s_nativeAds.allValues) {
+            entry.destroyed = YES;   // A2: armed before dict ref release
+            if (entry.nativeView) [viewsToRemove addObject:entry.nativeView];
+            if (entry.host)       [viewsToRemove addObject:entry.host];
+        }
+        [s_nativeAds removeAllObjects];
+
+        if (viewsToRemove.count > 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                for (UIView* v in viewsToRemove) {
+                    [v removeFromSuperview];
+                }
+            });
+        }
+
+        DaroLogD(@"Native", @"DestroyAll cleared %lu entries, %lu views",
+                 (unsigned long)entryCount, (unsigned long)viewsToRemove.count);
     });
 }
 

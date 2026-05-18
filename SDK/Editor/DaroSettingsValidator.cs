@@ -78,18 +78,54 @@ namespace Daro.Editor
                     "Install com.google.external-dependency-manager."));
             }
 
-            // AI KB marker — Warn if the toggle is ON but at least one existing
-            // agent-instruction file (CLAUDE.md / AGENTS.md) is missing the
-            // marker block (out-of-sync state after manual edit / file deletion
-            // / orphaned settings). Pure decision in ShouldWarnAboutAiKbMarker
+            // AI KB marker axis (Codex AGENTS.md). Warn if the toggle is ON,
+            // AGENTS.md exists at the project root, but its marker block is
+            // missing — out-of-sync state after manual edit / orphaned
+            // settings / pre-existing AGENTS.md the SDK has not yet been
+            // reconciled into. Pure decision in ShouldWarnAboutAiKbMarker
             // for EditMode test seams.
-            if (ShouldWarnAboutAiKbMarker(settings, DaroAiKbTargets.AllPaths()))
+            if (ShouldWarnAboutAiKbMarker(settings, DaroAiKbTargets.MarkerAllPaths()))
             {
                 results.Add(new ValidationResult(
                     "any.aiKbMarker",
                     ValidationSeverity.Warn,
-                    "AI integration helper toggle is ON but at least one agent-instruction file (CLAUDE.md / AGENTS.md) is missing the marker block.",
-                    "Re-toggle in Integration Manager, or ensure CLAUDE.md or AGENTS.md exists at the project root."));
+                    "AI integration helper toggle is ON but AGENTS.md is missing the marker block.",
+                    "Re-toggle in Integration Manager, or ensure AGENTS.md exists at the project root."));
+            }
+
+            // AI KB own-file axis (Claude `.claude/rules/`, Cursor
+            // `.cursor/rules/`, Cline `.clinerules/`). Warn when an
+            // env-signaled target's path is occupied by a *user-authored*
+            // file (not vendor-owned) or when the vendor-owned file is
+            // stale (payload schema bump). Targets without env signal are
+            // skipped entirely — no warn. Cline single-file conflict is
+            // intentionally NOT raised as a Warn — it's a normal user
+            // choice surfaced in the UI notice instead.
+            if (ShouldWarnAboutAiKbOwnFile(settings))
+            {
+                results.Add(new ValidationResult(
+                    "any.aiKbOwnFile",
+                    ValidationSeverity.Warn,
+                    "AI integration helper toggle is ON but one or more own-file rule paths are user-authored (not vendor-owned) or stale.",
+                    "Manually remove the conflicting file at the target path, or re-toggle in Integration Manager."));
+            }
+
+            // AI KB content copy (`<project>/.daro/integration-kb/`). Warn
+            // when the toggle is ON, at least one env signal exists, and
+            // the KB copy directory either:
+            //   - exists but is user-occupied (no vendor sentinel), or
+            //   - exists, vendor-owned, but content is stale vs.
+            //     `<package>/Documentation~/`.
+            // Source-unavailable (package install path unresolved) is
+            // logged as a Warn separately by the copier and not raised
+            // again here.
+            if (ShouldWarnAboutAiKbKb(settings))
+            {
+                results.Add(new ValidationResult(
+                    "any.aiKbKb",
+                    ValidationSeverity.Warn,
+                    "AI integration helper toggle is ON but `.daro/integration-kb/` is user-occupied or stale.",
+                    "Manually remove `.daro/integration-kb/`, or re-toggle in Integration Manager."));
             }
 
             // -- Platform-specific checks --------------------------------------
@@ -109,15 +145,61 @@ namespace Daro.Editor
 
         // Test seam for the "any.aiKbMarker" check. Tests pass temp paths
         // instead of the real DaroAiKbTargets list. Returns true when the
-        // toggle is ON AND at least one existing target file is missing the
-        // marker (out-of-sync state). If the toggle is OFF or no targets
-        // exist at all, returns false (no Warn). The "no targets exist"
-        // case is surfaced by the UI notice instead.
+        // toggle is ON AND at least one existing marker target file is
+        // missing the marker block (out-of-sync state). If the toggle is OFF
+        // or no marker targets exist at all, returns false (no Warn).
         internal static bool ShouldWarnAboutAiKbMarker(DaroSettings settings, System.Collections.Generic.IEnumerable<string> targetPaths)
         {
             if (settings == null || !settings.enableAiIntegrationHelper) return false;
             foreach (var path in targetPaths)
                 if (System.IO.File.Exists(path) && !DaroAiKbInjector.HasMarker(path)) return true;
+            return false;
+        }
+
+        // True when at least one env-signaled own-file target's path is
+        // occupied by a user-authored file (Apply would refuse to
+        // overwrite) or is stale (vendor-owned but content doesn't match
+        // what Apply would write). Toggle must be ON. Targets without env
+        // signal are skipped entirely — they're not in scope.
+        internal static bool ShouldWarnAboutAiKbOwnFile(DaroSettings settings)
+        {
+            if (settings == null || !settings.enableAiIntegrationHelper) return false;
+            var root = DaroProjectRoot.Path;
+            foreach (var target in DaroAiKbTargets.OwnFileTargets)
+            {
+                if (target.EnvSignal == null || !target.EnvSignal(root)) continue;
+
+                // Skip conflict-guarded targets — those are reflected in
+                // the UI notice, not validator output.
+                if (target.ConflictGuard != null &&
+                    !string.IsNullOrEmpty(target.ConflictGuard(root)))
+                    continue;
+
+                var path = target.AbsolutePath;
+                if (!System.IO.File.Exists(path)) continue;  // not yet created; reconciler will Create
+
+                if (!DaroAiKbOwnFileWriter.IsOwned(path)) return true;  // user-authored at target path
+
+                var expected = target.BodyComposer(DaroAiKbPayload.DirectiveBlock);
+                if (!DaroAiKbOwnFileWriter.IsUpToDate(path, expected)) return true;  // stale vendor-owned
+            }
+            return false;
+        }
+
+        // True when toggle is ON, at least one env signal exists, and the
+        // KB copy directory at `<project>/.daro/integration-kb/` either
+        // (a) exists but lacks the vendor sentinel (user-occupied), or
+        // (b) is vendor-owned but stale vs. `<package>/Documentation~/`.
+        internal static bool ShouldWarnAboutAiKbKb(DaroSettings settings)
+        {
+            if (settings == null || !settings.enableAiIntegrationHelper) return false;
+            if (!DaroAiKbTargets.AnyEnvSignal()) return false;
+
+            var kbDir = DaroAiKbPaths.KbDirAbsolute(DaroProjectRoot.Path);
+            if (!System.IO.Directory.Exists(kbDir)) return false;  // reconciler will Create
+
+            if (!DaroAiKbKbCopier.IsOwned()) return true;          // user-occupied at KB path
+            if (!DaroAiKbKbCopier.IsUpToDate()) return true;       // stale vendor copy
             return false;
         }
 

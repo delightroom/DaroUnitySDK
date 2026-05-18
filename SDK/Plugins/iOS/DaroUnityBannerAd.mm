@@ -2,7 +2,7 @@
 //  DaroUnityBannerAd.mm
 //  Banner ObjC++ shim — wraps DaroObjCBannerView (DaroMObjCBridge module)
 //  for Unity. Parallel to Android's DaroUnityBannerAd.kt; full design in
-//  docs/dev/banner-ios/sketch-banner-ios.md.
+//  See docs/features/native-bridge.md (Banner overlay / iOS).
 //
 //  Lifecycle (sketch §"Overlay Lifecycle State Machine"):
 //
@@ -287,6 +287,43 @@ void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
                                                 BannerSizeForOrdinal(sizeOrd),
                                                 vc.view);
         });
+    });
+}
+
+// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by
+// DaroUnity_DestroyAll (DaroUnityBridge.mm). Banner has no entry-level
+// `destroyed` flag (D-iOS-banner-conditional in plan §2): banner delegates
+// don't read entry state in a way that would race during teardown — view
+// removal + dict ref release on s_adQueue is sufficient. If a future
+// banner-delegate change introduces entry-level callback state that needs
+// per-instance suppression, add a `destroyed` BOOL to DaroUnityBannerEntry
+// and follow NativeAd's A2 pattern here.
+//
+// Caller contract: must NOT be invoked from s_adQueue context — would deadlock.
+void DaroUnityBanner_DestroyAll(void) {
+    dispatch_sync(s_adQueue, ^{
+        NSUInteger entryCount = s_banners.count;
+        if (entryCount == 0) {
+            DaroLogD(@"Banner", @"DestroyAll noop (no entries)");
+            return;
+        }
+
+        NSMutableArray<UIView*>* viewsToRemove = [NSMutableArray array];
+        for (DaroUnityBannerEntry* entry in s_banners.allValues) {
+            if (entry.bannerView) [viewsToRemove addObject:entry.bannerView];
+        }
+        [s_banners removeAllObjects];
+
+        if (viewsToRemove.count > 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                for (UIView* v in viewsToRemove) {
+                    [v removeFromSuperview];
+                }
+            });
+        }
+
+        DaroLogD(@"Banner", @"DestroyAll cleared %lu entries, %lu views",
+                 (unsigned long)entryCount, (unsigned long)viewsToRemove.count);
     });
 }
 

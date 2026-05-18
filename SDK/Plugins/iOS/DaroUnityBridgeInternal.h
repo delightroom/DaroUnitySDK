@@ -60,4 +60,34 @@ extern NSString* LatencyField(id _Nullable info);
 // Provided by Unity's UnityFramework at link time.
 extern UIViewController* UnityGetGLViewController(void);
 
+// Per-format DestroyAll helpers — called by DaroUnity_DestroyAll in
+// DaroUnityBridge.mm during app-quit / Unity-runtime-teardown. Each helper
+// owns its dict and entry types (entry @interface declarations live in the
+// matching .mm file); the dispatcher in DaroUnityBridge.mm cannot access
+// those types directly.
+//
+// Contract per helper: dispatch_sync(s_adQueue) — set entry.destroyed=YES
+// for entry-guarded formats BEFORE [dict removeAllObjects]; dispatch_async
+// view removal to main queue. Caller (DaroUnity_DestroyAll) must NOT wrap
+// these calls in an outer s_adQueue sync block — would deadlock.
+//
+// `extern "C"` linkage required because the definitions live inside
+// `extern "C" { ... }` blocks in each .mm file. ObjC++ default linkage for
+// plain `extern void foo()` is C++ — mismatched definition link-fails with
+// "Declaration ... has a different language linkage".
+//
+// See docs/dev/native-object-lifecycle-cleanup/tasks/ios-destroy-all.md
+// §DestroyAll path (hygiene) for the helper-dispatcher pattern rationale.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void DaroUnityNativeAd_DestroyAll(void);
+void DaroUnityBanner_DestroyAll(void);
+void DaroUnityLightPopup_DestroyAll(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 NS_ASSUME_NONNULL_END

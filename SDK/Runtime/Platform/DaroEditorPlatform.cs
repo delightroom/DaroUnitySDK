@@ -142,6 +142,17 @@ namespace Daro.Internal
             SetLogLevelCallCount += 1;
         }
 
+        // DestroyAll: Editor mock has no native side. Mirror the LogLevel
+        // observability pattern — record call count so teardown tests can
+        // verify the trigger propagation (DaroSdk.MarkShuttingDown →
+        // platform.DestroyAll) without exercising real native shims.
+        internal int DestroyAllCallCount { get; private set; }
+        public void DestroyAll()
+        {
+            DaroLog.Verbose("Editor", $"Platform[Editor].DestroyAll (callCount={DestroyAllCallCount + 1})");
+            DestroyAllCallCount += 1;
+        }
+
         // ── IDaroPlatform: Per-format CRUD (fans into shared helpers) ───────
 
         public void CreateInterstitial(string adUnitId, string? placement)

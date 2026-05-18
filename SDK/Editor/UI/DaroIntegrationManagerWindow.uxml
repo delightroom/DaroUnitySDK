@@ -77,11 +77,14 @@
       </VisualElement>
     </Foldout>
 
-    <!-- AI Integration Helper — toggle that injects an integration-KB directive
-         into existing agent-instruction files (CLAUDE.md / AGENTS.md) so AI
-         coding agents auto-discover the SDK's Documentation~/ knowledge base
-         on session cold-start. The ChangeEvent handler reconciles marker
-         blocks; the notice Label is shown when neither target file exists. -->
+    <!-- AI Integration Helper — toggle that drives a 3-layer env-gated
+         reconcile (see DaroAiKbBootstrap):
+         (1) KB copy `<package>/Documentation~/` → `<project>/.daro/integration-kb/`,
+         (2) vendor-owned own-file directives under `.claude/rules/`, `.cursor/rules/`,
+         `.clinerules/` for env-signaled tools, (3) marker block inject into root
+         AGENTS.md (Codex). Legacy root CLAUDE.md marker is swept on every toggle.
+         The notice Label surfaces "no env detected" and the Cline single-file
+         conflict. -->
     <Foldout name="im-foldout-aihelper" value="true" class="im-foldout">
       <VisualElement class="im-section">
         <Toggle name="im-ai-helper-toggle" binding-path="enableAiIntegrationHelper"/>

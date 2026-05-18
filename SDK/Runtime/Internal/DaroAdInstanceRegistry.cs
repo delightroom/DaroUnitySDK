@@ -41,6 +41,18 @@ namespace Daro.Internal
         private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), WeakReference> _map
             = new ConcurrentDictionary<(DaroAdFormat, string), WeakReference>();
 
+        // Teardown gate. Set by MarkShuttingDown on app-quit / Unity-runtime
+        // teardown. Extends the existing "Find returns null → silent no-op"
+        // contract — a callback arriving after MarkShuttingDown sees a null
+        // ad and the public event never fires. See
+        // docs/dev/native-object-lifecycle-cleanup/tasks/teardown-contract.md
+        // §Cross-platform managed contract §1 (D-gate-c).
+        //
+        // volatile so a write on the main thread (OnApplicationQuit) is
+        // immediately visible to Find calls on any thread. Reset to false
+        // by ResetStatics so play-mode re-entry starts clean.
+        private static volatile bool _isShuttingDown;
+
         /// <summary>
         /// Register (or replace) an instance under <paramref name="format"/>
         /// + <paramref name="adUnitId"/>. Last writer wins — matches §2.4's
@@ -61,6 +73,10 @@ namespace Daro.Internal
         /// </summary>
         internal static T? Find<T>(DaroAdFormat format, string adUnitId) where T : class
         {
+            // Teardown gate: once SDK is shutting down, no callback should
+            // reach a public event. Returning null here makes the existing
+            // forwarder no-op path catch it.
+            if (_isShuttingDown) return null;
             if (adUnitId == null) return null;
             if (!_map.TryGetValue((format, adUnitId), out var weak)) return null;
 
@@ -69,6 +85,33 @@ namespace Daro.Internal
             // and dropped the reference" case. Callers no-op on null.
             return weak.Target as T;
         }
+
+        /// <summary>
+        /// Arm the teardown gate. After this call, <see cref="Find{T}"/>
+        /// returns null for every key — silent no-op at the forwarder layer.
+        /// Idempotent.
+        /// </summary>
+        /// <remarks>
+        /// Called by <c>DaroSdk.MarkShuttingDown</c> on app-quit / Unity
+        /// runtime teardown. Reset to false by <see cref="ResetStatics"/>
+        /// on next play-mode enter / build startup so a fresh session does
+        /// not inherit the gate.
+        /// </remarks>
+        internal static void MarkShuttingDown()
+        {
+            _isShuttingDown = true;
+        }
+
+        /// <summary>
+        /// Read the teardown gate. Exposed for callback paths that bypass
+        /// <see cref="Find{T}"/> — currently <see cref="DaroNativeAd"/>'s
+        /// sink-routed Fire methods (CD-8 per-instance handle pattern does
+        /// not register with this dict, so the Find gate cannot see those
+        /// callbacks). Other format Fire paths come through the platform
+        /// forwarder which already gates via <see cref="Find{T}"/>; they
+        /// don't need this getter.
+        /// </summary>
+        internal static bool IsShuttingDown => _isShuttingDown;
 
         /// <summary>
         /// Remove the registration for <paramref name="format"/> +
@@ -103,6 +146,10 @@ namespace Daro.Internal
         internal static void ResetStatics()
         {
             _map.Clear();
+            // Reset teardown gate so play-mode re-entry behaves as if no
+            // prior session ever shut down (mirrors MainThreadDispatcher
+            // pattern at MainThreadDispatcher.cs:230).
+            _isShuttingDown = false;
         }
     }
 }

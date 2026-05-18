@@ -46,6 +46,24 @@ namespace Daro.Editor
             var plistPath = Path.Combine(pathToBuiltProject, "Info.plist");
             ApplyPlistChanges(settings, plistPath, LoadSkAdNetworkIds());
             ApplyPbxChanges(settings, pathToBuiltProject);
+            EnableObjCExceptionsOnUnityFramework(pathToBuiltProject);
+        }
+
+        // DaroUnityBridge.mm 의 DestroyAll 안 per-helper @try/@catch (shutdown
+        // best-effort teardown isolation) 를 위해 ObjC exceptions 활성화. Unity
+        // 가 export 한 Xcode project 의 default 가 NO 라서 안 켜면 컴파일 실패.
+        // Daro plugins (Plugins/iOS/*) 는 UnityFramework target 에 attach 되므로
+        // main Unity-iPhone target 은 default(NO) 유지.
+        private static void EnableObjCExceptionsOnUnityFramework(string pathToBuiltProject)
+        {
+            var pbxPath = PBXProject.GetPBXProjectPath(pathToBuiltProject);
+            var pbx = new PBXProject();
+            pbx.ReadFromFile(pbxPath);
+
+            var unityFrameworkGuid = pbx.GetUnityFrameworkTargetGuid();
+            pbx.SetBuildProperty(unityFrameworkGuid, "GCC_ENABLE_OBJC_EXCEPTIONS", "YES");
+
+            pbx.WriteToFile(pbxPath);
         }
 
         // -- Plist seam (testable) -------------------------------------------

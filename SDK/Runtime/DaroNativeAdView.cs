@@ -22,8 +22,9 @@ namespace Daro
     /// (read <see cref="DaroNativeAd.Info"/> directly into their own UI).</para>
     ///
     /// <para><b>Visibility tracking (lightweight)</b>:
-    /// <see cref="OnEnable"/> → <see cref="DaroNativeAd.NotifyVisible"/>;
-    /// <see cref="OnDisable"/> → <see cref="DaroNativeAd.NotifyHidden"/>.
+    /// <see cref="Bind"/> on an active view or <see cref="OnEnable"/> →
+    /// <see cref="DaroNativeAd.NotifyVisible"/>; <see cref="OnDisable"/> →
+    /// <see cref="DaroNativeAd.NotifyHidden"/>.
     /// v1 Android shim only logs these — MAX billing impression fires
     /// independently via the revenue listener.</para>
     ///
@@ -95,7 +96,11 @@ namespace Daro
                 throw new InvalidOperationException(
                     "Cannot Bind a DaroNativeAd that is not ready.");
 
+            var previousAd = _boundAd;
             Unbind();
+
+            if (isActiveAndEnabled && previousAd != null && previousAd != ad)
+                previousAd.NotifyHidden();
 
             _boundAd = ad;
 
@@ -111,6 +116,9 @@ namespace Daro
                 if (ctaText != null) ctaText.text = info.CallToAction ?? string.Empty;
                 CtaButton.onClick.AddListener(OnCtaClicked);
             }
+
+            if (isActiveAndEnabled && previousAd != ad)
+                ad.NotifyVisible();
         }
 
         /// <summary>

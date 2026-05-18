@@ -161,10 +161,19 @@ AppOpen only. The SDK auto-preloads after dismiss; a manual `Load()` here create
 
 | Scenario | Recommended format | KB |
 |---|---|---|
-| Interrupt between game rounds | Interstitial | [interstitial.md](ad-formats/interstitial.md) |
+| Interrupt between game rounds | Interstitial | [ad-formats/interstitial.md](ad-formats/interstitial.md) |
 | User-initiated reward ("get 5 coins") | Rewarded | [ad-formats/rewarded.md](ad-formats/rewarded.md) |
 | Returning from background to foreground | AppOpen | [ad-formats/appopen.md](ad-formats/appopen.md) |
-| Persistent strip at top/bottom of screen | Banner | (phase 2) |
-| Native widget / carousel inside game UI | Native / LightPopup | (phase 2) |
+| Persistent strip at top/bottom of screen | Banner | [ad-formats/banner.md](ad-formats/banner.md) |
+| Ad-as-content inside your own UI (feed / list / detail card) | Native | [ad-formats/native.md](ad-formats/native.md) |
+| Modal popup with custom colors and a 6–8s auto-dismiss | LightPopup | [ad-formats/light-popup.md](ad-formats/light-popup.md) |
+
+The view-based formats (Banner / Native / LightPopup) follow different lifecycle shapes from the fullscreen formats — pre-read the format page before integrating. Most notably:
+
+- **Banner is a native overlay**, not a Canvas child. It does not participate in Unity's sort order; the consumer owns the screen-lifecycle Hide/Dispose. See [banner.md](ad-formats/banner.md).
+- **Native is publisher-rendered**. The SDK delivers asset payload + click signal routing; you build the UI. Multi-instance same-ad-unit is supported for feeds. See [native.md](ad-formats/native.md).
+- **LightPopup uses Interstitial-style lifecycle** (Load / Show / 7 events) but is rendered by the native layer with options baked at construction. See [light-popup.md](ad-formats/light-popup.md).
+
+When ads fail in production — no-fill, invalid ad unit, consent / ATT issues, EDM4U / iOS signing — start at [troubleshooting.md](troubleshooting.md).
 
 <!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (whole controller), SDK/Runtime/DaroSdk.cs, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/Internal/SafeEventInvoker.cs, SDK/Runtime/Internal/MainThreadDispatcher.cs, docs/features/event-handler.md -->

@@ -110,12 +110,17 @@ namespace Daro.Editor
 
             // --- AI Integration Helper ---
             ["ai.toggleLabel"]            = "Enable AI Integration Helper",
-            ["ai.toggleHelp"]             = "Injects a directive block into agent-instruction files at the project root (CLAUDE.md for Claude Code, AGENTS.md for Codex) so AI coding agents are guided to read the SDK's integration knowledge base on session cold-start. Both files are detected automatically — only those that already exist are written to. Toggling off cleans the marker block; bytes outside it are preserved byte-for-byte.",
-            ["ai.noAgentFile"]            = "No CLAUDE.md or AGENTS.md found at the project root. Create at least one (the helper does not auto-create files) and toggle again.",
-            ["ai.markerInjected"]         = "Directive injected into agent-instruction file(s).",
-            ["ai.markerCleaned"]          = "Directive removed from agent-instruction file(s).",
-            ["v.any.aiKbMarker.msg"]      = "AI integration helper is ON but at least one agent-instruction file (CLAUDE.md / AGENTS.md) is missing the marker block.",
-            ["v.any.aiKbMarker.hint"]     = "Re-toggle in Integration Manager, or ensure CLAUDE.md / AGENTS.md exists at the project root.",
+            ["ai.toggleHelp"]             = "Guides AI coding agents (Claude Code / Codex / Cursor / Cline) to read the SDK's integration knowledge base on session cold-start. Three layers, all gated on per-tool environment signals (presence of `.claude/`, `.cursor/`, `.clinerules`, existing `AGENTS.md` at the project root): (1) KB copy — `<project>/.daro/integration-kb/` mirrors `<package>/Documentation~/`; (2) own-file directives at `.claude/rules/`, `.cursor/rules/`, `.clinerules/` (vendor-owned, never overwrite user files); (3) marker block inject into root `AGENTS.md` (Codex, inject-into-existing-file only). Toggle off cleans everything; legacy root CLAUDE.md marker is swept automatically.",
+            ["ai.noAgentEnv"]             = "No AI agent environment detected at the project root (.claude/, .cursor/, .clinerules, AGENTS.md all absent). Nothing to reconcile — open at least one of these tools in this project, or create AGENTS.md, then toggle again.",
+            ["ai.clineFileMode"]          = "Cline `.clinerules` exists as a single file at the project root — directory mode is unavailable so Cline integration is skipped. Convert to directory mode manually to enable.",
+            ["ai.markerInjected"]         = "Directive applied to AI agent rule paths.",
+            ["ai.markerCleaned"]          = "Directive removed from AI agent rule paths.",
+            ["v.any.aiKbMarker.msg"]      = "AI integration helper is ON but AGENTS.md is missing the marker block.",
+            ["v.any.aiKbMarker.hint"]     = "Re-toggle in Integration Manager, or ensure AGENTS.md exists at the project root.",
+            ["v.any.aiKbOwnFile.msg"]     = "AI integration helper is ON but one or more env-signaled own-file rule paths are occupied by user-authored content or stale.",
+            ["v.any.aiKbOwnFile.hint"]    = "Manually remove the conflicting file at the target path, or re-toggle in Integration Manager.",
+            ["v.any.aiKbKb.msg"]          = "AI integration helper is ON but `.daro/integration-kb/` is user-occupied or stale.",
+            ["v.any.aiKbKb.hint"]         = "Manually remove `.daro/integration-kb/`, or re-toggle in Integration Manager.",
         };
 
         private static readonly Dictionary<string, string> _ko = new Dictionary<string, string>
@@ -176,12 +181,17 @@ namespace Daro.Editor
 
             // --- AI 통합 헬퍼 ---
             ["ai.toggleLabel"]            = "AI 통합 헬퍼 활성화",
-            ["ai.toggleHelp"]             = "프로젝트 루트의 agent-instruction 파일 (Claude Code 용 CLAUDE.md, Codex 용 AGENTS.md) 에 directive 블록을 inject 해서 AI 코딩 에이전트가 세션 시작 시 SDK 의 integration knowledge base 를 자동 참고하도록 유도합니다. 두 파일을 자동 감지 — 존재하는 파일에만 inject. 토글 off 시 marker 영역만 정리, 그 외 내용은 byte-for-byte 보존.",
-            ["ai.noAgentFile"]            = "프로젝트 루트에 CLAUDE.md / AGENTS.md 둘 다 없습니다. 최소 한 개 직접 생성 후 다시 토글하세요 — 헬퍼는 파일을 자동 생성하지 않습니다.",
-            ["ai.markerInjected"]         = "agent-instruction 파일에 directive 를 inject 했습니다.",
-            ["ai.markerCleaned"]          = "agent-instruction 파일에서 directive 를 제거했습니다.",
-            ["v.any.aiKbMarker.msg"]      = "AI 통합 헬퍼 토글이 ON 이지만 agent-instruction 파일 (CLAUDE.md / AGENTS.md) 중 하나 이상에 marker 영역이 없습니다.",
-            ["v.any.aiKbMarker.hint"]     = "Integration Manager 에서 토글을 다시 한 번 클릭하거나 프로젝트 루트의 CLAUDE.md / AGENTS.md 존재 여부를 확인하세요.",
+            ["ai.toggleHelp"]             = "AI 코딩 에이전트 (Claude Code / Codex / Cursor / Cline) 가 세션 시작 시 SDK 의 integration knowledge base 를 자동 참고하도록 가이드합니다. 3 layer, 모두 per-tool environment signal (프로젝트 루트의 `.claude/`, `.cursor/`, `.clinerules`, 기존 `AGENTS.md` 존재) 로 gate: (1) KB 복사 — `<project>/.daro/integration-kb/` 가 `<package>/Documentation~/` mirror; (2) `.claude/rules/`, `.cursor/rules/`, `.clinerules/` 에 vendor 소유 directive 파일 (사용자 작성 파일은 절대 안 건드림); (3) 루트 `AGENTS.md` 에 marker 블록 inject (Codex 만, 이미 존재하는 파일에만). 토글 off 시 모두 정리, 기존 sprint 의 루트 CLAUDE.md marker 도 자동 sweep.",
+            ["ai.noAgentEnv"]             = "프로젝트 루트에서 AI 에이전트 environment 감지 안 됨 (.claude/, .cursor/, .clinerules, AGENTS.md 모두 부재). reconcile 할 게 없습니다 — 이 프로젝트에서 위 도구 중 하나 사용하거나 AGENTS.md 를 생성 후 다시 토글하세요.",
+            ["ai.clineFileMode"]          = "Cline `.clinerules` 가 프로젝트 루트에 *단일 파일* 로 존재 — directory mode 사용 불가능. Cline 통합이 skip 됩니다. directory mode 로 수동 마이그레이션하면 사용 가능.",
+            ["ai.markerInjected"]         = "AI 에이전트 rule 경로에 directive 를 적용했습니다.",
+            ["ai.markerCleaned"]          = "AI 에이전트 rule 경로에서 directive 를 제거했습니다.",
+            ["v.any.aiKbMarker.msg"]      = "AI 통합 헬퍼 토글이 ON 이지만 AGENTS.md 에 marker 영역이 없습니다.",
+            ["v.any.aiKbMarker.hint"]     = "Integration Manager 에서 토글을 다시 한 번 클릭하거나 프로젝트 루트에 AGENTS.md 가 존재하는지 확인하세요.",
+            ["v.any.aiKbOwnFile.msg"]     = "AI 통합 헬퍼 토글이 ON 이지만 env-signal 통과한 own-file 경로 중 하나 이상이 사용자 작성 파일로 점유됐거나 stale 상태입니다.",
+            ["v.any.aiKbOwnFile.hint"]    = "해당 경로의 파일을 수동 제거하거나 Integration Manager 에서 토글을 다시 클릭하세요.",
+            ["v.any.aiKbKb.msg"]          = "AI 통합 헬퍼 토글이 ON 이지만 `.daro/integration-kb/` 가 사용자 점유 또는 stale 상태입니다.",
+            ["v.any.aiKbKb.hint"]         = "`.daro/integration-kb/` 를 수동 제거하거나 Integration Manager 에서 토글을 다시 클릭하세요.",
         };
     }
 }

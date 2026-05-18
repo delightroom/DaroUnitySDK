@@ -5,10 +5,16 @@ using Daro.Internal;
 
 namespace Daro.Editor
 {
-    // Marker-based idempotent text editor for the AI integration helper's
-    // pointer line in consumer `CLAUDE.md`. Mirrors the wrap/regex pattern
-    // from DaroAndroidPostProcessor (HTML comment markers instead of `//`
-    // line comments since CLAUDE.md is markdown).
+    // Marker-based idempotent text editor used by the marker axis of the AI
+    // Integration Helper. Today the only marker target is Codex's root
+    // `AGENTS.md` (see DaroAiKbTargets.MarkerTargets) — Codex CLI does not
+    // support sub-path / directory rule discovery, so marker inject into the
+    // user's main instruction file is the only mechanism. The own-file axis
+    // (Claude / Cursor / Cline) goes through DaroAiKbOwnFileWriter instead.
+    //
+    // Bootstrap also calls Clean on `DaroAiKbTargets.LegacyMarkerFileNames`
+    // (currently root `CLAUDE.md`) to sweep marker blocks left by the prior
+    // sprint design.
     //
     // Marker scheme (vendor-scoped, conflict-free if other SDKs adopt the
     // same pattern under their own prefix):
@@ -23,9 +29,9 @@ namespace Daro.Editor
     // - The marker block is the **only** region this class touches. Bytes
     //   outside the block (including blank lines, headings, the user's own
     //   notes) are preserved byte-for-byte.
-    // - `Apply` does not create CLAUDE.md if missing — see D8. Surface the
-    //   missing-file state to the UI instead so the user opts into creating
-    //   it themselves.
+    // - `Apply` does not create the target file if missing — see D8. Surface
+    //   the missing-file state to the UI instead so the user opts into
+    //   creating it themselves.
     // - Line endings are preserved (CRLF / LF detected from the first
     //   occurrence in the existing file; new-file path is unreachable since
     //   we don't create).
@@ -45,7 +51,7 @@ namespace Daro.Editor
 
         internal enum ApplyResult
         {
-            // File didn't exist — caller should surface a "create CLAUDE.md first" notice.
+            // File didn't exist — caller should surface a "no agent-instruction file" notice.
             FileMissing,
             // No marker block previously present; one was appended.
             Injected,

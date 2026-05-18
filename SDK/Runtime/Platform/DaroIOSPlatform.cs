@@ -97,6 +97,29 @@ namespace Daro.Internal
             DaroUnity_SetLogLevel((int)level);
         }
 
+        // IDaroPlatform-level teardown trigger. Called by
+        // DaroSdk.MarkShuttingDown on app-quit / Unity-runtime-teardown.
+        // Best-effort: never throws (DaroLog.Exception isolates). Idempotent
+        // — native side's DaroUnity_DestroyAll is safe to call twice (each
+        // helper noops on empty dicts).
+        //
+        // See SDK/Plugins/iOS/DaroUnityBridge.mm DaroUnity_DestroyAll for the
+        // native side: clears 3 fullscreen dicts + delegates to per-format
+        // helpers (NativeAd / Banner / LightPopup) under the A2 atomic
+        // destroyed-flag coordinated hybrid model.
+        public void DestroyAll()
+        {
+            DaroLog.Verbose("Sdk", "Platform[iOS].DestroyAll");
+            try
+            {
+                DaroUnity_DestroyAll();
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Sdk", e);
+            }
+        }
+
         // ── IDaroPlatform: Instance lifecycle ────────────────────────────
 
         public void CreateInterstitial(string adUnitId, string? placement)
@@ -198,7 +221,7 @@ namespace Daro.Internal
 
         // ── Banner (native-view-overlay-on-GL-surface) ───────────────────
         //
-        // sketch: docs/dev/banner-ios/sketch-banner-ios.md
+        // See docs/features/native-bridge.md (Banner overlay / iOS).
         // - placement: dropped (no concept on iOS banner — DaroObjCBannerView
         //   ctor doesn't take it; sketch §"Platform C# Implementation").
         // - DaroBannerSize / DaroBannerPosition: ordinal pass-through —
@@ -312,6 +335,10 @@ namespace Daro.Internal
         [DllImport(DLL)] private static extern void DaroUnity_SetAppMuted(bool muted);
         [DllImport(DLL)] private static extern void DaroUnity_SetLogLevel(int level);
 
+        // Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path.
+        // Native side shipped in prior turn — see SDK/Plugins/iOS/DaroUnityBridge.mm.
+        [DllImport(DLL)] private static extern void DaroUnity_DestroyAll();
+
         [DllImport(DLL)] private static extern void DaroUnity_CreateInterstitial(string adUnitId, string? placement);
         [DllImport(DLL)] private static extern void DaroUnity_LoadInterstitial(string adUnitId);
         [DllImport(DLL)] private static extern int  DaroUnity_IsInterstitialReady(string adUnitId);
@@ -365,7 +392,7 @@ namespace Daro.Internal
 
         // ── Light Popup (modal popup + auto-dismiss preset) ──────────────
         //
-        // sketch: docs/dev/light-popup-ios/sketch-light-popup-ios.md
+        // See docs/features/native-bridge.md (Light Popup / iOS).
         // - placement: dropped on iOS (CD-4) — DaroObjCLightPopupAdLoader.init
         //   takes unitId only; non-null placement triggers a Warn log.
         // - 9 Color32 → 36 float (RGBA per channel, pre-divided to [0,1] via

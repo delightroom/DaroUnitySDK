@@ -179,7 +179,24 @@ namespace Daro.Internal
 
         private void OnApplicationQuit()
         {
+            // Dispatcher gate first — stops any subsequent Enqueue from
+            // landing work for an Update tick that may never run.
             _isShuttingDown = true;
+
+            // Sprint native-object-lifecycle-cleanup §Cross-platform managed
+            // contract: fan out to DaroSdk so the registry Find gate arms and
+            // the current platform's native DestroyAll runs. Best-effort —
+            // OnApplicationQuit may fire when subsystems are partially torn
+            // down, so isolate exceptions per the SDK-wide gate-outside
+            // convention (`.claude/rules/logging.md` §Gate-외 예외 경로).
+            try
+            {
+                DaroSdk.MarkShuttingDown();
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Dispatcher", e);
+            }
         }
 
         // ── Unity lifecycle forwards for DaroAppStateNotifier (§2.6) ─────────

@@ -74,6 +74,13 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroInterstitialAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            {
+                DaroLog.Warn("Interstitial",
+                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToLoad(preconditionError);
+                return;
+            }
             DaroLog.Verbose("Interstitial", $"Load adUnit='{AdUnitId}'");
             DaroPlatform.Current.LoadInterstitial(AdUnitId);
         }

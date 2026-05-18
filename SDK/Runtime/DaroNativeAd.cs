@@ -103,6 +103,13 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroNativeAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            {
+                DaroLog.Warn("Native",
+                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToLoad(preconditionError);
+                return;
+            }
             // Clamp to ≥1 — Glide rejects 0-dim views, our shim host needs >0.
             var w = Mathf.Max(1, IconSize.x);
             var h = Mathf.Max(1, IconSize.y);
@@ -206,10 +213,23 @@ namespace Daro
         }
 
         // ── Internal Fire* (called from sink on Unity main thread) ───────
+        //
+        // Native ad uses INativeAdEventSink direct routing instead of the
+        // (format, adUnitId) registry pattern other formats use — see
+        // CD-8 in native-ad-android-sprint sketch. That means the Find
+        // gate in DaroAdInstanceRegistry doesn't see native ad callbacks
+        // (the registry has no entry for them). To keep `goal.md §Best-effort #6`
+        // (in-flight native callbacks after teardown do not dispatch
+        // public C# events) honest, each Fire method must consult the
+        // shutdown gate directly via DaroAdInstanceRegistry.IsShuttingDown.
+        // Without it there is a window between MarkShuttingDown and the
+        // Kotlin `@Volatile destroyed` set (via bridge.destroyAll →
+        // snapshotLiveNativeAds().forEach { it.destroy() }) where a native
+        // callback can still flow through the sink to the publisher.
 
         internal void FireOnAdLoaded(DaroAdInfo adInfo, DaroNativeAdInfo nativeInfo)
         {
-            if (_disposed) return;
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
             _loaded = true;
             Info    = nativeInfo;
             DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitId}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
@@ -218,7 +238,7 @@ namespace Daro
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
-            if (_disposed) return;
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
             _loaded = false;
             // Clear stale Info from a prior successful load so a failed reload
             // doesn't leave the publisher reading the previous ad's assets.
@@ -229,14 +249,14 @@ namespace Daro
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
-            if (_disposed) return;
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
             DaroLog.Verbose("Native", $"FireOnAdImpression adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
-            if (_disposed) return;
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
             DaroLog.Verbose("Native", $"FireOnAdClicked adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }

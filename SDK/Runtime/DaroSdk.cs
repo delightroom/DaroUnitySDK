@@ -275,6 +275,53 @@ namespace Daro
 
         // ── Internal ─────────────────────────────────────────────────────────
 
+        // Sprint native-object-lifecycle-cleanup §Cross-platform managed
+        // contract: idempotency guard for MarkShuttingDown. Set on first
+        // call, reset by ResetStatics on next play-mode enter / build startup.
+        private static volatile bool _isShuttingDown;
+
+        /// <summary>
+        /// SDK-internal teardown trigger. Called by
+        /// <c>MainThreadDispatcher.OnApplicationQuit</c> on app-quit /
+        /// Unity-runtime-teardown. Arms the
+        /// <see cref="DaroAdInstanceRegistry"/> Find gate (so any late
+        /// callback returns null at routing) and invokes
+        /// <see cref="IDaroPlatform.DestroyAll"/> on the current platform
+        /// (native dict + view cleanup).
+        /// </summary>
+        /// <remarks>
+        /// Idempotent — first call sets the gate and runs DestroyAll;
+        /// subsequent calls early-out via <c>_isShuttingDown</c>. Per
+        /// teardown-contract.md §Cross-platform managed contract §2
+        /// (D-reset-statics-b), <see cref="ResetStatics"/> does NOT call
+        /// this method — managed test isolation is preserved by keeping
+        /// the native teardown path separate.
+        /// </remarks>
+        internal static void MarkShuttingDown()
+        {
+            if (_isShuttingDown) return;
+            _isShuttingDown = true;
+            DaroLog.Verbose("Sdk", "MarkShuttingDown — gating registry + destroying native");
+
+            try
+            {
+                DaroAdInstanceRegistry.MarkShuttingDown();
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Sdk", e);
+            }
+
+            try
+            {
+                DaroPlatform.Current.DestroyAll();
+            }
+            catch (Exception e)
+            {
+                DaroLog.Exception("Sdk", e);
+            }
+        }
+
         /// <summary>
         /// Reset all static state. Called by <c>DaroRuntimeBoot.Reset</c> on
         /// play-mode enter / build startup (§6.4). After this runs, the SDK
@@ -294,6 +341,12 @@ namespace Daro
             // stays side-effect-free (no SetLogLevel propagate during teardown).
             // Original behavior was an auto-property reset; preserved.
             _logLevel                         = DaroLogLevel.Info;
+            // Reset shutdown gate so play-mode re-entry behaves as if no
+            // prior session ever quit (parallels DaroAdInstanceRegistry +
+            // MainThreadDispatcher patterns). Per D-reset-statics-b,
+            // ResetStatics does NOT invoke MarkShuttingDown's side effects —
+            // just clears the local idempotency flag.
+            _isShuttingDown                   = false;
         }
 
         /// <summary>

@@ -105,6 +105,13 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            {
+                DaroLog.Warn("Banner",
+                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToLoad(preconditionError);
+                return;
+            }
             DaroLog.Verbose("Banner", $"Load adUnit='{AdUnitId}' size={Size}");
             DaroPlatform.Current.LoadBanner(AdUnitId, Size);
         }
