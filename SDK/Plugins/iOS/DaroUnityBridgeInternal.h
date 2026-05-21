@@ -86,6 +86,14 @@ void DaroUnityNativeAd_DestroyAll(void);
 void DaroUnityBanner_DestroyAll(void);
 void DaroUnityLightPopup_DestroyAll(void);
 
+// CTA overlay sync (matches DllImport in DaroIOSNativeAdHandle.cs).
+// Definitions live in DaroUnityNativeAd.mm inside its extern "C" block.
+// 4 floats individually (no marshalled struct) + 1 bool.
+void DaroUnity_NativeAd_SetCtaScreenRect(int handleId,
+                                          float x, float y, float w, float h,
+                                          bool touchEnabled);
+void DaroUnity_NativeAd_ClearCtaScreenRect(int handleId);
+
 #ifdef __cplusplus
 }
 #endif

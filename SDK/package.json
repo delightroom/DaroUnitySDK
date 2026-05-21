@@ -1,11 +1,12 @@
 {
   "name": "so.daro.unity",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "displayName": "Daro Unity SDK",
   "description": "Daro ad mediation adapter for Unity (MAX variant). Supports Android and iOS.",
   "unity": "2019.4",
-  "dependencies": {},
-  "_dependencies_note": "EDM4U (com.google.external-dependency-manager@1.2.186) is the real transitive dep, re-introduced in Phase 3 when Dependencies.xml Force Resolve is exercised. Phase 5 Integration Manager auto-injects the Google scoped registry into the consumer's manifest.json. During Phases 1-4 the dep is omitted so the sample project can resolve without manual registry setup.",
+  "dependencies": {
+    "com.google.external-dependency-manager": "1.2.187"
+  },
   "testables": [
     "Daro.Tests",
     "Daro.PlayMode.Tests",

@@ -63,13 +63,6 @@
       </VisualElement>
     </Foldout>
 
-    <Foldout name="im-foldout-nativedeps" value="true" class="im-foldout">
-      <VisualElement class="im-section im-row">
-        <Button name="im-resolve-android-btn" class="im-action-btn"/>
-        <Button name="im-resolve-ios-btn"     class="im-action-btn"/>
-      </VisualElement>
-    </Foldout>
-
     <Foldout name="im-foldout-validation" value="true" class="im-foldout">
       <VisualElement class="im-section">
         <Button name="im-validate-btn" class="im-action-btn"/>
@@ -90,6 +83,22 @@
         <Toggle name="im-ai-helper-toggle" binding-path="enableAiIntegrationHelper"/>
         <Label  name="im-ai-helper-help"   class="im-ai-help"/>
         <Label  name="im-ai-helper-notice" class="im-warning-text im-hidden"/>
+      </VisualElement>
+    </Foldout>
+
+    <!-- Devtools — opt-in helpers bundled with the SDK as a separate
+         `.unitypackage` payload under `Devtools~/`. Each entry has its
+         own Import button + status label. v1 ships the LogOverlay devtool
+         only; v2+ entries (Banner visualizer, Native ad inspector, ...)
+         slot in here. -->
+    <Foldout name="im-foldout-devtools" value="false" class="im-foldout">
+      <VisualElement class="im-section">
+        <Label name="im-devtools-logoverlay-title" class="im-section-title"/>
+        <Label name="im-devtools-logoverlay-help"  class="im-ai-help"/>
+        <VisualElement class="im-row">
+          <Button name="im-import-logoverlay-btn" class="im-action-btn"/>
+          <Label  name="im-devtools-logoverlay-status" class="im-validate-result"/>
+        </VisualElement>
       </VisualElement>
     </Foldout>
 

@@ -107,6 +107,22 @@ namespace Daro.Internal
             _adObject.Call("notifyClicked", _proxy);
         }
 
+        // CTA overlay sync — iOS-only feature. Android click path is
+        // View.performClick() through NotifyClicked above; no overlay geometry
+        // is needed. Verbose log retained for cross-platform smoke-detection
+        // parity if a future Android sprint reuses the channel.
+        public void SetCtaScreenRect(UnityEngine.Rect rect, bool touchEnabled)
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[Android].SetCtaScreenRect adUnit='{_adUnitId}' rect={rect} touchEnabled={touchEnabled} (no-op)");
+        }
+
+        public void ClearCtaScreenRect()
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[Android].ClearCtaScreenRect adUnit='{_adUnitId}' (no-op)");
+        }
+
         public void Dispose()
         {
             if (_disposed) return;

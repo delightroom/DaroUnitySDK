@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Daro.Editor.Devtools;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -38,7 +39,6 @@ namespace Daro.Editor
         private Label         _assetPathLabel;
         private VisualElement _validationList;
         private VisualElement _iosGroup;
-        private Button        _resolveIosBtn;
         private Label         _osWarningLabel;
         private bool          _osWarningActive;
         private Label         _validateIosResult;
@@ -46,6 +46,10 @@ namespace Daro.Editor
         private Toggle        _aiHelperToggle;
         private Label         _aiHelperHelp;
         private Label         _aiHelperNotice;
+        private Button        _importLogOverlayBtn;
+        private Label         _devtoolsLogOverlayTitle;
+        private Label         _devtoolsLogOverlayHelp;
+        private Label         _devtoolsLogOverlayStatus;
 
         private Action _localizationHandler;
 
@@ -76,17 +80,21 @@ namespace Daro.Editor
             _assetPathLabel        = rootVisualElement.Q<Label>("im-asset-path-label");
             _validationList        = rootVisualElement.Q("im-validation-list");
             _iosGroup              = rootVisualElement.Q("im-ios-group");
-            _resolveIosBtn         = rootVisualElement.Q<Button>("im-resolve-ios-btn");
             _osWarningLabel        = rootVisualElement.Q<Label>("im-os-warning-label");
             _validateIosResult     = rootVisualElement.Q<Label>("im-validate-ios-result");
             _validateAndroidResult = rootVisualElement.Q<Label>("im-validate-android-result");
             _aiHelperToggle        = rootVisualElement.Q<Toggle>("im-ai-helper-toggle");
             _aiHelperHelp          = rootVisualElement.Q<Label>("im-ai-helper-help");
             _aiHelperNotice        = rootVisualElement.Q<Label>("im-ai-helper-notice");
+            _importLogOverlayBtn      = rootVisualElement.Q<Button>("im-import-logoverlay-btn");
+            _devtoolsLogOverlayTitle  = rootVisualElement.Q<Label>("im-devtools-logoverlay-title");
+            _devtoolsLogOverlayHelp   = rootVisualElement.Q<Label>("im-devtools-logoverlay-help");
+            _devtoolsLogOverlayStatus = rootVisualElement.Q<Label>("im-devtools-logoverlay-status");
 
             WireLanguageSelector();
             WireButtons();
             WireAiHelper();
+            WireDevtools();
             ApplyOsRestrictions();
 
             _localizationHandler = OnLanguageChanged;
@@ -118,6 +126,7 @@ namespace Daro.Editor
         {
             if (_validationList == null) return;
             RefreshValidation();
+            UpdateDevtoolsLogOverlayStatus();
         }
 
         private void OnProjectChange()
@@ -131,6 +140,52 @@ namespace Daro.Editor
             if (rootVisualElement == null) return;
             ApplyLocalization();
             RefreshValidation();
+            UpdateDevtoolsLogOverlayStatus();
+        }
+
+        // Devtools foldout — currently single entry (LogOverlay). Each entry
+        // resolves its own .unitypackage inside the SDK package cache and
+        // hands off to AssetDatabase.ImportPackage with Unity's standard
+        // import dialog. Status label reflects pre-import availability +
+        // post-import path presence so the user can tell "ready" from
+        // "already done" at a glance.
+        private void WireDevtools()
+        {
+            if (_importLogOverlayBtn == null) return;
+            _importLogOverlayBtn.RegisterCallback<ClickEvent>(_ =>
+            {
+                if (DaroLogOverlayImporter.Import())
+                {
+                    UpdateDevtoolsLogOverlayStatus();
+                }
+            });
+        }
+
+        private void UpdateDevtoolsLogOverlayStatus()
+        {
+            if (_devtoolsLogOverlayStatus == null) return;
+
+            if (!DaroLogOverlayImporter.IsAvailable(out _, out var reasonKey))
+            {
+                _devtoolsLogOverlayStatus.text = DaroImLocalization.Get(reasonKey);
+                ApplyResultClass(_devtoolsLogOverlayStatus, "im-validate-result--invalid");
+                if (_importLogOverlayBtn != null) _importLogOverlayBtn.SetEnabled(false);
+                return;
+            }
+
+            if (_importLogOverlayBtn != null) _importLogOverlayBtn.SetEnabled(true);
+
+            // Imported path presence drives the status text. AssetDatabase
+            // path check would also work but Directory.Exists is cheaper +
+            // doesn't depend on AssetDatabase refresh timing.
+            var importTarget = Path.Combine(Application.dataPath, "Daro Devtools", "Log Overlay");
+            var alreadyImported = Directory.Exists(importTarget);
+            _devtoolsLogOverlayStatus.text = DaroImLocalization.Get(
+                alreadyImported ? "devtools.logOverlay.status.imported"
+                                : "devtools.logOverlay.status.ready");
+            ApplyResultClass(_devtoolsLogOverlayStatus,
+                alreadyImported ? "im-validate-result--valid"
+                                : "im-validate-result--neutral");
         }
 
         private void WireLanguageSelector()
@@ -148,12 +203,6 @@ namespace Daro.Editor
         {
             rootVisualElement.Q<Button>("im-create-settings-btn")?.RegisterCallback<ClickEvent>(_ =>
                 CreateSettingsAsset());
-
-            rootVisualElement.Q<Button>("im-resolve-android-btn")?.RegisterCallback<ClickEvent>(_ =>
-                DaroEdmChecker.TryForceResolveAndroid());
-
-            _resolveIosBtn?.RegisterCallback<ClickEvent>(_ =>
-                DaroEdmChecker.TryForceResolveIos());
 
             rootVisualElement.Q<Button>("im-validate-btn")?.RegisterCallback<ClickEvent>(_ =>
                 RefreshValidation());
@@ -246,11 +295,6 @@ namespace Daro.Editor
         private void ApplyOsRestrictions()
         {
 #if UNITY_EDITOR_WIN
-            if (_resolveIosBtn != null)
-            {
-                _resolveIosBtn.SetEnabled(false);
-                _resolveIosBtn.tooltip = DaroImLocalization.Get("os.iosResolveTooltip");
-            }
             _iosGroup?.AddToClassList("im-platform-group--os-disabled");
             _osWarningActive = true;
             if (_osWarningLabel != null)
@@ -271,9 +315,16 @@ namespace Daro.Editor
             SetButton("im-create-settings-btn",         "nosettings.create");
 
             SetFoldout("im-foldout-settings",           "foldout.settings");
-            SetFoldout("im-foldout-nativedeps",         "foldout.nativeDeps");
             SetFoldout("im-foldout-validation",         "foldout.validation");
             SetFoldout("im-foldout-aihelper",           "foldout.aiHelper");
+            SetFoldout("im-foldout-devtools",           "foldout.devtools");
+
+            if (_devtoolsLogOverlayTitle != null)
+                _devtoolsLogOverlayTitle.text = DaroImLocalization.Get("devtools.logOverlay.title");
+            if (_devtoolsLogOverlayHelp != null)
+                _devtoolsLogOverlayHelp.text  = DaroImLocalization.Get("devtools.logOverlay.help");
+            SetButton("im-import-logoverlay-btn",       "btn.importLogOverlay");
+            UpdateDevtoolsLogOverlayStatus();
 
             if (_aiHelperToggle != null)
                 _aiHelperToggle.label = DaroImLocalization.Get("ai.toggleLabel");
@@ -293,8 +344,6 @@ namespace Daro.Editor
             SetTextLabel("im-android-appkey-field",     "field.daroAppKey");
             SetObjectLabel("im-android-keyfile-field",  "field.keyFile");
 
-            SetButton("im-resolve-android-btn",         "btn.resolveAndroid");
-            SetButton("im-resolve-ios-btn",             "btn.resolveIos");
             SetButton("im-validate-btn",                "btn.runChecks");
             SetButton("im-validate-ios-btn",            "btn.validate");
             SetButton("im-validate-android-btn",        "btn.validate");
@@ -303,9 +352,6 @@ namespace Daro.Editor
             // text would be in the previous language and confuse the reader.
             ResetValidateResultLabel(_validateIosResult);
             ResetValidateResultLabel(_validateAndroidResult);
-
-            if (_resolveIosBtn != null && !_resolveIosBtn.enabledSelf)
-                _resolveIosBtn.tooltip = DaroImLocalization.Get("os.iosResolveTooltip");
 
             if (_osWarningLabel != null && _osWarningActive)
                 _osWarningLabel.text = DaroImLocalization.Get("os.windowsWarning");

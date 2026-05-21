@@ -73,6 +73,20 @@ namespace Daro
 
         private INativeAdHandle? _handle;
 
+        // CTA overlay driver — attached on WireCtaButton, detached on
+        // UnwireCta / Dispose. Null on raw escape-hatch path. Actual
+        // MonoBehaviour body lives in SDK/Runtime/Internal/DaroNativeCtaDriver.cs.
+        private DaroNativeCtaDriver? _ctaDriver;
+
+        /// <summary>
+        /// Slot-view enabled signal — set by <see cref="DaroNativeAdView"/>'s
+        /// OnEnable / OnDisable hooks. Driver composite reads this so the
+        /// overlay touch gate follows the slot-view's enabled state.
+        /// Default <c>true</c> so raw-path (no slot view) publishers see no
+        /// effect.
+        /// </summary>
+        internal bool IsSlotViewActive { get; set; } = true;
+
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
         /// </exception>
@@ -155,6 +169,137 @@ namespace Daro
             _handle?.NotifyClicked();
         }
 
+        // ── CTA overlay wiring (iOS native click; Android/Editor inert) ────
+        //
+        // iOS overlay is a **single touch consumer** — a real UITouch on the
+        // Unity Button visual area is caught by the native UIKit overlay,
+        // so publisher's `Button.onClick` does NOT fire on iOS when the
+        // overlay is active. Publishers must use <see cref="OnAdClicked"/>
+        // event for cross-platform click handling; attaching listeners to
+        // the Unity Button.onClick to react to iOS ad clicks will silently
+        // miss. See <c>docs/study/ios-native-ad-overlay-click-attribution.md</c>.
+
+        /// <summary>
+        /// Helper-bound CTA wiring (primary raw-path API). SDK takes ownership
+        /// of the Button's screen geometry + composite interactability state,
+        /// syncing them to the iOS native overlay every <c>LateUpdate</c>.
+        /// Android / Editor: no-op (click still flows through
+        /// <see cref="NotifyClicked"/>).
+        /// </summary>
+        /// <param name="button">Publisher's uGUI CTA Button. Must not be null.
+        /// Idempotent on the same Button; auto-unwires the previous Button if
+        /// re-called with a different one.</param>
+        /// <exception cref="ArgumentNullException">If <paramref name="button"/> is null.</exception>
+        /// <exception cref="NotSupportedException">If the Button's ancestor
+        /// Canvas is <c>RenderMode.WorldSpace</c>. WorldSpace projection isn't
+        /// supported in v1 — accepting it would land publisher with a loaded
+        /// ad that can't dispatch clicks (silent broken state). Use
+        /// ScreenSpaceOverlay or ScreenSpaceCamera.</exception>
+        /// <remarks>
+        /// No-op after <see cref="Dispose"/>. iOS only — the actual driver
+        /// MonoBehaviour attach happens in <c>DaroNativeCtaDriver.Attach</c>
+        /// (see <c>SDK/Runtime/Internal/DaroNativeCtaDriver.cs</c>).
+        /// </remarks>
+        public void WireCtaButton(UnityEngine.UI.Button button)
+        {
+            if (button == null) throw new ArgumentNullException(nameof(button));
+            if (_disposed) return;
+
+            // Reject WorldSpace at wire time — keeps the driver's per-frame
+            // path simple + fails fast for unsupported render modes.
+            var canvas = button.GetComponentInParent<Canvas>();
+            if (canvas != null && canvas.renderMode == RenderMode.WorldSpace)
+            {
+                throw new NotSupportedException(
+                    $"WireCtaButton: WorldSpace canvas '{canvas.name}' is not " +
+                    "supported in v1 (ScreenSpaceOverlay / ScreenSpaceCamera only). " +
+                    "Native click overlay cannot project a WorldSpace rect onto a " +
+                    "UIKit hit-test region.");
+            }
+
+            // Idempotent on same Button; rewire on a different one.
+            if (_ctaDriver != null)
+            {
+                if (_ctaDriver.Button == button) return;
+                UnwireCta();
+            }
+
+            DaroLog.Verbose("Native",
+                $"WireCtaButton adUnit='{AdUnitId}' button='{button.name}' " +
+                $"canvas='{canvas?.name ?? "<none>"}' mode={canvas?.renderMode}");
+
+            _ctaDriver = DaroNativeCtaDriver.Attach(this, button);
+        }
+
+        /// <summary>
+        /// Detach the helper-bound CTA driver. Idempotent. Calls the platform
+        /// handle's <c>ClearCtaScreenRect</c> via the driver's Detach path.
+        /// No-op after <see cref="Dispose"/> (Dispose itself unwires first).
+        /// </summary>
+        public void UnwireCta()
+        {
+            if (_disposed) return;
+            if (_ctaDriver == null) return;
+
+            DaroLog.Verbose("Native", $"UnwireCta adUnit='{AdUnitId}'");
+            _ctaDriver.Detach();   // → ClearCtaScreenRect on live handle → Destroy driver
+            _ctaDriver = null;
+        }
+
+        /// <summary>
+        /// Direct escape hatch (advanced raw-path API). Push a CTA overlay
+        /// screen rect + touch-enabled state explicitly. Publisher takes full
+        /// ownership of every lifecycle transition: must re-call on layout /
+        /// interactability change, and <see cref="ClearCtaScreenRect"/> on
+        /// teardown. Mis-use produces stale overlays that accept clicks against
+        /// hidden / disabled publisher UI.
+        /// </summary>
+        /// <param name="screenRect">CTA rect in Unity pixel space (origin
+        /// bottom-left, no DPI division). Compute via
+        /// <c>RectTransformUtility.WorldToScreenPoint</c> over the Button's
+        /// world corners.</param>
+        /// <param name="touchEnabled">Whether the overlay should receive
+        /// <c>UITouch</c>. Publisher composes from their own visibility +
+        /// interactability signals.</param>
+        /// <remarks>
+        /// Most publishers should use <see cref="WireCtaButton"/> instead.
+        /// No-op after <see cref="Dispose"/>. Non-finite rect (NaN / Inf
+        /// components) → warn + return.
+        /// </remarks>
+        public void SetCtaScreenRect(Rect screenRect, bool touchEnabled)
+        {
+            if (_disposed) return;
+            if (!IsFiniteRect(screenRect))
+            {
+                DaroLog.Warn("Native",
+                    $"SetCtaScreenRect adUnit='{AdUnitId}' rejected — non-finite rect {screenRect}.");
+                return;
+            }
+            DaroLog.Verbose("Native",
+                $"SetCtaScreenRect adUnit='{AdUnitId}' rect={screenRect} touchEnabled={touchEnabled}");
+            _handle?.SetCtaScreenRect(screenRect, touchEnabled);
+        }
+
+        /// <summary>
+        /// Direct escape-hatch counterpart — clear the overlay rect (frame
+        /// kept intact, touch off). Publisher must call on teardown when
+        /// using <see cref="SetCtaScreenRect"/>. <see cref="WireCtaButton"/>
+        /// users do not need to call this — the helper auto-clears on its
+        /// own lifecycle.
+        /// </summary>
+        public void ClearCtaScreenRect()
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Native", $"ClearCtaScreenRect adUnit='{AdUnitId}'");
+            _handle?.ClearCtaScreenRect();
+        }
+
+        private static bool IsFiniteRect(Rect r) =>
+            !float.IsNaN(r.x)      && !float.IsInfinity(r.x) &&
+            !float.IsNaN(r.y)      && !float.IsInfinity(r.y) &&
+            !float.IsNaN(r.width)  && !float.IsInfinity(r.width) &&
+            !float.IsNaN(r.height) && !float.IsInfinity(r.height);
+
         // ── IDisposable ──────────────────────────────────────────────────
 
         /// <summary>
@@ -179,6 +324,22 @@ namespace Daro
         private void Dispose(bool disposing)
         {
             if (_disposed) return;
+
+            // Driver Detach must happen BEFORE _disposed=true — the Detach
+            // path calls ClearCtaScreenRect through the still-live handle.
+            // Finalizer-path (disposing=false) skips this — driver MonoBehaviour
+            // GC may run off main thread.
+            if (disposing && _ctaDriver != null)
+            {
+                try { _ctaDriver.Detach(); }
+                catch (Exception e)
+                {
+                    DaroLog.Warn("Native",
+                        $"DaroNativeAd({AdUnitId}) cta driver Detach threw: {e}");
+                }
+                _ctaDriver = null;
+            }
+
             _disposed = true;
 
             if (disposing)

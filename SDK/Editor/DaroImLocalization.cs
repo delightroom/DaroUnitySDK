@@ -59,9 +59,9 @@ namespace Daro.Editor
             ["nosettings.warning"]        = "No DaroSettings asset found. Create one to get started.",
             ["nosettings.create"]         = "Create Settings Asset",
             ["foldout.settings"]          = "Settings",
-            ["foldout.nativeDeps"]        = "Native Dependencies",
             ["foldout.validation"]        = "Build Validation",
             ["foldout.aiHelper"]          = "AI Integration Helper",
+            ["foldout.devtools"]          = "Devtools",
             ["section.mediation"]         = "Mediation",
             ["section.ios"]               = "iOS",
             ["section.android"]           = "Android",
@@ -70,8 +70,6 @@ namespace Daro.Editor
             ["field.keyFile"]             = "Key File",
             ["field.adMobKey"]            = "AdMob Key",
             ["field.attDescription"]      = "ATT Description",
-            ["btn.resolveAndroid"]        = "Android Force Resolve",
-            ["btn.resolveIos"]            = "iOS Force Resolve",
             ["btn.runChecks"]             = "Run Checks",
             ["btn.validate"]              = "Validate Key Pair",
             ["validate.idle"]             = "",
@@ -83,7 +81,6 @@ namespace Daro.Editor
             ["validate.tooShort"]         = "✗ Keyfile is too short to be valid (less than 28 bytes after Base64 decode).",
             ["assetPath.unsaved"]         = "(unsaved)",
             ["os.windowsWarning"]         = "Running on Windows — iOS build validation is host-limited.",
-            ["os.iosResolveTooltip"]      = "iOS CocoaPods resolution requires macOS.",
             ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI assets missing. Reimport so.daro.unity package.",
 
             // --- validator messages (msg + hint per CheckId) ---
@@ -121,6 +118,15 @@ namespace Daro.Editor
             ["v.any.aiKbOwnFile.hint"]    = "Manually remove the conflicting file at the target path, or re-toggle in Integration Manager.",
             ["v.any.aiKbKb.msg"]          = "AI integration helper is ON but `.daro/integration-kb/` is user-occupied or stale.",
             ["v.any.aiKbKb.hint"]         = "Manually remove `.daro/integration-kb/`, or re-toggle in Integration Manager.",
+
+            // --- Devtools — LogOverlay ---
+            ["devtools.logOverlay.title"]                       = "Log Overlay",
+            ["devtools.logOverlay.help"]                        = "Floating, draggable + resizable runtime log panel that filters Daro SDK callbacks (and optional consumer-side structured logs) into source-tagged rows with a detail modal and multi-select filter popup. Import bundles assets at `Assets/Daro Devtools/Log Overlay/`; consumers tweak namespace / log prefix / PlayerPrefs keys post-import as needed.",
+            ["btn.importLogOverlay"]                            = "Import Log Overlay",
+            ["devtools.logOverlay.status.ready"]                = "Ready to import.",
+            ["devtools.logOverlay.status.imported"]             = "Imported at Assets/Daro Devtools/Log Overlay/.",
+            ["devtools.logOverlay.notAvailable.packageMissing"] = "Daro Unity SDK package not resolved — open this menu from a project with the SDK linked.",
+            ["devtools.logOverlay.notAvailable.assetMissing"]   = "LogOverlay.unitypackage not bundled in this SDK build. Run `Daro / Devtools / Rebuild LogOverlay Package` from the SDK dev environment first.",
         };
 
         private static readonly Dictionary<string, string> _ko = new Dictionary<string, string>
@@ -130,9 +136,9 @@ namespace Daro.Editor
             ["nosettings.warning"]        = "DaroSettings 에셋을 찾을 수 없습니다. 시작하려면 생성하세요.",
             ["nosettings.create"]         = "Settings 에셋 생성",
             ["foldout.settings"]          = "설정",
-            ["foldout.nativeDeps"]        = "네이티브 의존성",
             ["foldout.validation"]        = "빌드 검증",
             ["foldout.aiHelper"]          = "AI 통합 헬퍼",
+            ["foldout.devtools"]          = "개발자 도구",
             ["section.mediation"]         = "Mediation",
             ["section.ios"]               = "iOS",
             ["section.android"]           = "Android",
@@ -141,8 +147,6 @@ namespace Daro.Editor
             ["field.keyFile"]             = "키 파일",
             ["field.adMobKey"]            = "AdMob 키",
             ["field.attDescription"]      = "ATT 설명",
-            ["btn.resolveAndroid"]        = "Android 의존성 강제 Resolve",
-            ["btn.resolveIos"]            = "iOS 의존성 강제 Resolve",
             ["btn.runChecks"]             = "검사 실행",
             ["btn.validate"]              = "키 페어 검증",
             ["validate.idle"]             = "",
@@ -154,7 +158,6 @@ namespace Daro.Editor
             ["validate.tooShort"]         = "✗ Keyfile 이 너무 짧습니다 (Base64 디코드 후 28 byte 미만).",
             ["assetPath.unsaved"]         = "(저장되지 않음)",
             ["os.windowsWarning"]         = "Windows 환경 — iOS 빌드 검증은 호스트 제한됩니다.",
-            ["os.iosResolveTooltip"]      = "iOS CocoaPods Resolve는 macOS에서만 동작합니다.",
             ["error.uiAssetsMissing"]     = "Daro Integration Manager — UI 에셋 누락. so.daro.unity 패키지를 다시 임포트하세요.",
 
             // --- validator messages (msg + hint per CheckId) ---
@@ -192,6 +195,15 @@ namespace Daro.Editor
             ["v.any.aiKbOwnFile.hint"]    = "해당 경로의 파일을 수동 제거하거나 Integration Manager 에서 토글을 다시 클릭하세요.",
             ["v.any.aiKbKb.msg"]          = "AI 통합 헬퍼 토글이 ON 이지만 `.daro/integration-kb/` 가 사용자 점유 또는 stale 상태입니다.",
             ["v.any.aiKbKb.hint"]         = "`.daro/integration-kb/` 를 수동 제거하거나 Integration Manager 에서 토글을 다시 클릭하세요.",
+
+            // --- 개발자 도구 — LogOverlay ---
+            ["devtools.logOverlay.title"]                       = "Log Overlay",
+            ["devtools.logOverlay.help"]                        = "런타임 로그 패널 — 드래그/리사이즈 가능한 플로팅 오버레이로 Daro SDK 콜백 (옵션으로 consumer 측 구조화 로그 포함) 을 source 별 배지 row, 디테일 모달, 멀티-셀렉트 필터 popup 으로 분류합니다. Import 시 `Assets/Daro Devtools/Log Overlay/` 에 에셋 배포 — namespace / 로그 prefix / PlayerPrefs 키는 가져온 뒤 직접 수정 가능.",
+            ["btn.importLogOverlay"]                            = "Log Overlay 가져오기",
+            ["devtools.logOverlay.status.ready"]                = "가져올 준비 완료.",
+            ["devtools.logOverlay.status.imported"]             = "Assets/Daro Devtools/Log Overlay/ 에 가져왔습니다.",
+            ["devtools.logOverlay.notAvailable.packageMissing"] = "Daro Unity SDK 패키지가 resolve 되지 않았습니다 — SDK 가 링크된 프로젝트에서 이 메뉴를 여세요.",
+            ["devtools.logOverlay.notAvailable.assetMissing"]   = "LogOverlay.unitypackage 가 이 SDK 빌드에 번들되지 않았습니다. SDK 개발 환경에서 `Daro / Devtools / Rebuild LogOverlay Package` 를 먼저 실행하세요.",
         };
     }
 }

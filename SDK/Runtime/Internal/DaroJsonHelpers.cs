@@ -86,6 +86,35 @@ namespace Daro.Internal
                 : (double?)null;
         }
 
+        /// <summary>
+        /// Extract a boolean literal value. Returns <paramref name="defaultValue"/>
+        /// if the key is missing, the value is the JSON <c>null</c> literal, or
+        /// the value is anything other than the literals <c>true</c> /
+        /// <c>false</c>. Used for additive boolean fields where missing-key =
+        /// back-compat default (e.g. <c>isCtaInteractive</c>).
+        /// </summary>
+        internal static bool GetJsonBool(string json, string key, bool defaultValue = false)
+        {
+            int valueStart = SeekValue(json, key);
+            if (valueStart < 0) return defaultValue;
+            // true / false / null literals are 4-5 chars; check prefix.
+            if (valueStart + 4 <= json.Length &&
+                json[valueStart] == 't' && json[valueStart + 1] == 'r' &&
+                json[valueStart + 2] == 'u' && json[valueStart + 3] == 'e')
+            {
+                return true;
+            }
+            if (valueStart + 5 <= json.Length &&
+                json[valueStart] == 'f' && json[valueStart + 1] == 'a' &&
+                json[valueStart + 2] == 'l' && json[valueStart + 3] == 's' &&
+                json[valueStart + 4] == 'e')
+            {
+                return false;
+            }
+            // null literal or malformed → default.
+            return defaultValue;
+        }
+
         // ── helpers ──────────────────────────────────────────────────────
 
         // Returns index of the first non-whitespace char of the value for `key`,

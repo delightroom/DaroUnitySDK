@@ -38,6 +38,7 @@
 
 @class DaroUnityNativeAdDelegate;
 @class DaroUnityNativeAdHost;
+@class DaroUnityInvisibleCTAButton;
 
 #pragma mark - Callback channel (CD-2)
 
@@ -84,19 +85,130 @@ static DaroNativeAdCallbackFn s_nativeAdCallback = NULL;
 // bypass DaroUnity_NativeAd_Load) start clean.
 @property (atomic, assign)              BOOL              loadedEmitted;
 @property (nonatomic, strong, nullable) DaroObjCAdInfo*   pendingImpression;
+
+// CTA overlay sync state.
+// Pre-Load cache — `SetCtaScreenRect` 가 host 생성 전 도착하면 여기 보관,
+// Load 의 main-queue 블록이 host/button 생성 후 replay. `ctaInteractive`
+// 는 매 Load 시작 시 explicit YES 로 reset (ObjC zero-default 의존 금지);
+// `scrapeAndDeliver` 의 GR survey 가 unsupported 발견 시에만 NO 로 내림.
+// 모든 access 는 main queue 로 직렬화 — atomic property 는 type safety
+// 외 race protection 목적 아님.
+@property (atomic, assign) CGRect pendingCtaRect;
+@property (atomic, assign) BOOL   pendingCtaTouchEnabled;
+@property (atomic, assign) BOOL   hasPendingCta;
+@property (atomic, assign) BOOL   ctaInteractive;
 @end
 
 @implementation DaroUnityNativeAdEntry
 @end
 
-// CD-4 touch-blocking host. UIView subclass with hitTest:withEvent:→nil
-// override + isUserInteractionEnabled=NO (set on instance). Defense in depth
-// — Android Finding A iOS parity. UIControl `sendActions:` bypasses
-// hit-testing so the click forward path survives this block.
-@interface DaroUnityNativeAdHost : UIView
+// CD-4 SUPERSEDED: host gains a runtime `_touchEnabled` gate. Default NO
+// preserves the original CD-4 intent (touch-blocking) for the Load →
+// first-SetCtaScreenRect window. When the publisher's CTA wire pushes
+// touchEnabled=YES, both the `hitTest:` override and `userInteractionEnabled`
+// open together — UIKit's documented hit-test rule ignores views with
+// alpha<0.01, so visual transparency switches from `alpha=0` to
+// `alpha=1 + clearColor` for the host to stay touch-receivable.
+//
+// hitTest: behavior:
+//   _touchEnabled=NO                                   → nil (gate closed)
+//   _touchEnabled=YES + point outside bounds          → nil (defensive)
+//   _touchEnabled=YES + point inside bounds           → [super hitTest:]
+//
+// All reads/writes of `_touchEnabled` happen on the main queue (hitTest:
+// in UIKit touch pipeline + `setOverlayTouchEnabled:` invoked from
+// shim-side dispatch_async(main_queue)). Same-queue → no atomic needed.
+@interface DaroUnityNativeAdHost : UIView {
+    BOOL _touchEnabled;
+}
+- (void)setOverlayTouchEnabled:(BOOL)enabled;
 @end
+
 @implementation DaroUnityNativeAdHost
-- (UIView*)hitTest:(CGPoint)point withEvent:(UIEvent*)event { return nil; }
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        _touchEnabled              = NO;
+        self.userInteractionEnabled = NO;
+        self.alpha                  = 1.0;
+        self.backgroundColor        = [UIColor clearColor];
+        self.opaque                 = NO;
+    }
+    return self;
+}
+
+- (void)setOverlayTouchEnabled:(BOOL)enabled {
+    _touchEnabled              = enabled;
+    self.userInteractionEnabled = enabled;
+}
+
+- (UIView*)hitTest:(CGPoint)point withEvent:(UIEvent*)event {
+    if (!_touchEnabled) return nil;
+    if (!CGRectContainsPoint(self.bounds, point)) return nil;
+    return [super hitTest:point withEvent:event];
+}
+
+@end
+
+// AppLovin's `renderNativeAdView:` populates the bound CTA button via
+// `setTitle:`/`setAttributedTitle:`/`setImage:`/`setBackgroundImage:` during
+// synchronous render (CommonAdNativeView.swift:185-187). Publisher renders
+// the CTA visual in Unity uGUI; the iOS button must be visually empty but
+// hit-testable so AppLovin's UITapGestureRecognizer can still recognize
+// real touches. Subclass overrides each visual-content setter to no-op and
+// records the intended title in `lastIntendedTitle` so the scrape path
+// can still forward the CTA string to publishers.
+//
+// `UIButton.buttonWithType:UIButtonTypeCustom` (default) — system buttons
+// apply tint/highlight effects that survive content-clearing tricks.
+@interface DaroUnityInvisibleCTAButton : UIButton
+@property (nonatomic, copy, nullable) NSString* lastIntendedTitle;
+@end
+
+@implementation DaroUnityInvisibleCTAButton
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        [super setBackgroundColor:[UIColor clearColor]];
+        self.opaque                       = NO;
+        self.adjustsImageWhenHighlighted  = NO;
+        self.showsTouchWhenHighlighted    = NO;
+    }
+    return self;
+}
+
+- (void)setTitle:(NSString*)title forState:(UIControlState)state {
+    // Record only the Normal-state title — that's what scrape forwards to publishers.
+    if (state == UIControlStateNormal && title.length > 0) {
+        self.lastIntendedTitle = title;
+    }
+    // No-op on super — visual layer stays empty.
+    (void)title; (void)state;
+}
+
+- (void)setAttributedTitle:(NSAttributedString*)title forState:(UIControlState)state {
+    if (state == UIControlStateNormal && title.string.length > 0) {
+        self.lastIntendedTitle = title.string;
+    }
+    (void)title; (void)state;
+}
+
+- (void)setImage:(UIImage*)image forState:(UIControlState)state {
+    (void)image; (void)state;
+}
+
+- (void)setBackgroundImage:(UIImage*)image forState:(UIControlState)state {
+    (void)image; (void)state;
+}
+
+- (void)setBackgroundColor:(UIColor*)backgroundColor {
+    // Lock to clearColor regardless of caller — AppLovin templates may try
+    // to set tinted backgrounds.
+    [super setBackgroundColor:[UIColor clearColor]];
+}
+
 @end
 
 // 4-method delegate adopter (DaroObjCNativeView's @objc optional protocol —
@@ -166,6 +278,13 @@ static const double kIconPollIntervalSec = 0.2;
                     adInfo:(DaroObjCAdInfo*)adInfo {
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
+    // Click truth signal — production-useful click attribution log.
+    // The iOS overlay is a single touch consumer, so this delegate is the
+    // only path that confirms a real UITouch reached AppLovin's GR.
+    // Asymmetric vs `NotifyClicked` log below: `nativeViewDidClick` =
+    // success signal; `NotifyClicked` on iOS = overlay-miss diagnostic
+    // (Unity Button received the touch instead).
+    DaroLogW(@"Native", @"nativeViewDidClick callback h=%d", entry.handleId);
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adClicked\"%@}", LatencyField(adInfo)];
     if (s_nativeAdCallback) {
@@ -198,6 +317,47 @@ static const double kIconPollIntervalSec = 0.2;
                  attempt:(int)attempt {
     if (entry.destroyed) return;
 
+    // GR survey + click-disabled-load detection.
+    // Render completed synchronously upstream (CommonAdNativeView.swift:185
+    // renderAd before line 187 onAdLoadSuccess), so any UITapGestureRecognizer
+    // AppLovin attached is observable here. Gate on attempt==0 — wiring is
+    // render-time stable; repeated polling re-entry would otherwise log
+    // multiple times per load.
+    //
+    // Unsupported predicate: missingHierarchy || btnGR==0 || parentGR>0 ||
+    // grandpaGR>0. On unsupported, we DO NOT reject — didPayRevenue already
+    // fired during render so MAX-side impression is billed; rejecting at our
+    // boundary would create an accounting mismatch + retry loop. Instead we
+    // flag entry.ctaInteractive=NO + force host touch off. onAdLoaded /
+    // onAdImpression continue to flow with isCtaInteractive=false in JSON
+    // so publisher can hide the prefab via Info.IsCtaInteractive.
+    if (attempt == 0) {
+        UIButton* btn = entry.callToActionButton;
+        BOOL missingHierarchy = (btn == nil || btn.superview == nil
+                                 || btn.superview.superview == nil);
+        NSUInteger btnGR     = btn ? btn.gestureRecognizers.count : 0;
+        NSUInteger parentGR  = btn.superview ? btn.superview.gestureRecognizers.count : 0;
+        NSUInteger grandpaGR = btn.superview.superview
+                                 ? btn.superview.superview.gestureRecognizers.count : 0;
+        DaroLogW(@"Native",
+                 @"GRwire h=%d btnGR=%lu parentGR=%lu grandpaGR=%lu missingHierarchy=%@ adUnit='%@'",
+                 entry.handleId,
+                 (unsigned long)btnGR, (unsigned long)parentGR,
+                 (unsigned long)grandpaGR,
+                 missingHierarchy ? @"YES" : @"NO",
+                 entry.adUnitId);
+
+        BOOL unsupported = missingHierarchy || (btnGR == 0)
+                            || (parentGR > 0) || (grandpaGR > 0);
+        if (unsupported) {
+            DaroLogW(@"Native",
+                     @"GRwire h=%d UNSUPPORTED — isCtaInteractive=false, overlay touch off",
+                     entry.handleId);
+            entry.ctaInteractive = NO;
+            if (entry.host) [entry.host setOverlayTouchEnabled:NO];
+        }
+    }
+
     UIImage* image = entry.iconImageView.image;
     if (!image && attempt < kIconPollMaxAttempts) {
         __weak DaroUnityNativeAdDelegate* weakSelf = self;
@@ -213,7 +373,13 @@ static const double kIconPollIntervalSec = 0.2;
     NSData* png = image ? UIImagePNGRepresentation(image) : nil;
     NSString* title = entry.titleLabel.text ?: @"";
     NSString* body  = entry.bodyLabel.text  ?: @"";
-    NSString* cta   = entry.callToActionButton.titleLabel.text ?: @"";
+    // Invisible CTA button's setTitle: is a no-op on the visual layer, so
+    // titleLabel.text is nil. The intended CTA string is recorded in the
+    // subclass's `lastIntendedTitle` ivar — read that for asset transport.
+    NSString* cta = @"";
+    if ([entry.callToActionButton isKindOfClass:[DaroUnityInvisibleCTAButton class]]) {
+        cta = ((DaroUnityInvisibleCTAButton*)entry.callToActionButton).lastIntendedTitle ?: @"";
+    }
 
     // Bug #2 debug: scrape result. If title/body/cta empty + image nil →
     // daro-m didn't populate our loose UILabels (likely needs them as
@@ -224,10 +390,16 @@ static const double kIconPollIntervalSec = 0.2;
              image ? [NSString stringWithFormat:@"%dx%d", (int)image.size.width, (int)image.size.height] : @"nil",
              png ? [NSString stringWithFormat:@"%dB", (int)png.length] : @"nil");
 
+    // isCtaInteractive flag — false signals publisher that click chain is
+    // broken for this fill (unsupported GR wiring). C# parser reads via
+    // DaroJsonHelpers.GetJsonBool with default true (back-compat for
+    // Android/Editor sinks that don't emit this field).
     NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adLoaded\"%@,\"title\":\"%@\",\"body\":\"%@\",\"callToAction\":\"%@\"}",
+        @"{\"event\":\"adLoaded\"%@,\"title\":\"%@\",\"body\":\"%@\","
+        @"\"callToAction\":\"%@\",\"isCtaInteractive\":%@}",
         LatencyField(info),
-        EscapeJson(title), EscapeJson(body), EscapeJson(cta)];
+        EscapeJson(title), EscapeJson(body), EscapeJson(cta),
+        entry.ctaInteractive ? @"true" : @"false"];
 
     if (s_nativeAdCallback) {
         // png lifetime: NSData is autoreleased; the synchronous PInvoke call
@@ -260,6 +432,43 @@ static const double kIconPollIntervalSec = 0.2;
 }
 
 @end
+
+#pragma mark - CTA overlay apply helpers
+
+// Raw geometry-apply path. Writes host / nativeView / button frames in the
+// order parent → child + flips host touch gate. internal_ + maNativeAdView
+// follow via Autolayout edge-anchors. No `entry.ctaInteractive` check —
+// that's the Guarded wrapper's job. Direct callers (eg. force-off from
+// non-positive-size guard) call Raw with effectiveTouch=NO explicitly.
+//
+// Main-queue only. Caller must dispatch.
+static void DaroUnityNativeAdApplyCtaRectRaw(DaroUnityNativeAdEntry* entry,
+                                              CGRect uiRect,
+                                              BOOL   effectiveTouch) {
+    DaroUnityNativeAdHost* host       = entry.host;
+    DaroObjCNativeView*    nativeView = entry.nativeView;
+    UIButton*              button     = entry.callToActionButton;
+    if (!host) return;   // race: Load tore down between checks. silent.
+
+    host.frame       = uiRect;
+    nativeView.frame = host.bounds;
+    button.frame     = host.bounds;
+    [host setOverlayTouchEnabled:effectiveTouch];
+}
+
+// Guarded geometry-apply path. All apply paths route here except the
+// defensive force-off branches. Locks effectiveTouch = requestedTouch
+// AND ctaInteractive — so once GR survey flags a fill as unsupported
+// (entry.ctaInteractive=NO), no subsequent SetCtaScreenRect(touchEnabled=YES)
+// from C# can re-open the gate.
+//
+// Main-queue only. Caller must dispatch.
+static void DaroUnityNativeAdApplyCtaRectGuarded(DaroUnityNativeAdEntry* entry,
+                                                  CGRect uiRect,
+                                                  BOOL   requestedTouch) {
+    BOOL effectiveTouch = requestedTouch && entry.ctaInteractive;
+    DaroUnityNativeAdApplyCtaRectRaw(entry, uiRect, effectiveTouch);
+}
 
 #pragma mark - extern C surface (matches [DllImport] in DaroIOSNativeAdHandle.cs)
 
@@ -311,15 +520,34 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             entry.loadedEmitted     = NO;
             entry.pendingImpression = nil;
 
+            // Explicit per-load reset. ObjC zero-default 의존 금지 — first
+            // Load of a fresh entry needs YES, and refresh-driven loads need
+            // YES re-arm (last GR survey may have left NO). GR survey in
+            // scrapeAndDeliver flips to NO only on unsupported predicate.
+            entry.ctaInteractive = YES;
+
             UIViewController* vc = UnityGetGLViewController();
             if (!vc) return;   // Unity not ready — silently bail (Banner parity)
 
-            // CD-4 + CD-5: hidden host — both touch-blocking layers + on-screen
-            // window-attached frame so MAX impression-viewability check passes.
+            // Load reentry guard: tear down any previous host/nativeView
+            // from a prior Load on the same entry. Without this, the old
+            // host stays in vc.view.subviews — and with overlay touch
+            // possibly enabled — intercepting taps for a stale ad.
+            if (entry.host) {
+                [entry.host setOverlayTouchEnabled:NO];
+                [entry.host removeFromSuperview];
+            }
+            if (entry.nativeView) {
+                [entry.nativeView removeFromSuperview];
+            }
+
+            // CD-4 SUPERSEDED: host is touch-blocking by default
+            // (_touchEnabled=NO + userInteractionEnabled=NO set in init), with
+            // visual transparency via clearColor + alpha=1 (alpha<0.01 would
+            // disable hit-test per Apple's documented rule). Default-closed
+            // gate stays closed until SetCtaScreenRect(touchEnabled=YES) opens it.
             DaroUnityNativeAdHost* host = [[DaroUnityNativeAdHost alloc]
                 initWithFrame:CGRectMake(0, 0, hostWidth, hostHeight)];
-            host.alpha = 0;
-            host.userInteractionEnabled = NO;
             entry.host = host;
             [vc.view addSubview:host];
 
@@ -330,7 +558,10 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             entry.titleLabel         = [UILabel new];
             entry.bodyLabel          = [UILabel new];
             entry.iconImageView      = [UIImageView new];
-            entry.callToActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            // Invisible-content CTA button — AppLovin's setTitle: / setImage:
+            // / etc. become no-ops on the visual layer; intended title
+            // preserved in `lastIntendedTitle` for the scrape path.
+            entry.callToActionButton = [[DaroUnityInvisibleCTAButton alloc] initWithFrame:CGRectZero];
             entry.mediaContentView   = [UIView new];
 
             // CD-3: autoLoad=NO. Without this, addSubview(host) below would
@@ -374,6 +605,18 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
                                          mediaContentView:entry.mediaContentView
                                        callToActionButton:entry.callToActionButton];
             [nativeView loadNativeAd];
+
+            // Replay any pre-Load cached CTA rect now that host/nativeView/
+            // button exist. hasPendingCta is the single source of truth — Clear
+            // pre-Load already set it to NO, so no replay in that path.
+            if (entry.hasPendingCta) {
+                CGRect cached      = entry.pendingCtaRect;
+                BOOL   cachedTouch = entry.pendingCtaTouchEnabled;
+                entry.hasPendingCta = NO;
+                DaroUnityNativeAdApplyCtaRectGuarded(entry, cached, cachedTouch);
+                DaroLogD(@"Native", @"Load h=%d replayed cached CTA rect=%@ touch=%d",
+                         handleId, NSStringFromCGRect(cached), (int)cachedTouch);
+            }
         });
     });
 }
@@ -388,26 +631,126 @@ void DaroUnity_NativeAd_NotifyHidden(int handleId) {
 }
 
 void DaroUnity_NativeAd_NotifyClicked(int handleId) {
+    // CD-7 SUPERSEDED. The original path here was
+    // `[btn sendActionsForControlEvents:UIControlEventTouchUpInside]`
+    // — a synthetic UIControl-event dispatch intended to bridge Unity's
+    // Button.onClick → AppLovin's click chain. Device diagnosis confirmed
+    // AppLovin wires click via `UITapGestureRecognizer` (not UIControl
+    // target/action), so sendActions never fired the recognizer. The real
+    // click path now runs through the iOS overlay (Geometry-sync UIView
+    // catches the user's UITouch; AppLovin's GR recognizes it normally).
+    //
+    // This function is retained as ABI (C# `_handle.NotifyClicked()` still
+    // calls it) and repurposed as a diagnostic ack. On iOS the overlay
+    // single-consumes the touch — Unity Button.onClick should NOT fire on a
+    // normal click. If this log line *does* fire, it indicates Unity GL
+    // surface received the touch, i.e. overlay z-order / geometry / hit-test
+    // failed (overlay-miss). Asymmetric vs `nativeViewDidClick callback`
+    // log (truth signal for actual click reaching MAX).
     NSNumber* key = @(handleId);
     dispatch_async(s_adQueue, ^{
         DaroUnityNativeAdEntry* entry = s_nativeAds[key];
         if (!entry || entry.destroyed) return;
         UIButton* btn = entry.callToActionButton;
-        if (!btn) return;   // race: load not yet completed — silent no-op
-                            // (sketch §5.2; Android Finding C iOS parity but
-                            // without the bare-event fallback — phantom clicks
-                            // without an underlying ad to launch surface as
-                            // "nothing happened" rather than a dud event)
+        if (!btn) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             if (entry.destroyed) return;
-            // CD-7: bridge Unity Button click → MAX click chain via the hidden
-            // CTA UIButton's UIControl event dispatch. AppLovin's
-            // renderNativeAdView:withAd: wires UIControlEventTouchUpInside on
-            // the supplied callToActionButton during render (synchronous,
-            // before onAdLoadSuccess per CommonAdNativeView.swift:185-187).
-            // sendActionsForControlEvents: bypasses hit-testing, so the host's
-            // hitTest:→nil block doesn't break this path.
-            [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
+            DaroLogW(@"Native",
+                     @"NotifyClicked h=%d btnGR=%lu parentGR=%lu grandpaGR=%lu",
+                     handleId,
+                     (unsigned long)btn.gestureRecognizers.count,
+                     (unsigned long)btn.superview.gestureRecognizers.count,
+                     (unsigned long)btn.superview.superview.gestureRecognizers.count);
+            // No sendActionsForControlEvents — real UITouch via overlay is
+            // the click path. Phantom firing here would double-count clicks
+            // on AppLovin's GR-driven attribution.
+        });
+    });
+}
+
+// CTA overlay geometry sync. C# DaroNativeCtaDriver.LateUpdate sends
+// per-frame (dirty-checked) rect + composite touchEnabled. Conversion:
+// Unity pixel space + bottom-left → UIKit point + top-left here. Pre-Load
+// → cache, Load replays after loadNativeAd. All apply paths route through
+// the Guarded helper so `entry.ctaInteractive=NO` (set by GR survey on
+// unsupported fills) locks the touch gate closed.
+void DaroUnity_NativeAd_SetCtaScreenRect(int   handleId,
+                                          float x,
+                                          float y,
+                                          float w,
+                                          float h,
+                                          bool  touchEnabled) {
+    NSNumber* key = @(handleId);
+    dispatch_async(s_adQueue, ^{
+        DaroUnityNativeAdEntry* entry = s_nativeAds[key];
+        if (!entry || entry.destroyed) return;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (entry.destroyed) return;
+
+            UIViewController* vc = UnityGetGLViewController();
+            if (!vc) return;   // Unity not yet attached — silent bail.
+
+            CGFloat scale = vc.view.window.screen.scale;
+            if (scale <= 0.0) scale = [UIScreen mainScreen].scale;
+            CGFloat unityScreenH_px = vc.view.bounds.size.height * scale;
+
+            CGFloat uiX = x / scale;
+            CGFloat uiW = w / scale;
+            CGFloat uiH = h / scale;
+            CGFloat uiY = (unityScreenH_px - y - h) / scale;
+            CGRect  uiRect = CGRectMake(uiX, uiY, uiW, uiH);
+
+            if (uiW <= 0.0 || uiH <= 0.0) {
+                // Defensive — C# clamps Mathf.Max(1, ...) at IconSize but the
+                // computed screen rect can still go zero if Button is collapsed
+                // mid-layout (e.g., LayoutGroup transient). Treat as clear.
+                DaroLogW(@"Native",
+                         @"SetCtaScreenRect h=%d non-positive size w=%.2f h=%.2f — clearing overlay",
+                         handleId, uiW, uiH);
+                if (entry.host) [entry.host setOverlayTouchEnabled:NO];
+                entry.hasPendingCta = NO;
+                return;
+            }
+
+            if (!entry.host) {
+                // Pre-Load. Cache for Load's main-queue block to replay after
+                // host / nativeView / button construction.
+                entry.pendingCtaRect         = uiRect;
+                entry.pendingCtaTouchEnabled = touchEnabled ? YES : NO;
+                entry.hasPendingCta          = YES;
+                DaroLogD(@"Native", @"SetCtaScreenRect h=%d cached pre-Load rect=%@ touch=%d",
+                         handleId, NSStringFromCGRect(uiRect), (int)touchEnabled);
+                return;
+            }
+
+            // Post-Load fast path. Guarded helper enforces ctaInteractive lock.
+            DaroUnityNativeAdApplyCtaRectGuarded(entry, uiRect, touchEnabled ? YES : NO);
+            DaroLogD(@"Native", @"SetCtaScreenRect h=%d applied rect=%@ touch=%d",
+                     handleId, NSStringFromCGRect(uiRect), (int)touchEnabled);
+        });
+    });
+}
+
+// Counterpart — frame intact (preserves MAX viewability-frame stability
+// across refresh cycles), touch off. Pre-Load: clear cache flag only.
+// Post-Load: flip host touch gate.
+void DaroUnity_NativeAd_ClearCtaScreenRect(int handleId) {
+    NSNumber* key = @(handleId);
+    dispatch_async(s_adQueue, ^{
+        DaroUnityNativeAdEntry* entry = s_nativeAds[key];
+        if (!entry || entry.destroyed) return;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (entry.destroyed) return;
+
+            entry.hasPendingCta = NO;
+
+            if (entry.host) {
+                [entry.host setOverlayTouchEnabled:NO];
+            }
+            DaroLogD(@"Native", @"ClearCtaScreenRect h=%d (host=%@ pending=cleared)",
+                     handleId, entry.host ? @"present" : @"nil");
         });
     });
 }

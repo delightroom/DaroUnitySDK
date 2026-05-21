@@ -115,6 +115,26 @@ namespace Daro.Internal
             DaroUnity_NativeAd_NotifyClicked(_handleId);
         }
 
+        // CTA overlay geometry sync. 4 floats individually (no marshalled
+        // struct); Unity pixel-space rect, bottom-left origin, no DPI
+        // division. The iOS shim performs UIKit point conversion + Y-flip.
+        public void SetCtaScreenRect(UnityEngine.Rect rect, bool touchEnabled)
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[iOS].SetCtaScreenRect adUnit='{_adUnitId}/h{_handleId}' rect={rect} touchEnabled={touchEnabled} disposed={_disposed}");
+            if (_disposed) return;
+            DaroUnity_NativeAd_SetCtaScreenRect(
+                _handleId, rect.x, rect.y, rect.width, rect.height, touchEnabled);
+        }
+
+        public void ClearCtaScreenRect()
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[iOS].ClearCtaScreenRect adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
+            if (_disposed) return;
+            DaroUnity_NativeAd_ClearCtaScreenRect(_handleId);
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -183,13 +203,19 @@ namespace Daro.Internal
                     var title = DaroJsonHelpers.GetJsonString(eventJson, "title");
                     var body  = DaroJsonHelpers.GetJsonString(eventJson, "body");
                     var cta   = DaroJsonHelpers.GetJsonString(eventJson, "callToAction");
+                    // false signals unsupported CTA GR wiring; click chain
+                    // inactive for this fill. Default true preserves back-compat
+                    // for any emitter that drops the field.
+                    var isCtaInteractive = DaroJsonHelpers.GetJsonBool(
+                        eventJson, "isCtaInteractive", defaultValue: true);
 
                     var nativeInfo = new DaroNativeAdInfo(
-                        title:        string.IsNullOrEmpty(title) ? null : title,
-                        body:         string.IsNullOrEmpty(body)  ? null : body,
-                        callToAction: string.IsNullOrEmpty(cta)   ? null : cta,
-                        icon:         icon,
-                        mediaImage:   null);   // v1 image-only; video deferred
+                        title:            string.IsNullOrEmpty(title) ? null : title,
+                        body:             string.IsNullOrEmpty(body)  ? null : body,
+                        callToAction:     string.IsNullOrEmpty(cta)   ? null : cta,
+                        icon:             icon,
+                        mediaImage:       null,   // v1 image-only; video deferred
+                        isCtaInteractive: isCtaInteractive);
 
                     Safely(() => handle._sink.OnAdLoaded(adInfo, nativeInfo));
                     break;
@@ -262,6 +288,12 @@ namespace Daro.Internal
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_NotifyHidden (int handleId);
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_NotifyClicked(int handleId);
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Destroy      (int handleId);
+
+        // CTA overlay sync. 4 floats individually + bool; no struct
+        // marshalling. Matching signature in SDK/Plugins/iOS/DaroUnityBridgeInternal.h.
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_SetCtaScreenRect(
+            int handleId, float x, float y, float width, float height, bool touchEnabled);
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_ClearCtaScreenRect(int handleId);
     }
 }
 #endif

@@ -102,20 +102,33 @@ namespace Daro
             if (isActiveAndEnabled && previousAd != null && previousAd != ad)
                 previousAd.NotifyHidden();
 
+            // Wire native click overlay first — throws NotSupportedException
+            // on WorldSpace canvas. Doing this before any slot/listener
+            // mutation keeps Bind atomic: an exception here leaves the
+            // view in its pre-Bind state.
+            if (CtaButton != null)
+            {
+                ad.WireCtaButton(CtaButton);
+                // Seed IsSlotViewActive from the view's current enabled state.
+                // OnEnable/OnDisable only fire on transitions; without this
+                // explicit seed, Bind on a disabled view would leave
+                // IsSlotViewActive at its default `true`, opening the
+                // overlay touch gate against a view the publisher meant
+                // to be inactive.
+                ad.IsSlotViewActive = isActiveAndEnabled;
+            }
+
             _boundAd = ad;
 
-            var info = ad.Info!;
-            if (TitleText      != null) TitleText.text         = info.Title       ?? string.Empty;
-            if (BodyText       != null) BodyText.text          = info.Body        ?? string.Empty;
-            if (IconImage      != null) IconImage.texture      = info.Icon;
-            if (MediaContainer != null) MediaContainer.texture = info.MediaImage;
+            ApplyInfo(ad.Info!);
 
             if (CtaButton != null)
             {
-                var ctaText = CtaButton.GetComponentInChildren<Text>();
-                if (ctaText != null) ctaText.text = info.CallToAction ?? string.Empty;
                 CtaButton.onClick.AddListener(OnCtaClicked);
             }
+
+            ad.OnAdLoaded += OnBoundAdLoaded;
+            ad.OnAdFailedToLoad += OnBoundAdFailedToLoad;
 
             if (isActiveAndEnabled && previousAd != ad)
                 ad.NotifyVisible();
@@ -129,7 +142,13 @@ namespace Daro
         {
             if (_boundAd == null) return;
 
+            _boundAd.OnAdLoaded -= OnBoundAdLoaded;
+            _boundAd.OnAdFailedToLoad -= OnBoundAdFailedToLoad;
+
             if (CtaButton != null) CtaButton.onClick.RemoveListener(OnCtaClicked);
+            // Driver Detach → ClearCtaScreenRect through still-live handle.
+            // Must run before _boundAd is nulled below.
+            _boundAd.UnwireCta();
 
             if (TitleText      != null) TitleText.text         = string.Empty;
             if (BodyText       != null) BodyText.text          = string.Empty;
@@ -146,8 +165,19 @@ namespace Daro
 
         // ── Visibility hooks (v1 lightweight) ────────────────────────────
 
-        private void OnEnable()  { _boundAd?.NotifyVisible(); }
-        private void OnDisable() { _boundAd?.NotifyHidden();  }
+        private void OnEnable()
+        {
+            _boundAd?.NotifyVisible();
+            if (_boundAd != null) _boundAd.IsSlotViewActive = true;
+        }
+
+        private void OnDisable()
+        {
+            _boundAd?.NotifyHidden();
+            // Slot-view inactive → driver composite false → overlay touch off
+            // even when the Button GameObject itself remains active.
+            if (_boundAd != null) _boundAd.IsSlotViewActive = false;
+        }
 
         // Prevent dangling visibility-hidden / click-listener state if the
         // GameObject is destroyed without an explicit Unbind call.
@@ -156,5 +186,42 @@ namespace Daro
         // ── Click ────────────────────────────────────────────────────────
 
         private void OnCtaClicked() { _boundAd?.NotifyClicked(); }
+
+        private void OnBoundAdLoaded(DaroAdInfo _)
+        {
+            if (_boundAd?.Info == null) return;
+            ApplyInfo(_boundAd.Info);
+        }
+
+        private void OnBoundAdFailedToLoad(DaroAdLoadError _)
+        {
+            ClearSlots();
+        }
+
+        private void ApplyInfo(DaroNativeAdInfo info)
+        {
+            if (TitleText      != null) TitleText.text         = info.Title       ?? string.Empty;
+            if (BodyText       != null) BodyText.text          = info.Body        ?? string.Empty;
+            if (IconImage      != null) IconImage.texture      = info.Icon;
+            if (MediaContainer != null) MediaContainer.texture = info.MediaImage;
+            if (CtaButton != null)
+            {
+                var ctaText = CtaButton.GetComponentInChildren<Text>();
+                if (ctaText != null) ctaText.text = info.CallToAction ?? string.Empty;
+            }
+        }
+
+        private void ClearSlots()
+        {
+            if (TitleText      != null) TitleText.text         = string.Empty;
+            if (BodyText       != null) BodyText.text          = string.Empty;
+            if (IconImage      != null) IconImage.texture      = null;
+            if (MediaContainer != null) MediaContainer.texture = null;
+            if (CtaButton != null)
+            {
+                var ct = CtaButton.GetComponentInChildren<Text>();
+                if (ct != null) ct.text = string.Empty;
+            }
+        }
     }
 }

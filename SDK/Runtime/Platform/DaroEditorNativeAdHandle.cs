@@ -129,6 +129,21 @@ namespace Daro.Internal
             });
         }
 
+        // CTA overlay sync — iOS-only. Editor mock has no overlay concept; the
+        // mock click path stays through NotifyClicked above. Verbose log only
+        // for cross-platform interface uniformity + smoke-detection parity.
+        public void SetCtaScreenRect(UnityEngine.Rect rect, bool touchEnabled)
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[Editor].SetCtaScreenRect adUnit='{_adUnitId}' rect={rect} touchEnabled={touchEnabled} (mock no-op)");
+        }
+
+        public void ClearCtaScreenRect()
+        {
+            DaroLog.Verbose("Native",
+                $"Handle[Editor].ClearCtaScreenRect adUnit='{_adUnitId}' (mock no-op)");
+        }
+
         public void Dispose()
         {
             DaroLog.Verbose("Native", $"Handle[Editor].Dispose adUnit='{_adUnitId}'");
