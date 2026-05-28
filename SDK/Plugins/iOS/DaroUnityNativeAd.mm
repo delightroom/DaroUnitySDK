@@ -297,16 +297,36 @@ static const double kIconPollIntervalSec = 0.2;
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
 
-    // Order-fix: ALWAYS queue impression. MAX's didPayRevenue fires
-    // synchronously during renderAd (CommonAdNativeView.swift:185), which
-    // runs BEFORE listener.onAdLoadSuccess (line 187) — so this delegate
-    // method runs BEFORE nativeViewDidLoad. Gating on loadedEmitted breaks
-    // on refresh cycles where loadedEmitted=YES carries over from cycle N-1.
-    // Impressions are 1:1 with renders and renders are 1:1 with successful
-    // loads, so the queue depth stays at 0 or 1 and the queued impression
-    // always belongs to the in-flight load. scrapeAndDeliver flushes it
-    // after adLoaded emits.
-    entry.pendingImpression = adInfo;
+    // Order-fix v2: handle BOTH callback orderings. The original code
+    // assumed didPayRevenue (→ this delegate) ALWAYS runs BEFORE
+    // listener.onAdLoadSuccess (→ nativeViewDidLoad) per the documented
+    // CommonAdNativeView.swift:185-187 sequence. On real iOS first-loads
+    // the order is observed REVERSED — onAdLoadSuccess emits first, this
+    // delegate fires afterwards, and the now-already-flushed pendingImpression
+    // slot leaves the impression silently dropped.
+    //
+    //  loadedEmitted=NO  → flush hasn't happened yet (the documented
+    //                       order). Queue; scrapeAndDeliver will flush
+    //                       after adLoaded emits.
+    //  loadedEmitted=YES → adLoaded already on the wire. Emit immediately.
+    //
+    // Each load lifecycle resets loadedEmitted=NO at the top of
+    // nativeViewDidLoad (line ~260) and DaroUnity_NativeAd_Load (line ~520),
+    // so the branch is stable across refresh cycles.
+    DaroLogD(@"Native", @"didRecordImpression h=%d loadedEmitted=%@ — %@",
+             entry.handleId,
+             entry.loadedEmitted ? @"YES" : @"NO",
+             entry.loadedEmitted ? @"emitting directly" : @"queueing for flush");
+
+    if (entry.loadedEmitted) {
+        if (s_nativeAdCallback) {
+            NSString* json = [NSString stringWithFormat:
+                @"{\"event\":\"adImpression\"%@}", LatencyField(adInfo)];
+            s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
+        }
+    } else {
+        entry.pendingImpression = adInfo;
+    }
 }
 
 // CD-6 icon scrape with 5×200ms polling fallback. iOS MAX adapters mostly
