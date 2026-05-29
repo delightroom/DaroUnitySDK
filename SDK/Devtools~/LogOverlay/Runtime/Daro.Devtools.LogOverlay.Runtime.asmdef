@@ -1,0 +1,14 @@
+{
+    "name": "Daro.Devtools.LogOverlay.Runtime",
+    "rootNamespace": "Daro.Devtools.LogOverlay",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

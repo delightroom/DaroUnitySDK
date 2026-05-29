@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ui="UnityEngine.UIElements"
+    xmlns:uie="UnityEditor.UIElements"
+>
+    <!-- src is relative to this UXML's containing folder; works at both
+         the SDK source-truth location and the consumer's imported location
+         (Assets/Daro Devtools/Log Overlay/) since both keep .uss as a sibling. -->
+    <Style src="LogOverlay.uss" />
+    <!-- Root spans the full screen but ignores pointer events. Only the panel
+         / bubble inside capture pointer; the rest of the screen passes through
+         to whatever is underneath. -->
+    <ui:VisualElement name="log-root" class="log-root" picking-mode="Ignore">
+
+        <!-- Expanded panel. Default positioned bottom-right via USS; controller
+             may override left/top + width/height after drag / resize and
+             persist via PlayerPrefs. -->
+        <ui:VisualElement name="log-panel" class="log-panel">
+            <ui:VisualElement name="log-handle" class="log-handle">
+                <ui:Label text="LOG" class="log-title" />
+                <ui:VisualElement class="log-handle-buttons">
+                    <ui:Button text="Filter" name="btn-overlay-filter" class="log-handle-button log-handle-button--filter" />
+                    <ui:Button text="Clear"  name="btn-overlay-clear"  class="log-handle-button" />
+                    <ui:Button text="—"      name="btn-overlay-hide"   class="log-handle-button" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:ScrollView name="log-scroll" mode="Vertical" class="log-scroll" />
+
+            <!-- Filter popup. Anchored just below the header, hidden by
+                 default; opens on the Filter button click and closes on
+                 outside click (no backdrop — the rest of the UI stays
+                 interactive). -->
+            <ui:VisualElement name="log-filter-popup" class="log-filter-popup">
+                <ui:Label text="SOURCE" class="log-filter-group-label" />
+                <ui:VisualElement class="log-filter-row">
+                    <ui:Toggle name="tg-filter-event" label="Ad Event" value="true" class="log-filter-toggle" />
+                    <ui:Toggle name="tg-filter-sdk"   label="SDK"      value="true" class="log-filter-toggle" />
+                    <ui:Toggle name="tg-filter-misc"  label="App"      value="true" class="log-filter-toggle" />
+                </ui:VisualElement>
+                <ui:Label text="LEVEL" class="log-filter-group-label" />
+                <ui:VisualElement class="log-filter-row">
+                    <ui:Toggle name="tg-filter-info"    label="Info"    value="true" class="log-filter-toggle" />
+                    <ui:Toggle name="tg-filter-success" label="Success" value="true" class="log-filter-toggle" />
+                    <ui:Toggle name="tg-filter-warn"    label="Warn"    value="true" class="log-filter-toggle" />
+                    <ui:Toggle name="tg-filter-error"   label="Error"   value="true" class="log-filter-toggle" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <!-- Corner resize handles. BR has a visible grip (convention),
+                 others are transparent hit-test areas. Controller binds
+                 pointer events on each by name. -->
+            <ui:VisualElement name="resize-handle-tl" class="resize-handle resize-handle--tl" />
+            <ui:VisualElement name="resize-handle-tr" class="resize-handle resize-handle--tr" />
+            <ui:VisualElement name="resize-handle-bl" class="resize-handle resize-handle--bl" />
+            <ui:VisualElement name="resize-handle-br" class="resize-handle resize-handle--br" />
+        </ui:VisualElement>
+
+        <!-- Collapsed bubble — shown when the user hides the panel so it can
+             be brought back from any screen. -->
+        <ui:VisualElement name="log-bubble" class="log-bubble">
+            <ui:Button text="Show Log" name="btn-overlay-show" class="log-bubble-button" />
+        </ui:VisualElement>
+
+        <!-- Detail modal — hidden until a log row is clicked. Sits as a
+             log-root sibling so it overlays the panel AND any other layer
+             below (PanelSettings.sortingOrder=100 covers both). -->
+        <ui:VisualElement name="log-detail-modal" class="log-detail-modal">
+            <ui:VisualElement name="log-detail-backdrop" class="log-detail-backdrop" />
+            <ui:VisualElement name="log-detail-sheet" class="log-detail-sheet">
+                <ui:VisualElement class="log-detail-header">
+                    <ui:Label  name="log-detail-badge" class="log-row-badge log-detail-badge" />
+                    <ui:Label  name="log-detail-title" class="log-detail-title" />
+                    <ui:Button text="✕" name="btn-detail-close" class="log-detail-close" />
+                </ui:VisualElement>
+                <ui:ScrollView name="log-detail-scroll" mode="Vertical" class="log-detail-scroll">
+                    <ui:VisualElement name="log-detail-fields" class="log-detail-fields" />
+                    <ui:Label text="Raw" class="log-detail-section-label" />
+                    <ui:Label name="log-detail-raw" class="log-detail-raw" />
+                </ui:ScrollView>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>
