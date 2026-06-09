@@ -170,6 +170,43 @@ namespace Daro
             DaroPlatform.Current.SetBannerPosition(AdUnitId, position);
         }
 
+        /// <summary>
+        /// The native banner's actual on-screen rectangle in Unity screen pixels
+        /// (bottom-left origin, same convention as <see cref="Screen.safeArea"/>),
+        /// or <c>null</c> if the banner has not laid out yet, is hidden, or the
+        /// instance is disposed.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>Timing</b>: the native banner lays out a frame or two AFTER
+        /// <see cref="Show"/> returns, so this is <c>null</c> immediately after
+        /// Show — including inside an <see cref="OnAdShown"/> handler, which fires
+        /// synchronously from <see cref="Show"/> before the native view has laid
+        /// out. Poll across a few frames until it returns non-null rather than
+        /// reading it once on the Show callback.</para>
+        ///
+        /// <para>This reports the REAL measured footprint — including the
+        /// platform's safe-area / system-bar / gesture inset — so a consumer can
+        /// reserve layout space that aligns with where the banner actually
+        /// renders. Unlike <see cref="Screen.safeArea"/>, the rect accounts for
+        /// the Android system-bar / gesture inset that MAX positions the banner
+        /// within (the inset Unity's safe area omits).</para>
+        ///
+        /// <para>Platform divergence is intentional and not normalized: iOS pins
+        /// the banner to its nominal size (320×50 / 300×250 pt) regardless of
+        /// device, while Android reports the actually-laid-out view rect (e.g.
+        /// 728×90 on tablets). Do not assume both platforms return the same
+        /// value. The rect can change on rotation / resize — re-query afterward.
+        /// In the Editor this returns a non-authoritative nominal rect derived
+        /// from <see cref="Screen.safeArea"/>.</para>
+        /// </remarks>
+        public Rect? GetScreenRect()
+        {
+            if (_disposed) return null;
+            return DaroPlatform.Current.TryGetBannerScreenRect(AdUnitId, out var rect)
+                ? rect
+                : (Rect?)null;
+        }
+
         // ── IDisposable ───────────────────────────────────────────────────
 
         /// <summary>

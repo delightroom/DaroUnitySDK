@@ -353,6 +353,26 @@ namespace Daro.Internal
 #endif
         }
 
+        // Non-authoritative mock footprint — only while the mock banner is
+        // visible (Show called, not Hidden). Device platforms return the real
+        // measured rect; the editor returns a nominal-size rect from Screen.safeArea.
+        public bool TryGetBannerScreenRect(string adUnitId, out Rect rect)
+        {
+            rect = default;
+#if UNITY_EDITOR
+            if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
+            {
+                var view = go.GetComponent<DaroEditorBannerView>();
+                if (view != null && view.IsVisible)
+                {
+                    rect = view.ScreenRectBottomLeft();
+                    return true;
+                }
+            }
+#endif
+            return false;
+        }
+
 #if UNITY_EDITOR
         private DaroEditorBannerView EnsureBannerView(PerUnitState state)
         {

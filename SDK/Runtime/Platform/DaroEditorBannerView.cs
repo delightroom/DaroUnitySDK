@@ -33,6 +33,31 @@ namespace Daro.Internal
         public void Show() => _visible = true;
         public void Hide() => _visible = false;
 
+        internal bool IsVisible => _visible;
+
+        /// <summary>
+        /// Non-authoritative mock footprint: nominal size placed inside
+        /// <see cref="Screen.safeArea"/>, in Unity screen px with bottom-left
+        /// origin (Screen.safeArea convention) — matches the device API's
+        /// coordinate space so editor flows exercise the same shape.
+        /// </summary>
+        internal Rect ScreenRectBottomLeft()
+        {
+            var (w, h) = SizeToPixels(_size);
+            var sa = Screen.safeArea;
+            bool top = (int)_position <= (int)DaroBannerPosition.TopRight; // 0..2
+            float x = _position switch
+            {
+                DaroBannerPosition.TopLeft     => sa.x,
+                DaroBannerPosition.BottomLeft  => sa.x,
+                DaroBannerPosition.TopRight    => sa.xMax - w,
+                DaroBannerPosition.BottomRight => sa.xMax - w,
+                _                              => sa.x + (sa.width - w) / 2f,
+            };
+            float y = top ? sa.yMax - h : sa.y;
+            return new Rect(x, y, w, h);
+        }
+
         private void OnGUI()
         {
             if (!_visible) return;

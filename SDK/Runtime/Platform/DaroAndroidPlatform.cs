@@ -137,6 +137,36 @@ namespace Daro.Internal
             adObj.Call("setPosition", BannerPositionToGravity(position));
         }
 
+        public bool TryGetBannerScreenRect(string adUnitId, out Rect rect)
+        {
+            rect = default;
+            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return false;
+
+            int[]? r;
+            try
+            {
+                // Kotlin shim: getScreenRectPx() -> IntArray? {left, top, width, height}
+                // in display px (top-left origin), or null if not laid out / hidden.
+                r = adObj.Call<int[]>("getScreenRectPx");
+            }
+            catch (Exception e)
+            {
+                DaroLog.Warn("Banner",
+                    $"Platform[Android].getScreenRectPx threw adUnit='{adUnitId}': {e.Message}");
+                return false;
+            }
+            if (r == null || r.Length < 4 || r[2] <= 0 || r[3] <= 0) return false;
+
+            // Android top-left origin → Unity screen px, bottom-left origin
+            // (Screen.safeArea convention).
+            float w = r[2];
+            float h = r[3];
+            float x = r[0];
+            float yBottomLeft = Screen.height - (r[1] + h);
+            rect = new Rect(x, yBottomLeft, w, h);
+            return true;
+        }
+
         // android.view.Gravity bitmask values are stable across Android versions;
         // listed inline rather than via AndroidJavaClass lookup to avoid extra
         // JNI traffic on every SetPosition call. Sketch §6.2.

@@ -153,7 +153,7 @@ namespace Daro
             if (TitleText      != null) TitleText.text         = string.Empty;
             if (BodyText       != null) BodyText.text          = string.Empty;
             if (IconImage      != null) IconImage.texture      = null;
-            if (MediaContainer != null) MediaContainer.texture = null;
+            if (MediaContainer != null) { MediaContainer.texture = null; MediaContainer.gameObject.SetActive(false); }
             if (CtaButton != null)
             {
                 var ct = CtaButton.GetComponentInChildren<Text>();
@@ -203,7 +203,15 @@ namespace Daro
             if (TitleText      != null) TitleText.text         = info.Title       ?? string.Empty;
             if (BodyText       != null) BodyText.text          = info.Body        ?? string.Empty;
             if (IconImage      != null) IconImage.texture      = info.Icon;
-            if (MediaContainer != null) MediaContainer.texture = info.MediaImage;
+            if (MediaContainer != null)
+            {
+                MediaContainer.texture = info.MediaImage;
+                // No media in the creative → collapse the slot. A RawImage with a
+                // null texture renders as an opaque white box AND still reserves
+                // layout space; deactivating the GameObject drops it from the
+                // layout so the ad shrinks to fit (uGUI ignores inactive children).
+                MediaContainer.gameObject.SetActive(info.MediaImage != null);
+            }
             if (CtaButton != null)
             {
                 var ctaText = CtaButton.GetComponentInChildren<Text>();
@@ -216,7 +224,7 @@ namespace Daro
             if (TitleText      != null) TitleText.text         = string.Empty;
             if (BodyText       != null) BodyText.text          = string.Empty;
             if (IconImage      != null) IconImage.texture      = null;
-            if (MediaContainer != null) MediaContainer.texture = null;
+            if (MediaContainer != null) { MediaContainer.texture = null; MediaContainer.gameObject.SetActive(false); }
             if (CtaButton != null)
             {
                 var ct = CtaButton.GetComponentInChildren<Text>();

@@ -39,6 +39,7 @@
 @property (nonatomic, strong, nullable) id<DaroObjCBannerViewDelegate> delegate;
 @property (nonatomic, assign) int positionOrdinal;   // 0..5 = DaroBannerPosition
 @property (nonatomic, assign) int sizeOrdinal;       // 0=Standard, 1=Mrec
+@property (nonatomic, assign) BOOL visible;          // Show requested + not yet Hidden — gates GetScreenRect
 @end
 
 @implementation DaroUnityBannerEntry
@@ -209,6 +210,7 @@ void DaroUnity_ShowBanner(const char* adUnitId) {
         if (!entry) return;
         DaroObjCBannerView* view = entry.bannerView;
         if (!view) return;
+        entry.visible = YES;   // intent set synchronously on s_adQueue (gates GetScreenRect)
         int posOrd = entry.positionOrdinal;
         int sizeOrd = entry.sizeOrdinal;
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -238,8 +240,10 @@ void DaroUnity_HideBanner(const char* adUnitId) {
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
     DaroLogD(@"Banner", @"Hide adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
-        DaroObjCBannerView* view = s_banners[unit].bannerView;
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        DaroObjCBannerView* view = entry.bannerView;
         if (!view) return;
+        entry.visible = NO;    // clears the footprint gate before the async detach
         dispatch_async(dispatch_get_main_queue(), ^{
             // removeFromSuperview triggers didMoveToSuperview(nil) on the
             // native CommonAdBannerView, which pauses AdRefreshCoordinator.
@@ -288,6 +292,66 @@ void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
                                                 vc.view);
         });
     });
+}
+
+// Banner footprint query (banner-footprint sprint). Returns 1 + the banner's
+// on-screen rect in Unity screen px (bottom-left origin, Screen.safeArea
+// convention); 0 if the banner is not attached / unknown. The view.frame is
+// already safe-area-correct (BannerFrameForPosition computes it from
+// parentView.safeAreaInsets), so consumers get the real footprint without
+// guessing from Unity's Screen.safeArea.
+//
+// Unity's iOS scripting thread is the UIKit main thread, so this normally runs
+// on main; the [NSThread isMainThread] guard hops to main for any off-main
+// caller. s_banners is read under s_adQueue (mutated there).
+int DaroUnity_GetBannerScreenRect(const char* adUnitId,
+                                  float* outX, float* outY,
+                                  float* outW, float* outH) {
+    if (!adUnitId) return 0;
+    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+
+    __block DaroObjCBannerView* view = nil;
+    __block BOOL visible = NO;
+    dispatch_sync(s_adQueue, ^{
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        view    = entry.bannerView;
+        visible = entry.visible;
+    });
+    // `visible` is cleared synchronously by Hide on s_adQueue, so a query racing
+    // the async detach returns 0 instead of the stale rect.
+    if (!view || !visible) return 0;
+
+    __block CGRect frame  = CGRectZero;
+    __block BOOL attached = NO;
+    void (^readGeometry)(void) = ^{
+        attached = (view.superview != nil);
+        frame    = view.frame;                 // parentView coords, points, top-left
+    };
+    if ([NSThread isMainThread]) readGeometry();
+    else dispatch_sync(dispatch_get_main_queue(), readGeometry);
+    if (!attached || frame.size.width <= 0.0) return 0;   // attached but not laid out yet
+
+    UIViewController* vc = UnityGetGLViewController();
+    UIView* parent = vc ? vc.view : nil;
+    if (!parent) return 0;
+
+    CGFloat scale = parent.window.screen.scale;
+    if (scale <= 0.0) scale = UIScreen.mainScreen.scale;
+    CGFloat parentHpx = parent.bounds.size.height * scale;
+
+    float wpx = (float)(frame.size.width  * scale);
+    float hpx = (float)(frame.size.height * scale);
+    float xpx = (float)(frame.origin.x * scale);
+    float topPx = (float)(frame.origin.y * scale);
+    float yBottomLeftPx = (float)(parentHpx - (topPx + hpx));
+
+    if (outX) *outX = xpx;
+    if (outY) *outY = yBottomLeftPx;
+    if (outW) *outW = wpx;
+    if (outH) *outH = hpx;
+    DaroLogD(@"Banner", @"GetScreenRect adUnit='%@' px=(%.0f,%.0f,%.0f,%.0f)",
+        unit, xpx, yBottomLeftPx, wpx, hpx);
+    return 1;
 }
 
 // Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by

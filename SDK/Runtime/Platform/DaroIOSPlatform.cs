@@ -277,6 +277,19 @@ namespace Daro.Internal
             DaroUnity_SetBannerPosition(adUnitId, (int)position);
         }
 
+        public bool TryGetBannerScreenRect(string adUnitId, out UnityEngine.Rect rect)
+        {
+            rect = default;
+            // Shim returns the rect already in Unity screen px, bottom-left origin
+            // (points→px + y-flip done native-side). Returns 0 if not laid out /
+            // hidden / unknown adUnitId.
+            if (DaroUnity_GetBannerScreenRect(adUnitId,
+                    out float x, out float y, out float w, out float h) == 0)
+                return false;
+            rect = new UnityEngine.Rect(x, y, w, h);
+            return true;
+        }
+
         // ── IDaroIosEventSink (forwards to event slots / pending Tcs) ────
 
         void IDaroIosEventSink.Loaded(string adUnitId, DaroAdInfo info) =>
@@ -367,6 +380,10 @@ namespace Daro.Internal
         [DllImport(DLL)] private static extern void DaroUnity_HideBanner(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_DestroyBanner(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_SetBannerPosition(string adUnitId, int positionOrdinal);
+        // Returns 1 + rect (Unity screen px, bottom-left origin) if the banner is
+        // laid out; 0 otherwise. Out params untouched when 0.
+        [DllImport(DLL)] private static extern int DaroUnity_GetBannerScreenRect(
+            string adUnitId, out float x, out float y, out float width, out float height);
 
         // ── Light Popup extern C surface ─────────────────────────────────
         // Defined in SDK/Plugins/iOS/DaroUnityLightPopup.mm.

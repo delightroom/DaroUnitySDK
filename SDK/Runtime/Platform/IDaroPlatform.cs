@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace Daro.Internal
 {
@@ -63,6 +64,12 @@ namespace Daro.Internal
         void HideBanner(string adUnitId);
         void DestroyBanner(string adUnitId);
         void SetBannerPosition(string adUnitId, DaroBannerPosition position);
+
+        // Banner footprint — the laid-out native banner view's actual on-screen
+        // rect in Unity screen px (bottom-left origin, Screen.safeArea
+        // convention). Returns false (rect = default) if not yet laid out / not
+        // shown / unknown adUnitId. Backs DaroBannerAd.GetScreenRect.
+        bool TryGetBannerScreenRect(string adUnitId, out Rect rect);
 
         // ── Light Popup ad operations ─────────────────────────────────────
         // Options baked at Create time (immutable per instance). placement forwarded
