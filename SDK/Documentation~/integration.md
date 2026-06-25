@@ -17,6 +17,11 @@ public sealed class GameBootstrap : MonoBehaviour
         DaroSdk.HasGdprConsent = true;
         DaroSdk.SetUserId("user-12345");
 
+        // (Optional) Android MAX test devices — set before init.
+#if UNITY_ANDROID && (DEVELOPMENT_BUILD || UNITY_EDITOR)
+        DaroSdk.SetTestDeviceAdvertisingIdentifiers("ANDROID_ADVERTISING_ID");
+#endif
+
         await DaroSdk.InitializeAsync();
         // From here on, you can construct ad instances and call Load().
 
@@ -32,6 +37,7 @@ Key points:
 - `DaroSdk.InitializeAsync()` returns a `Task`. Repeated calls return the same Task — safe to `await` from anywhere.
 - Privacy settings (`HasGdprConsent` / `GdprConsentString` / `DoNotSell` / `CcpaConsentString` / `IsTaggedForChildDirectedTreatment`) are safe to set before *and* after init. The SDK does NOT own the consent UX — your app must display GDPR dialogs / ATT prompts / UMP flows and then assign the resulting values here.
 - `DaroSdk.SetUserId(string)` / `SetAppMuted(bool)` / `LogLevel` setters are also pre-init safe.
+- `DaroSdk.SetTestDeviceAdvertisingIdentifiers(...)` should be called before init. It maps to Android `SDKConfig.Builder.setTestDeviceAdvertisingIds`; iOS test mode is configured through MAX Mediation Debugger / dashboard-side setup.
 - `OnSdkInitialized` has a *late-subscriber* contract — subscribing after init still fires the handler once on the main thread. No polling required.
 
 ## 2. Ad instance lifecycle (canonical pattern)

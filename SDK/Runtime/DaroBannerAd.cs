@@ -57,10 +57,21 @@ namespace Daro
         public event Action<DaroAdInfo>?      OnAdHidden;
 
         /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). Auto-refresh banners fire
+        /// this on every refreshed impression. May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
+        /// <summary>
         /// Disposal flag. <c>volatile</c> mirrors the v1 §4.4 pre-enqueue +
         /// at-drain checks pattern.
         /// </summary>
         internal volatile bool _disposed;
+
+        private long _registryGeneration;
 
         internal bool IsDisposed => _disposed;
 
@@ -90,9 +101,10 @@ namespace Daro
             Placement = placement;
 
             // Platform handles native create + the "replace prior instance" rule
-            // (KU-1); registry mirrors that by overwriting the mapping.
-            DaroPlatform.Current.CreateBanner(AdUnitId, Placement);
-            DaroAdInstanceRegistry.Register(DaroAdFormat.Banner, AdUnitId, this);
+            // (KU-1); registry serializes same-adUnit create/destroy.
+            _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
+                DaroAdFormat.Banner, AdUnitId, this,
+                () => DaroPlatform.Current.CreateBanner(AdUnitId, Placement));
             DaroLog.Verbose("Banner", $"ctor adUnit='{AdUnitId}' size={Size} position={Position} placement='{Placement}'");
         }
 
@@ -243,13 +255,14 @@ namespace Daro
                 OnAdClicked      = null;
                 OnAdImpression   = null;
                 OnAdHidden       = null;
-
-                DaroAdInstanceRegistry.Unregister(DaroAdFormat.Banner, AdUnitId, this);
+                OnAdRevenuePaid  = null;
             }
 
             try
             {
-                DaroPlatform.Current.DestroyBanner(AdUnitId);
+                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                    DaroAdFormat.Banner, AdUnitId, this, _registryGeneration,
+                    () => DaroPlatform.Current.DestroyBanner(AdUnitId));
             }
             catch (Exception e)
             {
@@ -300,6 +313,13 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("Banner", $"FireOnAdImpression adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
+        }
+
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Banner", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 
         internal void FireOnAdHidden(DaroAdInfo info)

@@ -36,6 +36,14 @@ namespace Daro
         public event Action<DaroAdInfo>?         OnAdDismissed;
 
         /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
+        /// <summary>
         /// Disposal flag. <c>volatile</c> so the §4.4 pre-enqueue and at-drain
         /// checks read the current value without a lock.
         /// </summary>
@@ -46,6 +54,8 @@ namespace Daro
         /// routing layer to skip firing against dead instances.
         /// </summary>
         internal bool IsDisposed => _disposed;
+
+        private long _registryGeneration;
 
         /// <summary>
         /// Construct a Light Popup ad instance bound to <paramref name="adUnitId"/>.
@@ -70,9 +80,12 @@ namespace Daro
 
             // Null options → daro-m defaults via field initializers. Platform
             // impls always receive non-null.
-            DaroPlatform.Current.CreateLightPopup(
-                AdUnitId, Placement, options ?? new DaroLightPopupAdOptions());
-            DaroAdInstanceRegistry.Register(DaroAdFormat.LightPopup, AdUnitId, this);
+            _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
+                DaroAdFormat.LightPopup,
+                AdUnitId,
+                this,
+                () => DaroPlatform.Current.CreateLightPopup(
+                    AdUnitId, Placement, options ?? new DaroLightPopupAdOptions()));
             DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitId}' placement='{Placement}' optionsProvided={options != null}");
         }
 
@@ -172,13 +185,17 @@ namespace Daro
                 OnAdClicked      = null;
                 OnAdImpression   = null;
                 OnAdDismissed    = null;
-
-                DaroAdInstanceRegistry.Unregister(DaroAdFormat.LightPopup, AdUnitId, this);
+                OnAdRevenuePaid  = null;
             }
 
             try
             {
-                DaroPlatform.Current.DestroyLightPopup(AdUnitId);
+                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                    DaroAdFormat.LightPopup,
+                    AdUnitId,
+                    this,
+                    _registryGeneration,
+                    () => DaroPlatform.Current.DestroyLightPopup(AdUnitId));
             }
             catch (Exception e)
             {
@@ -233,6 +250,13 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("LightPopup", $"FireOnAdImpression adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
+        }
+
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("LightPopup", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 
         internal void FireOnAdDismissed(DaroAdInfo info)

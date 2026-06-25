@@ -23,6 +23,7 @@ namespace Daro.Internal
         void Impression(string adUnitId, DaroAdInfo info);
         void Dismissed(string adUnitId, DaroAdInfo info);
         void EarnedReward(string adUnitId, DaroAdInfo info, DaroRewardItem reward);
+        void RevenuePaid(string adUnitId, DaroAdInfo info, DaroRevenueInfo revenue);
         void SdkInitialized();
         void SdkInitFailed(DaroSdkInitException ex);
     }
@@ -143,6 +144,16 @@ namespace Daro.Internal
                     var type   = DaroJsonHelpers.GetJsonString(eventJson, "rewardType") ?? string.Empty;
                     var reward = new DaroRewardItem(amount, type);
                     Safely(() => sink.EarnedReward(adUnitId, info, reward));
+                    break;
+                }
+                case "adRevenuePaid":
+                {
+                    var info      = new DaroAdInfo(adFormat, adUnitId, DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
+                    var value     = DaroJsonHelpers.GetJsonString(eventJson, "value");
+                    var currency  = DaroJsonHelpers.GetJsonString(eventJson, "currencyCode") ?? "USD";
+                    var precision = DaroJsonHelpers.GetJsonInt(eventJson, "precisionType");
+                    var revenue   = DaroRevenueInfo.FromDecimalString(value, currency, precision);
+                    Safely(() => sink.RevenuePaid(adUnitId, info, revenue));
                     break;
                 }
                 // unknown event → silent drop

@@ -31,7 +31,7 @@ namespace Daro.Internal
         /// <remarks>
         /// <para>The Daro Android SDK exposes only a binary debug toggle —
         /// <c>SDKConfig.Builder().setDebugMode(boolean)</c>. There is no
-        /// <c>setLogLevel</c> equivalent (verified via daro-m:1.3.6 sources).
+        /// <c>setLogLevel</c> equivalent (verified via daro-m:1.3.12 sources).
         /// C#'s 5-step enum is compressed to a boolean: any non-<c>None</c>
         /// level enables debug mode, on the principle that a consumer asking
         /// for any logging at all should receive the native debug stream.</para>

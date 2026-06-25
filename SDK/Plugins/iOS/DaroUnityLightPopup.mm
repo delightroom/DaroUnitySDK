@@ -272,6 +272,7 @@ void DaroUnity_CreateLightPopup(
         entry.destroyed      = NO;
         loaderDel.entry      = entry;   // weak back-ref — set after entry exists
         loader.delegate      = loaderDel;
+        DaroUnityWireRevenue(loader, unit, 5);
 
         s_lightPopups[unit] = entry;
     });

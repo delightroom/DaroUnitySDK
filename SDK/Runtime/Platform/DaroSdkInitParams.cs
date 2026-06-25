@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+
 namespace Daro.Internal
 {
     /// <summary>
@@ -15,5 +17,6 @@ namespace Daro.Internal
         public string?      CcpaConsentString                 { get; set; }
         public bool?        IsTaggedForChildDirectedTreatment { get; set; }
         public DaroLogLevel LogLevel                          { get; set; }
+        public string[]     TestDeviceAdvertisingIdentifiers  { get; set; } = Array.Empty<string>();
     }
 }

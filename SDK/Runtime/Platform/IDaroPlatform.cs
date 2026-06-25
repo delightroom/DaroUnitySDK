@@ -105,5 +105,10 @@ namespace Daro.Internal
         // Banner-only — fires after HideBanner completes. native callback 부재이므로
         // platform impl 이 Hide 호출 직후 이 slot 에 직접 enqueue.
         Action<string, DaroAdInfo>?                 OnAdHidden       { set; }
+
+        // ILRD — per-impression net (fee-adjusted) revenue from the mediation
+        // layer. Registry-keyed formats only; native ad routes revenue through
+        // its INativeAdEventSink instead.
+        Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set; }
     }
 }

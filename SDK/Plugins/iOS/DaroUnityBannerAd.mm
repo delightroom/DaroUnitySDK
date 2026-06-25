@@ -171,6 +171,7 @@ void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
         DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
             initWithUnitId:unit bannerSize:nativeSize autoLoad:NO];
         view.delegate = delegate;
+        DaroUnityWireRevenue(view, unit, 0);
         entry.bannerView = view;
         entry.delegate   = delegate;
 

@@ -43,6 +43,7 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo>?                 _onAdDismissed;
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
+        private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
 
         // ── Static state for [MonoPInvokeCallback] dispatch ──────────────
         // The static handler can only access static state — the instance is
@@ -218,6 +219,7 @@ namespace Daro.Internal
         public Action<string, DaroAdInfo>?                 OnAdDismissed    { set => _onAdDismissed    = value; }
         public Action<string, DaroAdInfo, DaroRewardItem>? OnEarnedReward   { set => _onEarnedReward   = value; }
         public Action<string, DaroAdInfo>?                 OnAdHidden       { set => _onAdHidden       = value; }
+        public Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
 
         // ── Banner (native-view-overlay-on-GL-surface) ───────────────────
         //
@@ -308,6 +310,8 @@ namespace Daro.Internal
             _onAdDismissed?.Invoke(adUnitId, info);
         void IDaroIosEventSink.EarnedReward(string adUnitId, DaroAdInfo info, DaroRewardItem reward) =>
             _onEarnedReward?.Invoke(adUnitId, info, reward);
+        void IDaroIosEventSink.RevenuePaid(string adUnitId, DaroAdInfo info, DaroRevenueInfo revenue) =>
+            _onAdRevenuePaid?.Invoke(adUnitId, info, revenue);
 
         void IDaroIosEventSink.SdkInitialized()
         {

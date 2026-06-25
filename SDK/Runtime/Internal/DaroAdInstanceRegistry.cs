@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 
 namespace Daro.Internal
 {
@@ -26,10 +27,9 @@ namespace Daro.Internal
     ///
     /// <para><b>Instance replacement</b> (§2.4 rule): constructing a
     /// second instance with the same <c>(format, adUnitId)</c>
-    /// replaces the prior registration. The prior instance's native
-    /// handle is destroyed by the platform layer in its own
-    /// <c>Create*</c> call; the registry simply overwrites the
-    /// mapping here.</para>
+    /// replaces the prior registration. The registry serializes create /
+    /// destroy ownership per key so a stale finalizer cannot destroy a
+    /// newer native handle.</para>
     ///
     /// <para>For the Editor mock, all callbacks arrive on the
     /// main thread; native callbacks may
@@ -40,6 +40,14 @@ namespace Daro.Internal
     {
         private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), WeakReference> _map
             = new ConcurrentDictionary<(DaroAdFormat, string), WeakReference>();
+
+        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), long> _generations
+            = new ConcurrentDictionary<(DaroAdFormat, string), long>();
+
+        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), object> _keyLocks
+            = new ConcurrentDictionary<(DaroAdFormat, string), object>();
+
+        private static long _nextGeneration;
 
         // Teardown gate. Set by MarkShuttingDown on app-quit / Unity-runtime
         // teardown. Extends the existing "Find returns null → silent no-op"
@@ -53,17 +61,99 @@ namespace Daro.Internal
         // by ResetStatics so play-mode re-entry starts clean.
         private static volatile bool _isShuttingDown;
 
+        private static object Gate((DaroAdFormat format, string adUnitId) key) =>
+            _keyLocks.GetOrAdd(key, _ => new object());
+
         /// <summary>
-        /// Register (or replace) an instance under <paramref name="format"/>
-        /// + <paramref name="adUnitId"/>. Last writer wins — matches §2.4's
-        /// duplicate-construction-replaces rule.
+        /// Reserve a new ownership token for <paramref name="format"/> +
+        /// <paramref name="adUnitId"/> before platform Create replaces the
+        /// previous native handle. This invalidates stale instances even if their
+        /// short weak reference has already been cleared before finalization.
         /// </summary>
-        internal static void Register(DaroAdFormat format, string adUnitId, object instance)
+        internal static long ReserveGeneration(DaroAdFormat format, string adUnitId)
+        {
+            if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
+
+            var key = (format, adUnitId);
+            lock (Gate(key))
+            {
+                var generation = Interlocked.Increment(ref _nextGeneration);
+                _generations[key] = generation;
+                _map.TryRemove(key, out _);
+                return generation;
+            }
+        }
+
+        /// <summary>
+        /// Register a constructed instance under a reserved generation. Last
+        /// writer wins — matches §2.4's duplicate-construction-replaces rule.
+        /// </summary>
+        internal static void Register(DaroAdFormat format, string adUnitId, object instance, long generation)
         {
             if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
             if (instance == null) throw new ArgumentNullException(nameof(instance));
 
-            _map[(format, adUnitId)] = new WeakReference(instance);
+            var key = (format, adUnitId);
+            lock (Gate(key))
+            {
+                _generations[key] = generation;
+                _map[key] = new WeakReference(instance);
+            }
+        }
+
+        /// <summary>
+        /// Atomically replace the current owner, create the platform handle, and
+        /// publish the new instance. If platform create throws, the prior owner
+        /// is restored so constructor failure does not orphan the old handle.
+        /// </summary>
+        internal static long CreateAndRegister(
+            DaroAdFormat format,
+            string adUnitId,
+            object instance,
+            Action createPlatformHandle)
+        {
+            if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
+            if (instance == null) throw new ArgumentNullException(nameof(instance));
+            if (createPlatformHandle == null) throw new ArgumentNullException(nameof(createPlatformHandle));
+
+            var key = (format, adUnitId);
+            lock (Gate(key))
+            {
+                var hadGeneration = _generations.TryGetValue(key, out var previousGeneration);
+                var hadWeak = _map.TryGetValue(key, out var previousWeak);
+
+                var generation = Interlocked.Increment(ref _nextGeneration);
+                _generations[key] = generation;
+                _map.TryRemove(key, out _);
+
+                try
+                {
+                    createPlatformHandle();
+                    _map[key] = new WeakReference(instance);
+                    return generation;
+                }
+                catch
+                {
+                    if (hadGeneration) _generations[key] = previousGeneration;
+                    else _generations.TryRemove(key, out _);
+
+                    if (hadWeak && previousWeak != null) _map[key] = previousWeak;
+                    else _map.TryRemove(key, out _);
+
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
+        /// True while <paramref name="generation"/> is still the current owner
+        /// for <paramref name="format"/> + <paramref name="adUnitId"/>.
+        /// </summary>
+        internal static bool IsCurrentGeneration(DaroAdFormat format, string adUnitId, long generation)
+        {
+            if (adUnitId == null || generation == 0) return false;
+            return _generations.TryGetValue((format, adUnitId), out var current)
+                && current == generation;
         }
 
         /// <summary>
@@ -119,22 +209,82 @@ namespace Daro.Internal
         /// points at <paramref name="instance"/>. A different instance
         /// (e.g. after a replace) must not be clobbered.
         /// </summary>
-        internal static void Unregister(DaroAdFormat format, string adUnitId, object instance)
+        internal static void Unregister(DaroAdFormat format, string adUnitId, object instance, long generation)
         {
             if (adUnitId == null || instance == null) return;
-            if (!_map.TryGetValue((format, adUnitId), out var weak)) return;
+            var key = (format, adUnitId);
 
-            // Only remove when the stored reference is still this instance.
-            // If the slot has already been replaced, leave the replacement alone.
-            if (ReferenceEquals(weak.Target, instance))
+            lock (Gate(key))
+            {
+                RemoveRegistrationNoLock(key, instance, generation);
+            }
+        }
+
+        /// <summary>
+        /// If <paramref name="generation"/> still owns the key, remove that
+        /// owner and invoke <paramref name="destroyPlatformHandle"/> while the
+        /// key lock is held. This closes the check-then-destroy race with a
+        /// same-adUnit replacement constructor.
+        /// </summary>
+        internal static bool ReleasePlatformHandleIfCurrent(
+            DaroAdFormat format,
+            string adUnitId,
+            object instance,
+            long generation,
+            Action destroyPlatformHandle)
+        {
+            if (adUnitId == null || instance == null || generation == 0) return false;
+            if (destroyPlatformHandle == null) throw new ArgumentNullException(nameof(destroyPlatformHandle));
+
+            var key = (format, adUnitId);
+            lock (Gate(key))
+            {
+                if (!_generations.TryGetValue(key, out var current) || current != generation)
+                    return false;
+
+                RemoveRegistrationNoLock(key, instance, generation);
+                destroyPlatformHandle();
+                return true;
+            }
+        }
+
+        private static void RemoveRegistrationNoLock(
+            (DaroAdFormat format, string adUnitId) key,
+            object instance,
+            long generation)
+        {
+            var ownsGeneration = _generations.TryGetValue(key, out var current)
+                && current == generation;
+
+            // Only remove when the stored reference is still this instance or
+            // this generation still owns the key. The generation check matters
+            // on finalizer paths: short WeakReference.Target can already be
+            // null by the time the finalizer runs.
+            if (_map.TryGetValue(key, out var weak) && ReferenceEquals(weak.Target, instance))
             {
                 // TryRemove with the exact KVP to avoid a TOCTOU clobber.
                 ((System.Collections.Generic.ICollection<
                     System.Collections.Generic.KeyValuePair<
                         (DaroAdFormat, string), WeakReference>>)_map)
                     .Remove(new System.Collections.Generic.KeyValuePair<
-                        (DaroAdFormat, string), WeakReference>(
-                            (format, adUnitId), weak));
+                        (DaroAdFormat, string), WeakReference>(key, weak));
+            }
+            else if (ownsGeneration && weak != null)
+            {
+                ((System.Collections.Generic.ICollection<
+                    System.Collections.Generic.KeyValuePair<
+                        (DaroAdFormat, string), WeakReference>>)_map)
+                    .Remove(new System.Collections.Generic.KeyValuePair<
+                        (DaroAdFormat, string), WeakReference>(key, weak));
+            }
+
+            if (ownsGeneration)
+            {
+                ((System.Collections.Generic.ICollection<
+                    System.Collections.Generic.KeyValuePair<
+                        (DaroAdFormat, string), long>>)_generations)
+                    .Remove(new System.Collections.Generic.KeyValuePair<
+                        (DaroAdFormat, string), long>(key, current));
             }
         }
 
@@ -146,6 +296,7 @@ namespace Daro.Internal
         internal static void ResetStatics()
         {
             _map.Clear();
+            _generations.Clear();
             // Reset teardown gate so play-mode re-entry behaves as if no
             // prior session ever shut down (mirrors MainThreadDispatcher
             // pattern at MainThreadDispatcher.cs:230).

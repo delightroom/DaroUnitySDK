@@ -41,5 +41,16 @@ namespace Daro
         [Header("Rewarded")]
                           public int    rewardAmount = 10;
                           public string rewardType   = "coins";
+
+        [Header("Revenue (ILRD)")]
+        /// <summary>
+        /// Mock net revenue per impression, in USD micros (1,000,000 = $1) —
+        /// integer so the Editor path exercises the same micros→decimal
+        /// conversion as the Android wire. 12,340 micros = $0.01234.
+        /// </summary>
+                          public long revenueValueMicros   = 12_340;
+                          public string revenueCurrencyCode = "USD";
+        /// <summary>0=Unknown 1=Estimated 2=PublisherProvided 3=Exact.</summary>
+        [Range(0, 3)]     public int  revenuePrecisionType = 3;
     }
 }

@@ -20,5 +20,8 @@ namespace Daro.Internal
         void OnAdFailedToLoad(DaroAdLoadError error);
         void OnAdImpression(DaroAdInfo adInfo);
         void OnAdClicked(DaroAdInfo adInfo);
+
+        /// <summary>ILRD — net (fee-adjusted) revenue per paid impression.</summary>
+        void OnAdRevenuePaid(DaroAdInfo adInfo, DaroRevenueInfo revenue);
     }
 }

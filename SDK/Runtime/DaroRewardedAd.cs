@@ -26,10 +26,20 @@ namespace Daro
         public event Action<DaroAdInfo, DaroRewardItem>? OnEarnedReward;
 
         /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
+        /// <summary>
         /// Disposal flag. <c>volatile</c> so the §4.4 pre-enqueue and at-drain
         /// checks read the current value without a lock.
         /// </summary>
         internal volatile bool _disposed;
+
+        private long _registryGeneration;
 
         internal bool IsDisposed => _disposed;
 
@@ -51,8 +61,9 @@ namespace Daro
             AdUnitId  = adUnitId;
             Placement = placement;
 
-            DaroPlatform.Current.CreateRewarded(AdUnitId, Placement);
-            DaroAdInstanceRegistry.Register(DaroAdFormat.Rewarded, AdUnitId, this);
+            _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
+                DaroAdFormat.Rewarded, AdUnitId, this,
+                () => DaroPlatform.Current.CreateRewarded(AdUnitId, Placement));
             DaroLog.Verbose("Rewarded", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
         }
 
@@ -154,13 +165,14 @@ namespace Daro
                 OnAdImpression   = null;
                 OnAdDismissed    = null;
                 OnEarnedReward   = null;
-
-                DaroAdInstanceRegistry.Unregister(DaroAdFormat.Rewarded, AdUnitId, this);
+                OnAdRevenuePaid  = null;
             }
 
             try
             {
-                DaroPlatform.Current.DestroyRewarded(AdUnitId);
+                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                    DaroAdFormat.Rewarded, AdUnitId, this, _registryGeneration,
+                    () => DaroPlatform.Current.DestroyRewarded(AdUnitId));
             }
             catch (Exception e)
             {
@@ -225,6 +237,13 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("Rewarded", $"FireOnEarnedReward adUnit='{AdUnitId}' reward={reward.Amount} '{reward.RewardType}'");
             SafeEventInvoker.Invoke(OnEarnedReward, info, reward);
+        }
+
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Rewarded", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }
 }

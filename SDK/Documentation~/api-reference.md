@@ -27,6 +27,10 @@ namespace Daro
         public static void SetUserId(string userId);
         public static void SetAppMuted(bool muted);
         public static DaroLogLevel LogLevel { get; set; }       // default DaroLogLevel.Info
+
+        // --- test devices (set before InitializeAsync) ---
+        public static string[] TestDeviceAdvertisingIdentifiers { get; }
+        public static void SetTestDeviceAdvertisingIdentifiers(params string[] identifiers);
     }
 }
 ```
@@ -34,6 +38,7 @@ namespace Daro
 Highlights:
 - `InitializeAsync()` is async. Repeated calls return the same `Task`. Pattern: `await DaroSdk.InitializeAsync();`.
 - `OnSdkInitialized` honors a *late-subscriber* contract — subscribing after init still fires once on the main thread. No polling.
+- `SetTestDeviceAdvertisingIdentifiers(...)` trims and de-duplicates IDs, then forwards them to Android's native MAX mediation layer during the next SDK initialization. Call it before `InitializeAsync()`; changing it after initialization only affects the next initialization. iOS test mode is configured through MAX Mediation Debugger / dashboard-side setup, not this API.
 
 ## DaroInterstitialAd
 
@@ -465,7 +470,7 @@ public enum DaroAdDisplayErrorCode
   - `Load()` / `Show()` / `SetCustomData()` → `ObjectDisposedException`.
 - **`Dispose()` is idempotent**. Calling it twice is safe.
 - **Finalizer ensures native handles are released** even if you forget `Dispose()`, but the timing is non-deterministic.
-- **AppOpen + Android 1.3.6**: `OnAdLoaded` can be swallowed by an internal preload race. Poll `IsReady()` instead. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
+- **AppOpen + Android**: the Unity shim makes `Load()` cache-aware. Cache-empty loads use a polling-backed readiness bridge; cache-filled loads complete immediately with `latency=0`. Always gate `Show()` with `IsReady()`. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
 - **Banner `OnAdShown` is synchronous** — emitted from inside `Show()` itself, not from a native callback. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
 - **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
 - **Native textures are owned by the instance**: `Info.Icon` / `Info.MediaImage` are destroyed by `Dispose()`. Do not retain past disposal.

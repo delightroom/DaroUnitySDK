@@ -63,6 +63,11 @@ namespace Daro.Editor
             var unityFrameworkGuid = pbx.GetUnityFrameworkTargetGuid();
             pbx.SetBuildProperty(unityFrameworkGuid, "GCC_ENABLE_OBJC_EXCEPTIONS", "YES");
 
+            // ILRD: DaroUnityRevenueToken.swift (CryptoKit) lives in Plugins/iOS
+            // and is attached to UnityFramework. Set SWIFT_VERSION so it compiles;
+            // it is C-callable via @_cdecl, so no bridging header is needed.
+            pbx.SetBuildProperty(unityFrameworkGuid, "SWIFT_VERSION", "5.0");
+
             pbx.WriteToFile(pbxPath);
         }
 

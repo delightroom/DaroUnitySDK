@@ -245,6 +245,18 @@ namespace Daro.Internal
                     Safely(() => handle._sink.OnAdClicked(info));
                     break;
                 }
+                case "adRevenuePaid":
+                {
+                    var info = new DaroAdInfo(
+                        DaroAdFormat.Native, adUnitId,
+                        DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
+                    var revenue = DaroRevenueInfo.FromDecimalString(
+                        DaroJsonHelpers.GetJsonString(eventJson, "value"),
+                        DaroJsonHelpers.GetJsonString(eventJson, "currencyCode") ?? "USD",
+                        DaroJsonHelpers.GetJsonInt(eventJson, "precisionType"));
+                    Safely(() => handle._sink.OnAdRevenuePaid(info, revenue));
+                    break;
+                }
                 // unknown event → silent drop (forward-compat)
             }
         }

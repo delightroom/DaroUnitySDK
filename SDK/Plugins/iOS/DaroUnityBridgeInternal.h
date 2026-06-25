@@ -57,6 +57,14 @@ extern NSString* EscapeJson(NSString* _Nullable s);
 // in DaroUnityBridge.mm.
 extern NSString* LatencyField(id _Nullable info);
 
+// `,"value":"<decimal>","currencyCode":"USD","precisionType":N` JSON fragment
+// for adRevenuePaid events (ILRD sprint). `value` crosses as a decimal string
+// (NSDecimalNumber → invariant "." description) so the C# side parses to
+// `decimal` without binary floating-point loss. Defined in DaroUnityBridge.mm.
+extern NSString* RevenueFields(NSDecimalNumber* _Nullable value,
+                               NSString* _Nullable currencyCode,
+                               NSInteger precisionType);
+
 // Provided by Unity's UnityFramework at link time.
 extern UIViewController* UnityGetGLViewController(void);
 
@@ -81,6 +89,16 @@ extern UIViewController* UnityGetGLViewController(void);
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Cached capability token for the per-instance paid-event hook (ILRD). Derived
+// once from DaroUnityRevenueToken.swift; empty when the app key is absent.
+// Defined in DaroUnityBridge.mm.
+NSString* DaroUnityPaidEventToken(void);
+
+// Wires a per-instance paid-event plugin on a unit-routed ad (interstitial /
+// rewarded / appOpen / banner / lightPopup); adFormat is the wire format code.
+// Native is handle-routed and wires its own block. Defined in DaroUnityBridge.mm.
+void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat);
 
 void DaroUnityNativeAd_DestroyAll(void);
 void DaroUnityBanner_DestroyAll(void);

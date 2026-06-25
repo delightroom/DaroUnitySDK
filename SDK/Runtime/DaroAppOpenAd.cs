@@ -25,7 +25,17 @@ namespace Daro
         public event Action<DaroAdInfo>?         OnAdImpression;
         public event Action<DaroAdInfo>?         OnAdDismissed;
 
+        /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
         internal volatile bool _disposed;
+
+        private long _registryGeneration;
 
         internal bool IsDisposed => _disposed;
 
@@ -47,8 +57,9 @@ namespace Daro
             AdUnitId  = adUnitId;
             Placement = placement;
 
-            DaroPlatform.Current.CreateAppOpen(AdUnitId, Placement);
-            DaroAdInstanceRegistry.Register(DaroAdFormat.AppOpen, AdUnitId, this);
+            _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
+                DaroAdFormat.AppOpen, AdUnitId, this,
+                () => DaroPlatform.Current.CreateAppOpen(AdUnitId, Placement));
             DaroLog.Verbose("AppOpen", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
         }
 
@@ -134,13 +145,14 @@ namespace Daro
                 OnAdClicked      = null;
                 OnAdImpression   = null;
                 OnAdDismissed    = null;
-
-                DaroAdInstanceRegistry.Unregister(DaroAdFormat.AppOpen, AdUnitId, this);
+                OnAdRevenuePaid  = null;
             }
 
             try
             {
-                DaroPlatform.Current.DestroyAppOpen(AdUnitId);
+                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                    DaroAdFormat.AppOpen, AdUnitId, this, _registryGeneration,
+                    () => DaroPlatform.Current.DestroyAppOpen(AdUnitId));
             }
             catch (Exception e)
             {
@@ -198,6 +210,13 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("AppOpen", $"FireOnAdDismissed adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
+        }
+
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("AppOpen", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }
 }

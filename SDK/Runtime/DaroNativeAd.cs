@@ -65,6 +65,14 @@ namespace Daro
         public event Action<DaroAdInfo>?      OnAdImpression;
         public event Action<DaroAdInfo>?      OnAdClicked;
 
+        /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
         internal volatile bool _disposed;
         internal bool IsDisposed => _disposed;
 
@@ -350,6 +358,7 @@ namespace Daro
                 OnAdFailedToLoad = null;
                 OnAdImpression   = null;
                 OnAdClicked      = null;
+                OnAdRevenuePaid  = null;
 
                 // Texture2D.Destroy is main-thread-only — only safe here in the
                 // disposing branch. Finalizer path skips it.
@@ -422,6 +431,13 @@ namespace Daro
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
+            DaroLog.Verbose("Native", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
+        }
+
         // Per-instance sink — direct ref to its DaroNativeAd, no registry lookup.
         private sealed class InstanceSink : INativeAdEventSink
         {
@@ -439,6 +455,9 @@ namespace Daro
 
             public void OnAdClicked(DaroAdInfo info) =>
                 _ad.FireOnAdClicked(info);
+
+            public void OnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue) =>
+                _ad.FireOnAdRevenuePaid(info, revenue);
         }
     }
 }

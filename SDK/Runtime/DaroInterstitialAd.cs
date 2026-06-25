@@ -26,6 +26,14 @@ namespace Daro
         public event Action<DaroAdInfo>?         OnAdDismissed;
 
         /// <summary>
+        /// Fires once per paid impression with the net (fee-adjusted) revenue
+        /// reported by the mediation layer (ILRD). May lag
+        /// <see cref="OnAdImpression"/> by a beat; not every impression is
+        /// guaranteed a revenue report.
+        /// </summary>
+        public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
+
+        /// <summary>
         /// Disposal flag. <c>volatile</c> so the §4.4 pre-enqueue and at-drain
         /// checks read the current value without a lock.
         /// </summary>
@@ -36,6 +44,8 @@ namespace Daro
         /// routing layer to skip firing against dead instances.
         /// </summary>
         internal bool IsDisposed => _disposed;
+
+        private long _registryGeneration;
 
         /// <summary>
         /// Construct an interstitial ad instance bound to <paramref name="adUnitId"/>.
@@ -56,9 +66,11 @@ namespace Daro
             Placement = placement;
 
             // Platform handles native create + the "replace prior instance"
-            // rule (§2.4); registry mirrors that by overwriting the mapping.
-            DaroPlatform.Current.CreateInterstitial(AdUnitId, Placement);
-            DaroAdInstanceRegistry.Register(DaroAdFormat.Interstitial, AdUnitId, this);
+            // rule (§2.4); registry serializes same-adUnit create/destroy so
+            // stale finalizers cannot destroy the new platform state.
+            _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
+                DaroAdFormat.Interstitial, AdUnitId, this,
+                () => DaroPlatform.Current.CreateInterstitial(AdUnitId, Placement));
             DaroLog.Verbose("Interstitial", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
         }
 
@@ -160,15 +172,16 @@ namespace Daro
                 OnAdClicked      = null;
                 OnAdImpression   = null;
                 OnAdDismissed    = null;
-
-                DaroAdInstanceRegistry.Unregister(DaroAdFormat.Interstitial, AdUnitId, this);
+                OnAdRevenuePaid  = null;
             }
 
             // Destroy the native handle. Wrapped in try/catch because Dispose
             // must not throw (§4.1); platform-level faults are logged and swallowed.
             try
             {
-                DaroPlatform.Current.DestroyInterstitial(AdUnitId);
+                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                    DaroAdFormat.Interstitial, AdUnitId, this, _registryGeneration,
+                    () => DaroPlatform.Current.DestroyInterstitial(AdUnitId));
             }
             catch (Exception e)
             {
@@ -236,6 +249,13 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("Interstitial", $"FireOnAdDismissed adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
+        }
+
+        internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Interstitial", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }
 }

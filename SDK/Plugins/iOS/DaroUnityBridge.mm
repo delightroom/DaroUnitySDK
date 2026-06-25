@@ -72,6 +72,19 @@ NSString* LatencyField(id _Nullable info) {
     return [NSString stringWithFormat:@",\"latency\":%@", adInfo.latency];
 }
 
+// External linkage — used by every shim file's didPayRevenue delegate method.
+// NSDecimalNumber description with nil locale always renders "." as the
+// decimal separator, so the payload stays invariant-culture parseable.
+NSString* RevenueFields(NSDecimalNumber* _Nullable value,
+                        NSString* _Nullable currencyCode,
+                        NSInteger precisionType) {
+    return [NSString stringWithFormat:
+        @",\"value\":\"%@\",\"currencyCode\":\"%@\",\"precisionType\":%ld",
+        EscapeJson(value ? [value descriptionWithLocale:nil] : @"0"),
+        EscapeJson(currencyCode.length > 0 ? currencyCode : @"USD"),
+        (long)precisionType];
+}
+
 #pragma mark - Ad instance container (sketch CD-4)
 
 // DaroMObjCBridge does NOT retain ad instances, and ad.delegate is `weak` —
@@ -317,6 +330,48 @@ void DaroUnity_SetCallback(DaroUnityCallbackFn callback) {
     s_callback = callback;
 }
 
+#pragma mark · Paid event (ILRD) plugin registration
+
+// Implemented in DaroUnityRevenueToken.swift (CryptoKit). Returns a strdup'd
+// token = base64(nonce || AES-GCM("adPaidEvent", SHA256(appKey)) || tag),
+// matching DaroSDK's gate. Caller frees. nil if the app key is absent.
+extern "C" char* DaroDerivePaidEventToken(void);
+
+// External linkage — every ad creation site (across the shim files) registers a
+// per-instance plugin with this token. Each DaroObjC* ad exposes only a generic,
+// identifier-gated hook; revenue meaning lives entirely here (the Unity-side
+// plugin). Per-instance so multi-instance formats (native) route to the right
+// handle. Token is derived once (DaroUnityRevenueToken.swift, CryptoKit) and
+// cached; empty when the app key is absent.
+NSString* DaroUnityPaidEventToken(void) {
+    static NSString* token = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        char* c = DaroDerivePaidEventToken();
+        if (c) {
+            token = [NSString stringWithUTF8String:c];
+            free(c);
+        }
+    });
+    return token;
+}
+
+// External linkage — used by every unit-routed creation site (incl. the other
+// shim files) to wire a per-instance paid-event plugin. Native is handle-routed
+// and wires its own block (DaroUnityNativeAd.mm).
+void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat) {
+    NSString* token = DaroUnityPaidEventToken();
+    if (!token || !ad) return;
+    [ad registerPluginWithIdentifier:token
+        onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
+                      NSString* currencyCode, NSInteger precisionType) {
+            DaroDispatch(adUnitId, [NSString stringWithFormat:
+                @"{\"event\":\"adRevenuePaid\",\"adFormat\":%ld%@%@}",
+                (long)adFormat, RevenueFields(value, currencyCode, precisionType),
+                LatencyField(adInfo)]);
+        }];
+}
+
 #pragma mark · SDK lifecycle
 
 void DaroUnity_Initialize(int hasGdprConsent,
@@ -386,6 +441,7 @@ void DaroUnity_CreateInterstitial(const char* adUnitId, const char* placement) {
         delegate.adUnitId = unit;
         DaroObjCInterstitialAd* ad = [[DaroObjCInterstitialAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
+        DaroUnityWireRevenue(ad, unit, 1);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;
@@ -450,6 +506,7 @@ void DaroUnity_CreateRewarded(const char* adUnitId, const char* placement) {
         DaroObjCRewardedAd* ad = [[DaroObjCRewardedAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
         if (placementS) [ad setPlacement:placementS];  // CD-13: only Rewarded exposes setPlacement.
+        DaroUnityWireRevenue(ad, unit, 2);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;
@@ -523,6 +580,7 @@ void DaroUnity_CreateAppOpen(const char* adUnitId, const char* placement) {
         delegate.adUnitId = unit;
         DaroObjCAppOpenAd* ad = [[DaroObjCAppOpenAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
+        DaroUnityWireRevenue(ad, unit, 4);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;

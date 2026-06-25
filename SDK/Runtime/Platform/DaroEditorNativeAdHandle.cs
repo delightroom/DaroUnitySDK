@@ -103,11 +103,18 @@ namespace Daro.Internal
             if (_disposed || !_loaded) return;
             // Mock impression: fire only when a load has succeeded; matches
             // device behavior where MAX revenue listener requires a loaded ad.
-            var info = new DaroAdInfo(DaroAdFormat.Native, _adUnitId, latency: null);
+            // Revenue follows the impression — device contract reports revenue
+            // at didPayRevenue (= impression) time.
+            var info    = new DaroAdInfo(DaroAdFormat.Native, _adUnitId, latency: null);
+            var revenue = DaroRevenueInfo.FromMicros(
+                _settings.revenueValueMicros,
+                _settings.revenueCurrencyCode ?? "USD",
+                _settings.revenuePrecisionType);
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (_disposed) return;
                 _sink.OnAdImpression(info);
+                _sink.OnAdRevenuePaid(info, revenue);
             });
         }
 

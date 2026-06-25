@@ -46,6 +46,7 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo>?                 _onAdDismissed;
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
+        private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
 
         // ── Construction ────────────────────────────────────────────────────
 
@@ -249,6 +250,17 @@ namespace Daro.Internal
         public Action<string, DaroAdInfo>?                 OnAdDismissed    { set => _onAdDismissed    = value; }
         public Action<string, DaroAdInfo, DaroRewardItem>? OnEarnedReward   { set => _onEarnedReward   = value; }
         public Action<string, DaroAdInfo>?                 OnAdHidden       { set => _onAdHidden       = value; }
+        public Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
+
+        /// <summary>
+        /// Mock revenue payload from settings — same micros→decimal conversion
+        /// the Android wire uses, so Editor verifies the real mapping path.
+        /// </summary>
+        private DaroRevenueInfo BuildMockRevenue() =>
+            DaroRevenueInfo.FromMicros(
+                _settings.revenueValueMicros,
+                _settings.revenueCurrencyCode ?? "USD",
+                _settings.revenuePrecisionType);
 
         // ── Banner mock impl (sketch §5.2) ──────────────────────────────────
         // LoadBanner reuses LoadUnit's coroutine — same deterministic /
@@ -292,13 +304,17 @@ namespace Daro.Internal
 
             // OnAdShown fires synchronously from DaroBannerAd.Show() — no platform
             // dispatch needed. We fire OnAdImpression here as the platform-side
-            // signal that the overlay is live (sketch §5.2).
+            // signal that the overlay is live (sketch §5.2). Revenue follows the
+            // impression — mirrors the device contract where didPayRevenue is
+            // the impression signal.
             var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
+            var revenue = BuildMockRevenue();
             var captureId = adUnitId;
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed) return;
                 _onAdImpression?.Invoke(captureId, info);
+                _onAdRevenuePaid?.Invoke(captureId, info, revenue);
             });
         }
 
@@ -588,10 +604,14 @@ namespace Daro.Internal
             // (and for Rewarded, OnEarnedReward just before OnAdDismissed).
             var shownInfo = BuildShownInfo(state);
             var adUnitId = state.AdUnitId;
+            var revenue  = BuildMockRevenue();
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed) return;
                 _onAdShown?.Invoke(adUnitId, shownInfo);
+                // ILRD: device contract reports revenue at impression time
+                // (didPayRevenue ≈ show for fullscreen formats).
+                _onAdRevenuePaid?.Invoke(adUnitId, shownInfo, revenue);
             });
 
             if (adDurationSeconds > 0f)

@@ -590,6 +590,21 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             DaroObjCNativeView* nativeView = [[DaroObjCNativeView alloc]
                 initWithUnitId:entry.adUnitId autoLoad:NO];
             nativeView.delegate = entry.delegate;
+            // ILRD: handle-routed (multi-instance) — unlike unit-routed formats,
+            // native revenue must reach the exact handle, so we capture handleId.
+            NSString* paidToken = DaroUnityPaidEventToken();
+            if (paidToken) {
+                int handleId = entry.handleId;
+                [nativeView registerPluginWithIdentifier:paidToken
+                    onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
+                                  NSString* currencyCode, NSInteger precisionType) {
+                        if (!s_nativeAdCallback) return;
+                        NSString* json = [NSString stringWithFormat:
+                            @"{\"event\":\"adRevenuePaid\"%@%@}",
+                            RevenueFields(value, currencyCode, precisionType), LatencyField(adInfo)];
+                        s_nativeAdCallback(handleId, [json UTF8String], NULL, 0);
+                    }];
+            }
             nativeView.frame = host.bounds;
             entry.nativeView = nativeView;
 

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Daro.Internal;
 
@@ -93,6 +94,51 @@ namespace Daro
         public static string? CcpaConsentString                 { get; set; }
         public static bool?   IsTaggedForChildDirectedTreatment { get; set; }
 
+        private static string[] _testDeviceAdvertisingIdentifiers = Array.Empty<string>();
+
+        /// <summary>
+        /// Copy of the AppLovin test device advertising identifiers configured
+        /// for the next SDK initialization.
+        /// </summary>
+        public static string[] TestDeviceAdvertisingIdentifiers =>
+            (string[])_testDeviceAdvertisingIdentifiers.Clone();
+
+        /// <summary>
+        /// Configure test devices before <see cref="InitializeAsync"/>.
+        /// Values are forwarded to Android's native MAX mediation layer during
+        /// SDK initialization so the session can receive test ads. iOS currently
+        /// relies on MAX Mediation Debugger / dashboard-side test mode setup.
+        /// </summary>
+        public static void SetTestDeviceAdvertisingIdentifiers(params string[] identifiers)
+        {
+            if (identifiers == null) throw new ArgumentNullException(nameof(identifiers));
+
+            var normalized = new List<string>(identifiers.Length);
+            for (int i = 0; i < identifiers.Length; i++)
+            {
+                var value = identifiers[i];
+                if (value == null)
+                    throw new ArgumentException("Identifier entries must not be null.", nameof(identifiers));
+
+                value = value.Trim();
+                if (value.Length == 0)
+                    throw new ArgumentException("Identifier entries must not be empty.", nameof(identifiers));
+                if (value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                    throw new ArgumentException("Identifier entries must not contain line breaks.", nameof(identifiers));
+
+                if (!normalized.Contains(value))
+                    normalized.Add(value);
+            }
+
+            _testDeviceAdvertisingIdentifiers = normalized.ToArray();
+            if (IsInitialized)
+            {
+                DaroLog.Warn("Sdk",
+                    "Test device advertising identifiers changed after initialization; " +
+                    "they will take effect on the next SDK initialization.");
+            }
+        }
+
         // ── Logging ──────────────────────────────────────────────────────────
 
         // Volatile backing field — DaroLogLevel's underlying type is int, so
@@ -184,6 +230,7 @@ namespace Daro
                 CcpaConsentString                 = CcpaConsentString,
                 IsTaggedForChildDirectedTreatment = IsTaggedForChildDirectedTreatment,
                 LogLevel                          = LogLevel,
+                TestDeviceAdvertisingIdentifiers  = TestDeviceAdvertisingIdentifiers,
             };
 
             // Fire the platform init and arrange completion handling via
@@ -337,6 +384,7 @@ namespace Daro
             DoNotSell                         = null;
             CcpaConsentString                 = null;
             IsTaggedForChildDirectedTreatment = null;
+            _testDeviceAdvertisingIdentifiers  = Array.Empty<string>();
             // Direct field write — bypass the property setter so ResetStatics
             // stays side-effect-free (no SetLogLevel propagate during teardown).
             // Original behavior was an auto-property reset; preserved.
@@ -448,7 +496,17 @@ namespace Daro
                 banner?.FireOnAdHidden(info);
             };
 
-            DaroLog.Verbose("Sdk", "WirePlatformEvents complete — 9 event slots installed");
+            platform.OnAdRevenuePaid = (adUnitId, info, revenue) =>
+            {
+                RoutePentaInfo(adUnitId, info,
+                    i  => i.FireOnAdRevenuePaid(info, revenue),
+                    r  => r.FireOnAdRevenuePaid(info, revenue),
+                    a  => a.FireOnAdRevenuePaid(info, revenue),
+                    b  => b.FireOnAdRevenuePaid(info, revenue),
+                    lp => lp.FireOnAdRevenuePaid(info, revenue));
+            };
+
+            DaroLog.Verbose("Sdk", "WirePlatformEvents complete — 10 event slots installed");
         }
 
         // ── Routing helpers ──────────────────────────────────────────────────

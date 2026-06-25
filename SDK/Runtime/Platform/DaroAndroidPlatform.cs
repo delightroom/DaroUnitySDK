@@ -11,7 +11,7 @@ namespace Daro.Internal
     /// Android implementation of <see cref="IDaroPlatform"/>. Sits on top of
     /// the Kotlin shim shipped as <c>SDK/Plugins/Android/daro-android-wrapper.aar</c>
     /// (source lives under <c>SDK/Plugins/Android-src~</c>), which wraps native
-    /// <c>so.daro:daro-m:1.3.6</c> (daro-core resolves transitively via the
+    /// <c>so.daro:daro-m:1.3.12</c> (daro-core resolves transitively via the
     /// daro-m POM).
     /// See sketch §1, §3.1.
     /// </summary>
@@ -60,6 +60,7 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo>?                 _onAdDismissed;
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
+        private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
 
         // ── Layer 2 platform-level disposed guard ────────────────────────────
         // Distinct from the Kotlin Layer 1 (`@Volatile destroyed` per ad class).
@@ -78,6 +79,7 @@ namespace Daro.Internal
         Action<string, DaroAdInfo>?                 IDaroPlatform.OnAdDismissed    { set => _onAdDismissed    = value; }
         Action<string, DaroAdInfo, DaroRewardItem>? IDaroPlatform.OnEarnedReward   { set => _onEarnedReward   = value; }
         Action<string, DaroAdInfo>?                 IDaroPlatform.OnAdHidden       { set => _onAdHidden       = value; }
+        Action<string, DaroAdInfo, DaroRevenueInfo>? IDaroPlatform.OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
 
         // ── Banner ad operations ─────────────────────────────────────────────
 
@@ -206,7 +208,8 @@ namespace Daro.Internal
                 DaroAndroidEncoding.NullableBoolToTristate(p.DoNotSell),
                 p.CcpaConsentString ?? "",
                 DaroAndroidEncoding.NullableBoolToTristate(p.IsTaggedForChildDirectedTreatment),
-                DaroAndroidEncoding.LogLevelToDebugMode(p.LogLevel)
+                DaroAndroidEncoding.LogLevelToDebugMode(p.LogLevel),
+                string.Join("\n", p.TestDeviceAdvertisingIdentifiers ?? Array.Empty<string>())
             );
 
             // Daro.init() is synchronous from the caller's perspective (sketch CD-4)
@@ -583,6 +586,18 @@ namespace Daro.Internal
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdDismissed?.Invoke(adUnitId, info));
             }
+
+            // No latency on the revenue path — daro-m's paid event tuple is
+            // (valueMicros, currencyCode, precisionType) only.
+            public void onAdRevenuePaid(
+                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+            {
+                if (_platform._disposed) return;
+                var info    = new DaroAdInfo(_format, adUnitId, latency: null);
+                var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
+                MainThreadDispatcher.Enqueue(() =>
+                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+            }
         }
 
         // Standalone proxy for Rewarded — extends AndroidJavaProxy directly
@@ -676,6 +691,16 @@ namespace Daro.Internal
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onEarnedReward?.Invoke(adUnitId, info, reward));
             }
+
+            public void onAdRevenuePaid(
+                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+            {
+                if (_platform._disposed) return;
+                var info    = new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latency: null);
+                var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
+                MainThreadDispatcher.Enqueue(() =>
+                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+            }
         }
 
         // Banner-specific 4-method proxy. Standalone (not subclassing
@@ -730,6 +755,16 @@ namespace Daro.Internal
                 var info = MakeInfo(adUnitId, latencyMs);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdClicked?.Invoke(adUnitId, info));
+            }
+
+            public void onAdRevenuePaid(
+                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+            {
+                if (_platform._disposed) return;
+                var info    = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
+                var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
+                MainThreadDispatcher.Enqueue(() =>
+                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
             }
         }
 
@@ -817,6 +852,16 @@ namespace Daro.Internal
                 var info = MakeInfo(adUnitId, latencyMs);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdImpression?.Invoke(adUnitId, info));
+            }
+
+            public void onAdRevenuePaid(
+                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+            {
+                if (_platform._disposed) return;
+                var info    = new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latency: null);
+                var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
+                MainThreadDispatcher.Enqueue(() =>
+                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
             }
         }
 

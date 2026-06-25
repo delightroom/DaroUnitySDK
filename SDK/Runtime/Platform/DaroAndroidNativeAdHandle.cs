@@ -228,6 +228,19 @@ namespace Daro.Internal
                 });
             }
 
+            public void onAdRevenuePaid(
+                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+            {
+                if (_parent._disposed) return;
+                var info    = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latency: null);
+                var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_parent._disposed) return;
+                    _parent._sink.OnAdRevenuePaid(info, revenue);
+                });
+            }
+
             // PNG bytes → Texture2D. `LoadImage` decodes PNG header, allocates
             // correct format/dimensions, and uses bottom-left origin so display
             // is upright (no row flipping needed). Avoids the

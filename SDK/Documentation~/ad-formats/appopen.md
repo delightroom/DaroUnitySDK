@@ -83,11 +83,14 @@ public static class DaroAppStateNotifier
 - Same-state transitions are coalesced (no Foreground → Foreground duplicates).
 - **No late-subscriber replay** — transitions that happened before you subscribed are lost. Subscribe in `Awake` / `OnEnable` to catch the first background→foreground.
 
-## ⚠ Android 1.3.6 race — use `IsReady()` polling
+## Android readiness and cache behavior
 
-**Known structural race in the native AppLovin mediation SDK 1.3.6**: its lifecycle-driven auto-preload can intercept the listener callback path for manual `Load()` calls, so `OnAdLoaded` does not always fire. `IsReady()` remains accurate because it queries the native cache directly.
+Android AppOpen uses a native cache manager. The Unity shim keeps `Load()` cache-aware:
 
-Production-correct pattern: **poll `IsReady()`** rather than relying on the `OnAdLoaded` flag.
+- **Cache empty**: `Load()` starts a native fetch and a finite readiness poll. If the native AppOpen manager's lifecycle preload path intercepts the listener callback, the shim synthesizes one `OnAdLoaded` as soon as `IsReady()` turns true.
+- **Cache filled**: `Load()` does not destroy and refetch the cached ad. It immediately reports `OnAdLoaded` with `latency=0`, meaning "cache reuse, no fetch occurred."
+
+Production-correct display policy: use `OnAdLoaded` to update UI, but gate `Show()` with **`IsReady()`** immediately before showing.
 
 ```csharp
 // Polling coroutine — low cost, finite deadline.
@@ -103,9 +106,7 @@ private IEnumerator PollReady()
 }
 ```
 
-See `Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs` `PollAppOpenReady` (line 493-511) for reference.
-
-The race is a structural quirk of daro-m 1.3.6 that the Unity SDK cannot fix — slated for a fix in a later daro-m release. Until then, poll. iOS is unaffected (`OnAdLoaded` is trustworthy there).
+See `Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs` `PollAppOpenReady` for a sample status-label poll. iOS is unaffected by the Android cache manager behavior.
 
 ## ⚠ Do not call `Load()` from `OnAdDismissed`
 
@@ -141,7 +142,7 @@ Response: check `err.Code == DaroAdDisplayErrorCode.FullscreenAdAlreadyShowing` 
 | Pattern | Effect |
 |---|---|
 | Manual `Load()` in `OnAdDismissed` | race + wasted inventory |
-| Trusting `OnAdLoaded` flag on Android | swallowed by 1.3.6 race — use `IsReady()` |
+| Calling `Show()` without an `IsReady()` guard | stale UI state can race the native cache |
 | Subscribing to `OnAppStateChanged` late (after Start) | first background→foreground missed |
 | Forgetting to unsubscribe in `OnDisable` | dangling subscription after scene reload |
 | Showing on cold-start | negative UX |
