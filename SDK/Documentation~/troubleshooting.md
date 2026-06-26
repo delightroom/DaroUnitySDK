@@ -161,7 +161,7 @@ These are normal behaviors that surprise people — they look like bugs but are 
 | Symptom | Format | Why it's normal |
 |---|---|---|
 | `OnAdImpression` fires before the user can have actually seen the ad | Banner, Native, Light Popup (iOS) | iOS fires impression on `didPayRevenue` — the mediation revenue moment. It's a billing event, not a viewability event. |
-| `OnAdShown` fires synchronously inside `Show()` | Banner | Banner has no native show callback; the SDK emits the event directly from the `Show()` call. |
+| `OnAdShown` fires without a manual `Show()` call | Banner | Banner displays by default after `Load()` succeeds; the SDK synthesizes `OnAdShown` after that default display and after later `Hide()` → `Show()`. |
 | Many `OnAdFailedToLoad` events from a single `Load()` | Native, Light Popup (iOS) | daro iOS retries internally up to ~10 times. Wait for the inventory to recover. |
 | `Info.MediaImage == null` on Android Native | Native (Android v1) | Video / large media is not in v1 scope. |
 | Banner refreshes on its own | Banner | Mediation-driven; configured by the dashboard's `refreshInterval`. You do not call `Load()` again. |

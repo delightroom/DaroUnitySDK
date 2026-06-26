@@ -264,9 +264,10 @@ namespace Daro.Internal
 
         // ── Banner mock impl (sketch §5.2) ──────────────────────────────────
         // LoadBanner reuses LoadUnit's coroutine — same deterministic /
-        // always-fail policy as fullscreen formats. ShowBanner / HideBanner
-        // are not coroutine-driven (banner is always-on overlay, not one-shot)
-        // — they synchronously update state then enqueue a single event.
+        // always-fail policy as fullscreen formats. On successful banner load,
+        // the mock overlay is visible by default. ShowBanner / HideBanner are
+        // not coroutine-driven (banner is a persistent overlay, not one-shot)
+        // — they synchronously update state then enqueue events.
 
 #if UNITY_EDITOR
         // Per-banner GameObject hosting DaroEditorBannerView for IMGUI overlay.
@@ -287,6 +288,7 @@ namespace Daro.Internal
             if (_units.TryGetValue(adUnitId, out var state))
             {
                 state.BannerSize = size;
+                state.Visible = true;
             }
             LoadUnit(adUnitId);
         }
@@ -296,23 +298,23 @@ namespace Daro.Internal
             DaroLog.Verbose("Banner", $"Platform[Editor].ShowBanner adUnit='{adUnitId}' unit={_units.ContainsKey(adUnitId)}");
             if (!_units.TryGetValue(adUnitId, out var state)) return;
             if (state.Destroyed || !state.Loaded) return;
+            if (state.Visible) return;
             state.Visible = true;
 
 #if UNITY_EDITOR
             EnsureBannerView(state).Show();
 #endif
 
-            // OnAdShown fires synchronously from DaroBannerAd.Show() — no platform
-            // dispatch needed. We fire OnAdImpression here as the platform-side
-            // signal that the overlay is live (sketch §5.2). Revenue follows the
-            // impression — mirrors the device contract where didPayRevenue is
-            // the impression signal.
+            // OnAdShown is synthesized by DaroBannerAd. We fire
+            // OnAdImpression here as the platform-side signal that the overlay
+            // is live. Revenue follows the impression — mirrors the device
+            // contract where didPayRevenue is the impression signal.
             var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
             var revenue = BuildMockRevenue();
             var captureId = adUnitId;
             MainThreadDispatcher.Enqueue(() =>
             {
-                if (state.Destroyed) return;
+                if (state.Destroyed || !state.Visible) return;
                 _onAdImpression?.Invoke(captureId, info);
                 _onAdRevenuePaid?.Invoke(captureId, info, revenue);
             });
@@ -323,7 +325,9 @@ namespace Daro.Internal
             DaroLog.Verbose("Banner", $"Platform[Editor].HideBanner adUnit='{adUnitId}' unit={_units.ContainsKey(adUnitId)}");
             if (!_units.TryGetValue(adUnitId, out var state)) return;
             if (state.Destroyed) return;
+            var wasDisplayed = state.BannerDisplayed;
             state.Visible = false;
+            state.BannerDisplayed = false;
 
 #if UNITY_EDITOR
             if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
@@ -331,6 +335,8 @@ namespace Daro.Internal
                 go.GetComponent<DaroEditorBannerView>()?.Hide();
             }
 #endif
+
+            if (!wasDisplayed) return;
 
             var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
             var captureId = adUnitId;
@@ -370,7 +376,7 @@ namespace Daro.Internal
         }
 
         // Non-authoritative mock footprint — only while the mock banner is
-        // visible (Show called, not Hidden). Device platforms return the real
+        // visible (Load/Show display, not Hidden). Device platforms return the real
         // measured rect; the editor returns a nominal-size rect from Screen.safeArea.
         public bool TryGetBannerScreenRect(string adUnitId, out Rect rect)
         {
@@ -459,6 +465,8 @@ namespace Daro.Internal
 
             // Banner-only fields (sketch §5.1) — ignored for fullscreen formats.
             public bool                 Visible;
+            public bool                 BannerDisplayed;
+            public int                  LoadGeneration;
             public DaroBannerSize       BannerSize;
             public DaroBannerPosition   BannerPosition;
 
@@ -486,12 +494,24 @@ namespace Daro.Internal
         {
             if (!_units.TryGetValue(adUnitId, out var state)) return;
             if (state.Destroyed) return;
+            state.Loaded = false;
 
             MainThreadDispatcher.EnsureCreated();
-            StartCoroutineOnDispatcher(LoadCoroutine(state));
+            var generation = 0;
+            if (state.Format == DaroAdFormat.Banner)
+            {
+                generation = ++state.LoadGeneration;
+            }
+            StartCoroutineOnDispatcher(LoadCoroutine(state, generation));
         }
 
-        private IEnumerator LoadCoroutine(PerUnitState state)
+        private static bool IsStaleBannerLoad(PerUnitState state, int generation)
+        {
+            return state.Format == DaroAdFormat.Banner
+                && state.LoadGeneration != generation;
+        }
+
+        private IEnumerator LoadCoroutine(PerUnitState state, int generation)
         {
             // Snapshot settings so mid-delay changes don't desync one load cycle.
             var delay        = _settings.loadDelaySeconds;
@@ -503,7 +523,7 @@ namespace Daro.Internal
             if (delay > 0f)
                 yield return new WaitForSecondsRealtime(delay);
 
-            if (state.Destroyed) yield break;
+            if (state.Destroyed || IsStaleBannerLoad(state, generation)) yield break;
 
             var success = DaroEditorMockProbability.RollSuccess(successRate);
             if (success)
@@ -515,22 +535,50 @@ namespace Daro.Internal
                 double? latency = latencyMs < 0 ? (double?)null : latencyMs;
                 var info = new DaroAdInfo(state.Format, state.AdUnitId, latency);
 
+                if (state.Format == DaroAdFormat.Banner && state.Visible)
+                {
+#if UNITY_EDITOR
+                    EnsureBannerView(state).Show();
+#endif
+                    state.BannerDisplayed = true;
+                }
+
                 var adUnitId = state.AdUnitId;
+                var revenue = BuildMockRevenue();
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed) return;
                     _onAdLoaded?.Invoke(adUnitId, info);
+                    if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
+                    if (state.Format == DaroAdFormat.Banner && state.Visible && state.Loaded)
+                    {
+                        _onAdImpression?.Invoke(adUnitId, info);
+                        _onAdRevenuePaid?.Invoke(adUnitId, info, revenue);
+                    }
                 });
             }
             else
             {
+                state.Loaded = false;
+                if (state.Format == DaroAdFormat.Banner)
+                {
+                    state.Visible = false;
+                    state.BannerDisplayed = false;
+#if UNITY_EDITOR
+                    if (_bannerViews.TryGetValue(state.AdUnitId, out var go) && go != null)
+                    {
+                        go.GetComponent<DaroEditorBannerView>()?.Hide();
+                    }
+#endif
+                }
+
                 var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
                 var err = new DaroAdLoadError(mapped, errorMessage, state.AdUnitId);
 
                 var adUnitId = state.AdUnitId;
                 MainThreadDispatcher.Enqueue(() =>
                 {
-                    if (state.Destroyed) return;
+                    if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
                     _onAdFailedToLoad?.Invoke(adUnitId, err);
                 });
             }

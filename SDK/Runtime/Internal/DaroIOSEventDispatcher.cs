@@ -21,6 +21,7 @@ namespace Daro.Internal
         void FailedToShow(string adUnitId, DaroAdDisplayError error);
         void Clicked(string adUnitId, DaroAdInfo info);
         void Impression(string adUnitId, DaroAdInfo info);
+        void Hidden(string adUnitId, DaroAdInfo info);
         void Dismissed(string adUnitId, DaroAdInfo info);
         void EarnedReward(string adUnitId, DaroAdInfo info, DaroRewardItem reward);
         void RevenuePaid(string adUnitId, DaroAdInfo info, DaroRevenueInfo revenue);
@@ -129,6 +130,12 @@ namespace Daro.Internal
                 {
                     var info = new DaroAdInfo(adFormat, adUnitId, DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
                     Safely(() => sink.Impression(adUnitId, info));
+                    break;
+                }
+                case "adHidden":
+                {
+                    var info = new DaroAdInfo(adFormat, adUnitId, DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
+                    Safely(() => sink.Hidden(adUnitId, info));
                     break;
                 }
                 case "adDismissed":

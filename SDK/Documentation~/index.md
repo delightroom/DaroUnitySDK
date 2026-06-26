@@ -22,7 +22,7 @@ Read this first when integrating the Daro Unity SDK into a game project. Every c
 | Interstitial | ✓ | fullscreen, the simplest pattern |
 | Rewarded | ✓ | Interstitial + `OnEarnedReward` / `SetCustomData` |
 | AppOpen | ✓ | foreground-return auto-trigger; Android cache race notes inside |
-| Banner | ✓ | persistent native overlay; Load / Show / Hide / Dispose lifecycle |
+| Banner | ✓ | persistent native overlay; Load displays by default, Hide / Show re-display |
 | Native | ✓ | publisher-renders pattern; slot-path (`DaroNativeAdView`) + raw path; multi-instance |
 | LightPopup | ✓ | modal Dialog (Android) / present (iOS) with 9-color + close-label options |
 | Failure-mode diagnostic | ✓ | [troubleshooting.md](troubleshooting.md) |
@@ -30,9 +30,9 @@ Read this first when integrating the Daro Unity SDK into a game project. Every c
 ## Integration principles (TL;DR)
 
 1. **Namespace**: `using Daro;` — every public type lives under this single namespace.
-2. **Order**: `await DaroSdk.InitializeAsync();` → construct an ad instance → register events with `+=` → call `Load()` → call `Show()`.
+2. **Order**: `await DaroSdk.InitializeAsync();` → construct an ad instance → register events with `+=` → call `Load()` → call `Show()` for fullscreen formats. Banner displays by default after `Load()` succeeds; `Show()` is for re-display after `Hide()`.
 3. **Events fire on the main thread**: every SDK callback is marshalled to Unity's main thread. Update UI directly inside callbacks; no dispatcher needed.
-4. **`IDisposable`**: every ad instance (`DaroInterstitialAd` / `DaroRewardedAd` / `DaroAppOpenAd`) implements `IDisposable`. Call `Dispose()` and null the field in `OnDisable` / `OnDestroy`.
+4. **`IDisposable`**: every ad instance (`DaroInterstitialAd` / `DaroRewardedAd` / `DaroAppOpenAd` / `DaroBannerAd` / `DaroNativeAd` / `DaroLightPopupAd`) implements `IDisposable`. Call `Dispose()` and null the field in `OnDisable` / `OnDestroy`.
 5. **Guard `Show()` with `IsReady()`** (or at minimum a null check on the instance). Showing before loading raises `InvalidOperationException` or surfaces `OnAdFailedToShow`.
 6. **AppOpen is the exception to manual `Show()`**: subscribe to `DaroAppStateNotifier.OnAppStateChanged` and `Show()` on the Foreground transition rather than wiring it to a user-facing button.
 

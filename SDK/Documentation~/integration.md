@@ -86,7 +86,7 @@ public sealed class AdHost : MonoBehaviour
 }
 ```
 
-Order: **Construct → `+=` events → `Load()` → (wait) → `Show()` → `Dispose()`**. Breaking this order triggers the anti-patterns below.
+Fullscreen order: **Construct → `+=` events → `Load()` → (wait) → `Show()` → `Dispose()`**. Banner differs: `Load()` displays by default, and `Show()` is only for re-display after `Hide()`. Breaking each format's order triggers the anti-patterns below.
 
 ## 3. Event subscription
 
@@ -176,7 +176,7 @@ AppOpen only. The SDK auto-preloads after dismiss; a manual `Load()` here create
 
 The view-based formats (Banner / Native / LightPopup) follow different lifecycle shapes from the fullscreen formats — pre-read the format page before integrating. Most notably:
 
-- **Banner is a native overlay**, not a Canvas child. It does not participate in Unity's sort order; the consumer owns the screen-lifecycle Hide/Dispose. See [banner.md](ad-formats/banner.md).
+- **Banner is a native overlay**, not a Canvas child. `Load()` displays it by default; use `Hide()` / `Show()` for temporary visibility and `Dispose()` at the screen lifecycle boundary. See [banner.md](ad-formats/banner.md).
 - **Native is publisher-rendered**. The SDK delivers asset payload + click signal routing; you build the UI. Multi-instance same-ad-unit is supported for feeds. See [native.md](ad-formats/native.md).
 - **LightPopup uses Interstitial-style lifecycle** (Load / Show / 7 events) but is rendered by the native layer with options baked at construction. See [light-popup.md](ad-formats/light-popup.md).
 

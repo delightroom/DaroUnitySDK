@@ -7,36 +7,40 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// Banner ad instance — always-on overlay. v1 ships standard sizes (320×50,
-    /// 300×250) at 6 gravity-anchored positions; mediation manages auto-refresh
-    /// internally. See sketch-banner-android.md §2-3.
+    /// Banner ad instance — native view overlay. v1 ships standard sizes
+    /// (320×50, 300×250) at 6 gravity-anchored positions; mediation manages
+    /// auto-refresh internally. See sketch-banner-android.md §2-3.
     /// </summary>
     /// <remarks>
     /// <para>One instance per <c>adUnitId</c>; duplicate construction destroys +
     /// replaces the prior instance (KU-1, mirrors v1 Interstitial replace rule).
     /// The first instance becomes a stale C# object — caller must not retain it.</para>
     ///
-    /// <para>Lifecycle: <c>Load → Show → Hide → Show → Destroy</c> cycle is valid.
-    /// <c>Show()</c> requires prior <c>Load()</c> — does NOT implicit-load (KU-4).
+    /// <para>Lifecycle: <c>Load → Hide → Show → Destroy</c> cycle is valid.
+    /// <c>Load()</c> starts loading and, on success, displays the banner by
+    /// default. <c>Show()</c> requires prior <c>Load()</c> and is primarily for
+    /// re-displaying after <c>Hide()</c>; it does NOT implicit-load (KU-4).
     /// <c>Hide()</c> removes the view but keeps the ad loaded; subsequent
     /// <c>Show()</c> re-displays without a network round-trip.</para>
     ///
-    /// <para>Ownership: while a <see cref="DaroBannerAd"/> instance is alive,
-    /// the underlying native banner view stays attached to the host view tree
-    /// (Android: Activity decor; iOS: GLView controller). Switching the host
-    /// app's screen / scene does NOT auto-detach it, and mediation auto-refresh
-    /// keeps firing impressions on the still-attached view. Consumers must
-    /// explicitly call <see cref="Hide"/> (pause + can re-Show later) or
+    /// <para>Ownership: after a successful <see cref="Load"/>, the underlying
+    /// native banner view is attached to the host view tree (Android: Activity
+    /// decor; iOS: GLView controller) until <see cref="Hide"/> or
+    /// <see cref="Dispose"/>. Switching the host app's screen / scene does NOT
+    /// auto-detach it, and mediation auto-refresh keeps firing impressions on
+    /// the attached view. Consumers must explicitly call <see cref="Hide"/>
+    /// (pause + can re-Show later) or
     /// <see cref="Dispose"/> (permanent release) at the lifecycle boundary
     /// where the banner should disappear — typically the screen's back / unload
     /// handler.</para>
     ///
-    /// <para>Events: 6 (KU-5). <c>OnAdShown</c> fires synchronously inside
-    /// <c>Show()</c> — there is no native callback for view visibility, but the
-    /// consumer needs an observable signal that the overlay is live (AdMob Unity
-    /// SDK precedent). <c>OnAdFailedToShow</c> 부재 — Banner has no show-failure
-    /// concept (C# pre-checks block invalid Show calls). <c>OnAdRefreshed</c>
-    /// 부재 — DaroAdViewListener has no refresh callback.</para>
+    /// <para>Events: 6 (KU-5). <c>OnAdShown</c> fires once after a successful
+    /// <c>Load()</c> displays the banner, and once after each <c>Hide()</c> →
+    /// <c>Show()</c> re-display. There is no native callback for view
+    /// visibility, but the consumer needs an observable signal that the overlay
+    /// is live. <c>OnAdFailedToShow</c> 부재 — Banner has no show-failure concept
+    /// (C# pre-checks block invalid Show calls). <c>OnAdRefreshed</c> 부재 —
+    /// DaroAdViewListener has no refresh callback.</para>
     /// </remarks>
     public sealed class DaroBannerAd : IDisposable
     {
@@ -50,7 +54,11 @@ namespace Daro
         public event Action<DaroAdInfo>?      OnAdLoaded;
         public event Action<DaroAdLoadError>? OnAdFailedToLoad;
 
-        /// <summary>Fires synchronously from <see cref="Show"/> — not from native.</summary>
+        /// <summary>
+        /// Fires after <see cref="Load"/> successfully displays the banner, and
+        /// after <see cref="Show"/> re-displays it following <see cref="Hide"/>.
+        /// Not sourced from native.
+        /// </summary>
         public event Action<DaroAdInfo>?      OnAdShown;
         public event Action<DaroAdInfo>?      OnAdClicked;
         public event Action<DaroAdInfo>?      OnAdImpression;
@@ -75,9 +83,13 @@ namespace Daro
 
         internal bool IsDisposed => _disposed;
 
-        // _loaded 는 main-thread only access — FireOnAdLoaded(set) / Show()(read) /
+        // Main-thread only access — FireOnAdLoaded(set) / Show()(read) /
         // IsReady()(read) 모두 Unity main thread 에서 실행. volatile 불필요.
         private bool _loaded;
+        private bool _visibleIntent;
+        private bool _shownReported;
+        private bool _dispatchingLoad;
+        private bool _hiddenReportable;
 
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
@@ -109,8 +121,9 @@ namespace Daro
         }
 
         /// <summary>
-        /// Start loading. Size is passed because <c>DaroBannerAdView</c> bakes
-        /// it into view construction at native side. Post-init failures fire
+        /// Start loading and display the banner by default once loading
+        /// succeeds. Size is passed because <c>DaroBannerAdView</c> bakes it
+        /// into view construction at native side. Post-init failures fire
         /// <see cref="OnAdFailedToLoad"/> rather than throwing (v1 §4.1).
         /// </summary>
         /// <exception cref="ObjectDisposedException"/>
@@ -125,6 +138,9 @@ namespace Daro
                 return;
             }
             DaroLog.Verbose("Banner", $"Load adUnit='{AdUnitId}' size={Size}");
+            _loaded = false;
+            _visibleIntent = true;
+            _shownReported = false;
             DaroPlatform.Current.LoadBanner(AdUnitId, Size);
         }
 
@@ -134,8 +150,8 @@ namespace Daro
         public bool IsReady() => _loaded && !_disposed;
 
         /// <summary>
-        /// Place the banner overlay on screen. Fires <see cref="OnAdShown"/>
-        /// synchronously after the platform call (no native show callback exists).
+        /// Re-display the banner overlay after <see cref="Hide"/>. If the
+        /// banner is already visible, this is a no-op.
         /// </summary>
         /// <exception cref="ObjectDisposedException"/>
         /// <exception cref="InvalidOperationException">
@@ -149,11 +165,16 @@ namespace Daro
                 throw new InvalidOperationException($"Banner ad not ready: {AdUnitId}");
 
             DaroLog.Verbose("Banner", $"Show adUnit='{AdUnitId}' position={Position}");
-            DaroPlatform.Current.ShowBanner(AdUnitId);
+            if (_visibleIntent)
+            {
+                DaroLog.Verbose("Banner", $"Show no-op adUnit='{AdUnitId}' already visible");
+                if (!_dispatchingLoad) FireOnAdShownIfNeeded();
+                return;
+            }
 
-            // Sync fire — no native source for OnAdShown on banner.
-            SafeEventInvoker.Invoke(OnAdShown,
-                new DaroAdInfo(DaroAdFormat.Banner, AdUnitId, latency: null));
+            _visibleIntent = true;
+            DaroPlatform.Current.ShowBanner(AdUnitId);
+            if (!_dispatchingLoad) FireOnAdShownIfNeeded();
         }
 
         /// <summary>
@@ -166,6 +187,8 @@ namespace Daro
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
             DaroLog.Verbose("Banner", $"Hide adUnit='{AdUnitId}'");
+            _visibleIntent = false;
+            _shownReported = false;
             DaroPlatform.Current.HideBanner(AdUnitId);
         }
 
@@ -189,12 +212,11 @@ namespace Daro
         /// instance is disposed.
         /// </summary>
         /// <remarks>
-        /// <para><b>Timing</b>: the native banner lays out a frame or two AFTER
-        /// <see cref="Show"/> returns, so this is <c>null</c> immediately after
-        /// Show — including inside an <see cref="OnAdShown"/> handler, which fires
-        /// synchronously from <see cref="Show"/> before the native view has laid
-        /// out. Poll across a few frames until it returns non-null rather than
-        /// reading it once on the Show callback.</para>
+        /// <para><b>Timing</b>: the native banner may lay out a frame or two
+        /// AFTER <see cref="Load"/> succeeds or <see cref="Show"/> returns, so
+        /// this can be <c>null</c> inside an <see cref="OnAdShown"/> handler.
+        /// Poll across a few frames until it returns non-null rather than
+        /// reading it once on the shown callback.</para>
         ///
         /// <para>This reports the REAL measured footprint — including the
         /// platform's safe-area / system-bar / gesture inset — so a consumer can
@@ -214,6 +236,7 @@ namespace Daro
         public Rect? GetScreenRect()
         {
             if (_disposed) return null;
+            if (!_visibleIntent) return null;
             return DaroPlatform.Current.TryGetBannerScreenRect(AdUnitId, out var rect)
                 ? rect
                 : (Rect?)null;
@@ -256,6 +279,10 @@ namespace Daro
                 OnAdImpression   = null;
                 OnAdHidden       = null;
                 OnAdRevenuePaid  = null;
+                _visibleIntent   = false;
+                _shownReported   = false;
+                _dispatchingLoad = false;
+                _hiddenReportable = false;
             }
 
             try
@@ -288,43 +315,66 @@ namespace Daro
             if (_disposed) return;
             _loaded = true;
             DaroLog.Verbose("Banner", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
-            SafeEventInvoker.Invoke(OnAdLoaded, info);
+            _dispatchingLoad = true;
+            try
+            {
+                SafeEventInvoker.Invoke(OnAdLoaded, info);
+            }
+            finally
+            {
+                _dispatchingLoad = false;
+            }
+            FireOnAdShownIfNeeded();
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed) return;
             _loaded = false;
+            _visibleIntent = false;
+            _shownReported = false;
+            _dispatchingLoad = false;
+            _hiddenReportable = false;
             DaroLog.Verbose("Banner", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
-        // No FireOnAdShown — fires from Show() directly.
+        private void FireOnAdShownIfNeeded()
+        {
+            if (_disposed || !_loaded || !_visibleIntent || _shownReported) return;
+
+            _shownReported = true;
+            _hiddenReportable = true;
+            DaroLog.Verbose("Banner", $"FireOnAdShown adUnit='{AdUnitId}'");
+            SafeEventInvoker.Invoke(OnAdShown,
+                new DaroAdInfo(DaroAdFormat.Banner, AdUnitId, latency: null));
+        }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
-            if (_disposed) return;
+            if (_disposed || !_loaded || !_visibleIntent) return;
             DaroLog.Verbose("Banner", $"FireOnAdClicked adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
-            if (_disposed) return;
+            if (_disposed || !_loaded || !_visibleIntent) return;
             DaroLog.Verbose("Banner", $"FireOnAdImpression adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
-            if (_disposed) return;
+            if (_disposed || !_loaded) return;
             DaroLog.Verbose("Banner", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 
         internal void FireOnAdHidden(DaroAdInfo info)
         {
-            if (_disposed) return;
+            if (_disposed || !_hiddenReportable || _visibleIntent) return;
+            _hiddenReportable = false;
             DaroLog.Verbose("Banner", $"FireOnAdHidden adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdHidden, info);
         }

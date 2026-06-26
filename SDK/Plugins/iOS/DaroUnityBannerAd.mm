@@ -7,9 +7,9 @@
 //  Lifecycle (sketch §"Overlay Lifecycle State Machine"):
 //
 //    CreateBanner        → entry slot only, no view yet
-//    LoadBanner(size)    → construct DaroObjCBannerView + addSubview hidden=YES + loadAd
-//    ShowBanner          → addSubview (if needed) + hidden=NO   ← always set hidden=NO
-//    HideBanner          → removeFromSuperview                   ← preserves hidden=YES
+//    LoadBanner(size)    → construct DaroObjCBannerView + addSubview visible + loadAd
+//    ShowBanner          → addSubview if hidden/detached
+//    HideBanner          → removeFromSuperview
 //    DestroyBanner       → removeFromSuperview + nil entry (ARC releases all)
 //
 //  Threading: dictionary mutations on s_adQueue (serial); UIView ops dispatched
@@ -18,7 +18,7 @@
 //  needs no further marshaling.
 //
 //  Auto-refresh: native CommonAdBannerView's AdRefreshCoordinator is driven
-//  by didMoveToSuperview / isHidden setter — addSubview+hidden=NO resumes,
+//  by didMoveToSuperview / isHidden setter — addSubview resumes,
 //  removeFromSuperview pauses. The shim does no explicit coordinator calls.
 //
 
@@ -39,7 +39,8 @@
 @property (nonatomic, strong, nullable) id<DaroObjCBannerViewDelegate> delegate;
 @property (nonatomic, assign) int positionOrdinal;   // 0..5 = DaroBannerPosition
 @property (nonatomic, assign) int sizeOrdinal;       // 0=Standard, 1=Mrec
-@property (nonatomic, assign) BOOL visible;          // Show requested + not yet Hidden — gates GetScreenRect
+@property (nonatomic, assign) BOOL visible;          // Load/Show requested + not yet Hidden — gates GetScreenRect
+@property (nonatomic, assign) NSInteger generation;  // increments per Load; drops stale async main work/callbacks
 @end
 
 @implementation DaroUnityBannerEntry
@@ -48,6 +49,48 @@
 #pragma mark - Storage (defined here, declared extern in DaroUnityBridgeInternal.h)
 
 NSMutableDictionary<NSString*, DaroUnityBannerEntry*>* s_banners = nil;
+static NSInteger s_nextBannerGeneration = 0;
+
+static NSInteger NextBannerGeneration(void) {
+    // Called only from s_adQueue.
+    s_nextBannerGeneration += 1;
+    return s_nextBannerGeneration;
+}
+
+#pragma mark - Current-view guards
+
+// Caller contract: never call from s_adQueue. Delegate / paid-event callbacks
+// are native/main-queue driven, so dispatch_sync is safe here.
+static BOOL BannerIsCurrent(NSString* unit,
+                            DaroObjCBannerView* view,
+                            BOOL requireVisible) {
+    if (!unit || !view) return NO;
+    __block BOOL current = NO;
+    dispatch_sync(s_adQueue, ^{
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        current = (entry && entry.bannerView == view &&
+                   (!requireVisible || entry.visible));
+    });
+    return current;
+}
+
+static void DaroUnityWireBannerRevenue(DaroObjCBannerView* view,
+                                       NSString* unit) {
+    NSString* token = DaroUnityPaidEventToken();
+    if (!token || !view || !unit) return;
+
+    __weak DaroObjCBannerView* weakView = view;
+    [view registerPluginWithIdentifier:token
+        onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
+                      NSString* currencyCode, NSInteger precisionType) {
+            DaroObjCBannerView* strongView = weakView;
+            if (!strongView || !BannerIsCurrent(unit, strongView, YES)) return;
+            DaroDispatch(unit, [NSString stringWithFormat:
+                @"{\"event\":\"adRevenuePaid\",\"adFormat\":0%@%@}",
+                RevenueFields(value, currencyCode, precisionType),
+                LatencyField(adInfo)]);
+        }];
+}
 
 #pragma mark - Geometry helpers
 
@@ -80,10 +123,10 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 #pragma mark - Delegate adopter
 
-// adFormat:0 = DaroAdFormat.Banner. The protocol is 4 methods only — no
-// adShown/adHidden/adDismissed exist on DaroObjCBannerViewDelegate; those
-// are synthesized C#-side (OnAdShown by DaroBannerAd.Show, OnAdHidden by
-// DaroIOSPlatform.HideBanner — sketch CD-6).
+// adFormat:0 = DaroAdFormat.Banner. The native banner delegate has no
+// adShown/adHidden/adDismissed callbacks. OnAdShown is synthesized by the
+// C# DaroBannerAd Load/Show state; adHidden is emitted by this shim after
+// native detach completes and routed through DaroIOSPlatform.
 @interface DaroUnityBannerDelegate : NSObject <DaroObjCBannerViewDelegate>
 @property (nonatomic, copy) NSString* adUnitId;
 @end
@@ -92,6 +135,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 - (void)bannerViewDidLoad:(DaroObjCBannerView*)bannerView
                    adInfo:(DaroObjCAdInfo*)adInfo {
+    if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
     DaroLogD(@"Banner", @"didLoad adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
         [NSString stringWithFormat:@"{\"event\":\"adLoaded\",\"adFormat\":0%@}",
@@ -103,8 +147,18 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
     // NSError code is fixed at -1 by DaroObjCBannerView (domain
     // com.daro.objcbridge.banner). C# DaroAdErrorCodeMapper.ToLoadErrorCode(-1)
     // resolves to DaroAdLoadErrorCode.Unspecified (sketch CD-8).
+    if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
     DaroLogW(@"Banner", @"Load failed adUnit='%@' code=%ld msg='%@'",
         self.adUnitId, (long)error.code, error.localizedDescription);
+    NSString* unit = self.adUnitId;
+    dispatch_sync(s_adQueue, ^{
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        if (!entry || entry.bannerView != bannerView) return;
+        entry.visible = NO;
+        entry.bannerView = nil;
+        entry.delegate = nil;
+    });
+    [bannerView removeFromSuperview];
     DaroDispatch(self.adUnitId,
         [NSString stringWithFormat:
             @"{\"event\":\"adFailedToLoad\",\"adFormat\":0,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
@@ -113,6 +167,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 - (void)bannerViewDidClick:(DaroObjCBannerView*)bannerView
                     adInfo:(DaroObjCAdInfo*)adInfo {
+    if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didClick adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
         [NSString stringWithFormat:@"{\"event\":\"adClicked\",\"adFormat\":0%@}",
@@ -121,6 +176,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 - (void)bannerViewDidRecordImpression:(DaroObjCBannerView*)bannerView
                                adInfo:(DaroObjCAdInfo*)adInfo {
+    if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didRecordImpression adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
         [NSString stringWithFormat:@"{\"event\":\"adImpression\",\"adFormat\":0%@}",
@@ -140,10 +196,17 @@ void DaroUnity_CreateBanner(const char* adUnitId) {
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
     dispatch_async(s_adQueue, ^{
+        DaroObjCBannerView* oldView = s_banners[unit].bannerView;
+        if (oldView) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [oldView removeFromSuperview];
+            });
+        }
         s_banners[unit] = nil;                            // Replace any prior entry (ARC release)
         DaroUnityBannerEntry* entry = [DaroUnityBannerEntry new];
         entry.positionOrdinal = 4;                        // BottomCenter default (matches Android)
         entry.sizeOrdinal     = 0;                        // Standard default; overwritten at LoadBanner
+        entry.generation      = NextBannerGeneration();
         s_banners[unit] = entry;
     });
 }
@@ -156,24 +219,14 @@ void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
         DaroUnityBannerEntry* entry = s_banners[unit];
         if (!entry) return;
         entry.sizeOrdinal = sizeOrdinal;
-
-        DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
-            ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
+        entry.visible = YES;
+        entry.generation = NextBannerGeneration();
+        NSInteger generation = entry.generation;
 
         // Snapshot prior state for main-queue teardown (re-load pattern).
         DaroObjCBannerView* oldView = entry.bannerView;
-
-        // Construct adopter + view off the main queue. UIView init does no
-        // window operations until addSubview; setRootViewController + loadAd
-        // happen on main.
-        DaroUnityBannerDelegate* delegate = [DaroUnityBannerDelegate new];
-        delegate.adUnitId = unit;
-        DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
-            initWithUnitId:unit bannerSize:nativeSize autoLoad:NO];
-        view.delegate = delegate;
-        DaroUnityWireRevenue(view, unit, 0);
-        entry.bannerView = view;
-        entry.delegate   = delegate;
+        entry.bannerView = nil;
+        entry.delegate   = nil;
 
         dispatch_async(dispatch_get_main_queue(), ^{
             [oldView removeFromSuperview];                // No-op if nil
@@ -181,22 +234,56 @@ void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
             UIViewController* vc = UnityGetGLViewController();
             if (!vc) {
                 DaroLogW(@"Banner", @"Load no GLViewController adUnit='%@'", unit);
+                __block BOOL shouldFail = NO;
+                dispatch_sync(s_adQueue, ^{
+                    DaroUnityBannerEntry* latest = s_banners[unit];
+                    if (latest && latest.generation == generation) {
+                        latest.visible = NO;
+                        shouldFail = YES;
+                    }
+                });
+                if (shouldFail) {
+                    DaroDispatch(unit,
+                        @"{\"event\":\"adFailedToLoad\",\"adFormat\":0,\"errorCode\":-1,\"errorMessage\":\"Unity GLViewController unavailable\"}");
+                }
                 return;
             }
+
+            DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
+                ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
+            DaroUnityBannerDelegate* delegate = [DaroUnityBannerDelegate new];
+            delegate.adUnitId = unit;
+            DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
+                initWithUnitId:unit bannerSize:nativeSize autoLoad:NO];
+            view.delegate = delegate;
+            DaroUnityWireBannerRevenue(view, unit);
             [view setRootViewController:vc];
 
-            // DETACHED LOAD: do NOT addSubview here. Daro CommonAdBannerView's
-            // loadAd() uses loader.refresh() which is hierarchy-agnostic for
-            // fetch — the network request and onAdLoaded callback fire whether
-            // the view is in a window or not. Impression-counting (MAX
-            // viewability) requires a window, so by keeping the view detached
-            // we ensure no impression / refresh-cycle starts until ShowBanner
-            // attaches the view. This matches DaroFlutterSDK's pattern (load =
-            // ad object preparation, mount = display + impression).
-            //
-            // Frame computation is also deferred to ShowBanner because
-            // safeAreaInsets requires the parent view, which is only relevant
-            // at attach time.
+            __block BOOL current = NO;
+            __block BOOL shouldAttach = NO;
+            __block int latestPosOrd = 4;
+            __block int latestSizeOrd = sizeOrdinal;
+            dispatch_sync(s_adQueue, ^{
+                DaroUnityBannerEntry* latest = s_banners[unit];
+                if (latest && latest.generation == generation) {
+                    latest.bannerView = view;
+                    latest.delegate = delegate;
+                    current = YES;
+                    shouldAttach = latest.visible;
+                    latestPosOrd = latest.positionOrdinal;
+                    latestSizeOrd = latest.sizeOrdinal;
+                }
+            });
+            if (!current) return;
+
+            if (shouldAttach) {
+                UIView* parentView = vc.view;
+                view.frame = BannerFrameForPosition(
+                    latestPosOrd, BannerSizeForOrdinal(latestSizeOrd), parentView);
+                [parentView addSubview:view];
+                DaroLogD(@"Banner", @"Load.attached adUnit='%@' frame=%@",
+                    unit, NSStringFromCGRect(view.frame));
+            }
             [view loadAd];
         });
     });
@@ -212,9 +299,19 @@ void DaroUnity_ShowBanner(const char* adUnitId) {
         DaroObjCBannerView* view = entry.bannerView;
         if (!view) return;
         entry.visible = YES;   // intent set synchronously on s_adQueue (gates GetScreenRect)
-        int posOrd = entry.positionOrdinal;
-        int sizeOrd = entry.sizeOrdinal;
         dispatch_async(dispatch_get_main_queue(), ^{
+            __block BOOL current = NO;
+            __block int latestPosOrd = 4;
+            __block int latestSizeOrd = 0;
+            dispatch_sync(s_adQueue, ^{
+                DaroUnityBannerEntry* latest = s_banners[unit];
+                if (latest && latest.bannerView == view && latest.visible) {
+                    current = YES;
+                    latestPosOrd = latest.positionOrdinal;
+                    latestSizeOrd = latest.sizeOrdinal;
+                }
+            });
+            if (!current) return;
             if (view.superview) return;                   // Already shown — no-op
             UIViewController* vc = UnityGetGLViewController();
             if (!vc) {
@@ -225,13 +322,12 @@ void DaroUnity_ShowBanner(const char* adUnitId) {
             // Compute frame at attach time so safeAreaInsets reflects current
             // device orientation (CD-3: initial orientation only, but Show may
             // happen after device has rotated since Load — safest to recompute).
-            view.frame = BannerFrameForPosition(posOrd, BannerSizeForOrdinal(sizeOrd), parentView);
+            view.frame = BannerFrameForPosition(
+                latestPosOrd, BannerSizeForOrdinal(latestSizeOrd), parentView);
             [parentView addSubview:view];
             DaroLogD(@"Banner", @"Show.attached adUnit='%@' frame=%@",
                 unit, NSStringFromCGRect(view.frame));
-            // No hidden flag toggle — addSubview alone makes the view visible,
-            // and Daro CommonAdBannerView's didMoveToSuperview callback will
-            // wake AdRefreshCoordinator + signal MAX viewability → impression.
+            // No hidden flag toggle — addSubview alone makes the view visible.
         });
     });
 }
@@ -242,16 +338,25 @@ void DaroUnity_HideBanner(const char* adUnitId) {
     DaroLogD(@"Banner", @"Hide adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
+        if (!entry) return;
+        entry.visible = NO;    // clears the footprint gate before the async detach
         DaroObjCBannerView* view = entry.bannerView;
         if (!view) return;
-        entry.visible = NO;    // clears the footprint gate before the async detach
         dispatch_async(dispatch_get_main_queue(), ^{
             // removeFromSuperview triggers didMoveToSuperview(nil) on the
             // native CommonAdBannerView, which pauses AdRefreshCoordinator.
-            // No native "adHidden" callback fires — DaroIOSPlatform.HideBanner
-            // synthesizes OnAdHidden in C# (sketch CD-6).
+            // No native "adHidden" callback exists; this shim emits a
+            // synthetic JSON event after the detach has actually completed.
             [view removeFromSuperview];
             DaroLogD(@"Banner", @"Hide.detached adUnit='%@'", unit);
+            __block BOOL shouldDispatchHidden = NO;
+            dispatch_sync(s_adQueue, ^{
+                DaroUnityBannerEntry* latest = s_banners[unit];
+                shouldDispatchHidden = (latest && latest.bannerView == view && !latest.visible);
+            });
+            if (shouldDispatchHidden) {
+                DaroDispatch(unit, @"{\"event\":\"adHidden\",\"adFormat\":0}");
+            }
         });
     });
 }
@@ -280,16 +385,26 @@ void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
         entry.positionOrdinal = positionOrdinal;
         DaroObjCBannerView* view = entry.bannerView;
         // Apply only if currently in hierarchy. If not yet loaded, stored
-        // ordinal is consumed at next LoadBanner; if hidden, applied at
-        // next ShowBanner via the LoadBanner path doesn't re-run, so fall
-        // through to the cached frame on next visible attach.
-        if (!view || !view.superview) return;
-        int sizeOrd = entry.sizeOrdinal;
+        // ordinal is consumed at LoadBanner attach; if hidden, ShowBanner
+        // recomputes from the stored ordinal.
+        if (!view) return;
         dispatch_async(dispatch_get_main_queue(), ^{
+            __block BOOL current = NO;
+            __block int latestPosOrd = positionOrdinal;
+            __block int latestSizeOrd = 0;
+            dispatch_sync(s_adQueue, ^{
+                DaroUnityBannerEntry* latest = s_banners[unit];
+                if (latest && latest.bannerView == view && latest.visible) {
+                    current = YES;
+                    latestPosOrd = latest.positionOrdinal;
+                    latestSizeOrd = latest.sizeOrdinal;
+                }
+            });
+            if (!current || !view.superview) return;
             UIViewController* vc = UnityGetGLViewController();
             if (!vc) return;
-            view.frame = BannerFrameForPosition(positionOrdinal,
-                                                BannerSizeForOrdinal(sizeOrd),
+            view.frame = BannerFrameForPosition(latestPosOrd,
+                                                BannerSizeForOrdinal(latestSizeOrd),
                                                 vc.view);
         });
     });
@@ -324,21 +439,25 @@ int DaroUnity_GetBannerScreenRect(const char* adUnitId,
 
     __block CGRect frame  = CGRectZero;
     __block BOOL attached = NO;
+    __block CGFloat parentHpx = 0.0;
+    __block CGFloat scale = 1.0;
     void (^readGeometry)(void) = ^{
+        UIViewController* vc = UnityGetGLViewController();
+        UIView* parent = vc ? vc.view : nil;
+        if (!parent) {
+            attached = NO;
+            return;
+        }
         attached = (view.superview != nil);
         frame    = view.frame;                 // parentView coords, points, top-left
+        scale = parent.window.screen.scale;
+        if (scale <= 0.0) scale = UIScreen.mainScreen.scale;
+        parentHpx = parent.bounds.size.height * scale;
     };
     if ([NSThread isMainThread]) readGeometry();
     else dispatch_sync(dispatch_get_main_queue(), readGeometry);
     if (!attached || frame.size.width <= 0.0) return 0;   // attached but not laid out yet
-
-    UIViewController* vc = UnityGetGLViewController();
-    UIView* parent = vc ? vc.view : nil;
-    if (!parent) return 0;
-
-    CGFloat scale = parent.window.screen.scale;
-    if (scale <= 0.0) scale = UIScreen.mainScreen.scale;
-    CGFloat parentHpx = parent.bounds.size.height * scale;
+    if (parentHpx <= 0.0) return 0;
 
     float wpx = (float)(frame.size.width  * scale);
     float hpx = (float)(frame.size.height * scale);

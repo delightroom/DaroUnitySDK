@@ -362,11 +362,7 @@ namespace Daro
 
                 // Texture2D.Destroy is main-thread-only — only safe here in the
                 // disposing branch. Finalizer path skips it.
-                if (Info?.Icon != null)
-                    UnityEngine.Object.Destroy(Info.Icon);
-                if (Info?.MediaImage != null)
-                    UnityEngine.Object.Destroy(Info.MediaImage);
-
+                DestroyInfoTextures(Info);
                 Info = null;
             }
 
@@ -399,22 +395,40 @@ namespace Daro
 
         internal void FireOnAdLoaded(DaroAdInfo adInfo, DaroNativeAdInfo nativeInfo)
         {
-            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown)
+            {
+                DestroyInfoTextures(nativeInfo);
+                return;
+            }
+
+            var previousInfo = Info;
             _loaded = true;
             Info    = nativeInfo;
             DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitId}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, adInfo);
+            if (!ReferenceEquals(previousInfo, nativeInfo))
+                DestroyInfoTextures(previousInfo);
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
+            var previousInfo = Info;
             _loaded = false;
             // Clear stale Info from a prior successful load so a failed reload
             // doesn't leave the publisher reading the previous ad's assets.
             Info = null;
             DaroLog.Verbose("Native", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
+            DestroyInfoTextures(previousInfo);
+        }
+
+        private static void DestroyInfoTextures(DaroNativeAdInfo? info)
+        {
+            if (info?.Icon != null)
+                UnityEngine.Object.Destroy(info.Icon);
+            if (info?.MediaImage != null)
+                UnityEngine.Object.Destroy(info.MediaImage);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)

@@ -249,7 +249,9 @@ namespace Daro.Internal
             {
                 if (pngBytes == null || pngBytes.Length == 0) return null;
                 var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
-                return tex.LoadImage(pngBytes) ? tex : null;
+                if (tex.LoadImage(pngBytes)) return tex;
+                UnityEngine.Object.Destroy(tex);
+                return null;
             }
         }
     }

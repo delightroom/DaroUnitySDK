@@ -275,7 +275,9 @@ namespace Daro.Internal
             var managed = new byte[length];
             Marshal.Copy(pngBytes, managed, 0, length);
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
-            return tex.LoadImage(managed) ? tex : null;
+            if (tex.LoadImage(managed)) return tex;
+            UnityEngine.Object.Destroy(tex);
+            return null;
         }
 
         private static void Safely(Action call)

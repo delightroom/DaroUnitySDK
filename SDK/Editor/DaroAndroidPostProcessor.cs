@@ -40,7 +40,9 @@ namespace Daro.Editor
     // keyfile copy — also out-of-scope for EDM4U).
     //
     // **All inserted blocks are wrapped in marker comments** so re-running
-    // on an already-patched gradle tree is a no-op:
+    // on an already-patched gradle tree is a no-op. Gradle/Groovy files use
+    // `//` markers; gradle.properties uses `#` markers because `//` is not a
+    // comment in .properties syntax:
     //
     //     // daro-block: BEGIN <area>
     //     ... inserted content ...
@@ -98,6 +100,8 @@ namespace Daro.Editor
 
         private const string MarkerBegin = "// daro-block: BEGIN ";
         private const string MarkerEnd   = "// daro-block: END ";
+        private const string PropertiesMarkerBegin = "# daro-block: BEGIN ";
+        private const string PropertiesMarkerEnd   = "# daro-block: END ";
 
         // Match an existing daro-block <area> region; used for idempotency
         // (skip insert if our block is already present).
@@ -107,6 +111,16 @@ namespace Daro.Editor
                 @".*?//\s*daro-block:\s*END\s+" + Regex.Escape(area),
                 RegexOptions.Singleline);
 
+        // gradle.properties historically used the regular `// daro-block`
+        // marker by mistake. Match both the legacy `//` form and the correct
+        // `#` form so re-running the post-processor migrates old exports.
+        private static Regex PropertiesBlockRegex(string area) =>
+            new Regex(
+                @"^[ \t]*(?://|#)\s*daro-block:\s*BEGIN\s+" + Regex.Escape(area) +
+                @".*?^[ \t]*(?://|#)\s*daro-block:\s*END\s+" + Regex.Escape(area) +
+                @"[ \t]*(?:\r?\n)?",
+                RegexOptions.Singleline | RegexOptions.Multiline);
+
         private static string Wrap(string area, string body)
         {
             var sb = new StringBuilder();
@@ -114,6 +128,16 @@ namespace Daro.Editor
             sb.Append(body);
             if (!body.EndsWith("\n")) sb.Append('\n');
             sb.Append(MarkerEnd).Append(area).Append('\n');
+            return sb.ToString();
+        }
+
+        private static string WrapProperties(string area, string body)
+        {
+            var sb = new StringBuilder();
+            sb.Append(PropertiesMarkerBegin).Append(area).Append('\n');
+            sb.Append(body);
+            if (!body.EndsWith("\n")) sb.Append('\n');
+            sb.Append(PropertiesMarkerEnd).Append(area).Append('\n');
             return sb.ToString();
         }
 
@@ -153,26 +177,36 @@ namespace Daro.Editor
         private static bool HasBuildscriptBlock(string text) =>
             new Regex(@"\bbuildscript\s*\{").IsMatch(text);
 
-        // Surgical insert into existing buildscript.repositories block.
-        // URL-deduped against the whole file: skip if already present anywhere
-        // (consumer may have it in pluginManagement etc.).
+        // Insert into existing buildscript.repositories block; if a custom
+        // template has buildscript{} without repositories{}, create it in place.
+        // URL-deduped only inside buildscript{} — project-level repos do not
+        // resolve buildscript classpaths.
         private static string InjectBuildscriptRepo(string text)
         {
             const string area = "root-buildscript-repos";
             if (BlockRegex(area).IsMatch(text)) return text;
 
+            if (!TryFindBlockRange(text, "buildscript", out var buildscriptOpen, out var buildscriptClose))
+                return text;
+
             var url = DaroAndroidGradleContent.AppLovinMavenUrl;
-            if (text.IndexOf(url, System.StringComparison.Ordinal) >= 0) return text;
+            if (text.IndexOf(url, buildscriptOpen, buildscriptClose - buildscriptOpen, System.StringComparison.Ordinal) >= 0)
+                return text;
 
             var body = "        maven { url \"" + url + "\" }\n";
             var block = Wrap(area, body);
 
             var insertAt = FindNestedBlockOpen(text, "buildscript", "repositories");
-            if (insertAt < 0) return text;   // buildscript without repositories — caller already routed correctly.
+            if (insertAt < 0)
+            {
+                var reposBlock = "    repositories {\n" + block + "    }\n";
+                return text.Substring(0, buildscriptOpen) + "\n" + reposBlock + text.Substring(buildscriptOpen);
+            }
             return text.Substring(0, insertAt) + "\n" + block + text.Substring(insertAt);
         }
 
-        // Surgical insert into existing buildscript.dependencies block.
+        // Insert into existing buildscript.dependencies block; if a custom
+        // template has buildscript{} without dependencies{}, create it in place.
         private static string InjectBuildscriptClasspaths(string text)
         {
             const string area = "root-classpath";
@@ -184,7 +218,14 @@ namespace Daro.Editor
             var block = Wrap(area, sb.ToString());
 
             var insertAt = FindNestedBlockOpen(text, "buildscript", "dependencies");
-            if (insertAt < 0) return text;   // Defense: PatchRootBuildGradle routes only when buildscript exists.
+            if (insertAt < 0)
+            {
+                if (!TryFindBlockRange(text, "buildscript", out var buildscriptOpen, out var buildscriptClose))
+                    return text;
+
+                var depsBlock = "    dependencies {\n" + block + "    }\n";
+                return text.Substring(0, buildscriptClose) + "\n" + depsBlock + text.Substring(buildscriptClose);
+            }
             return text.Substring(0, insertAt) + "\n" + block + text.Substring(insertAt);
         }
 
@@ -233,15 +274,57 @@ namespace Daro.Editor
         // it is the one we want.
         private static int FindNestedBlockOpen(string text, string outer, string inner)
         {
-            var rxOuter = new Regex(@"\b" + Regex.Escape(outer) + @"\s*\{");
-            var mOuter = rxOuter.Match(text);
-            if (!mOuter.Success) return -1;
+            var innerStart = FindNestedBlockStart(text, outer, inner);
+            if (innerStart < 0) return -1;
 
             var rxInner = new Regex(@"\b" + Regex.Escape(inner) + @"\s*\{");
-            var mInner = rxInner.Match(text, mOuter.Index + mOuter.Length);
-            if (!mInner.Success) return -1;
+            var mInner = rxInner.Match(text, innerStart);
+            return mInner.Success ? mInner.Index + mInner.Length : -1;
+        }
 
-            return mInner.Index + mInner.Length;
+        private static int FindNestedBlockStart(string text, string outer, string inner)
+        {
+            if (!TryFindBlockRange(text, outer, out var outerOpen, out var outerClose))
+                return -1;
+
+            var rxInner = new Regex(@"\b" + Regex.Escape(inner) + @"\s*\{");
+            var mInner = rxInner.Match(text, outerOpen);
+            if (!mInner.Success || mInner.Index >= outerClose) return -1;
+
+            return mInner.Index;
+        }
+
+        private static bool TryFindBlockRange(string text, string blockName, out int openIndex, out int closeIndex)
+        {
+            openIndex = -1;
+            closeIndex = -1;
+
+            var rx = new Regex(@"\b" + Regex.Escape(blockName) + @"\s*\{");
+            var match = rx.Match(text);
+            if (!match.Success) return false;
+
+            openIndex = match.Index + match.Length;
+            var depth = 1;
+            for (var i = openIndex; i < text.Length; i++)
+            {
+                if (text[i] == '{')
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (text[i] != '}') continue;
+
+                depth--;
+                if (depth == 0)
+                {
+                    closeIndex = i;
+                    return true;
+                }
+            }
+
+            openIndex = -1;
+            return false;
         }
 
         // =====================================================================
@@ -370,9 +453,12 @@ namespace Daro.Editor
             if (!File.Exists(filePath)) return;
             var text = File.ReadAllText(filePath);
             const string area = "gradle-properties";
+            var blockRegex = PropertiesBlockRegex(area);
+            var hadBlock = blockRegex.IsMatch(text);
+            var textWithoutBlock = blockRegex.Replace(text, string.Empty);
 
             var props = DaroAndroidGradleContent.GetGradleProperties(settings);
-            var existingKeys = ParsePropertyKeys(text);
+            var existingKeys = ParsePropertyKeys(textWithoutBlock);
 
             // Filter to keys that are NOT already present anywhere in the file
             // (preserve consumer's existing values verbatim).
@@ -383,16 +469,19 @@ namespace Daro.Editor
                     toWrite.Add(kv);
             }
 
-            if (toWrite.Count == 0) return;
-
-            // Strip any prior daro-block to keep insertion fresh, then re-emit.
-            text = BlockRegex(area).Replace(text, string.Empty);
+            if (toWrite.Count == 0)
+            {
+                if (hadBlock)
+                    File.WriteAllText(filePath, textWithoutBlock);
+                return;
+            }
 
             var sb = new StringBuilder();
             foreach (var kv in toWrite)
                 sb.Append(kv.Key).Append('=').Append(kv.Value).Append('\n');
 
-            var block = Wrap(area, sb.ToString());
+            var block = WrapProperties(area, sb.ToString());
+            text = textWithoutBlock;
             if (text.Length > 0 && !text.EndsWith("\n")) text += "\n";
             text += block;
 

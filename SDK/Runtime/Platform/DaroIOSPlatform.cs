@@ -255,15 +255,6 @@ namespace Daro.Internal
         {
             DaroLog.Verbose("Banner", $"Platform[iOS].HideBanner adUnit='{adUnitId}'");
             DaroUnity_HideBanner(adUnitId);
-
-            // No native hide callback — synthesize OnAdHidden here (sketch CD-6).
-            // Direct invoke (no MainThreadDispatcher.Enqueue): IDaroPlatform's
-            // public surface is only called from Unity's main thread, and iOS
-            // needs no cross-thread marshal (unlike Android, where JNI callbacks
-            // can originate on worker threads — Android pays a 1-frame Enqueue
-            // delay; iOS doesn't).
-            var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
-            _onAdHidden?.Invoke(adUnitId, info);
         }
 
         public void DestroyBanner(string adUnitId)
@@ -306,6 +297,8 @@ namespace Daro.Internal
             _onAdClicked?.Invoke(adUnitId, info);
         void IDaroIosEventSink.Impression(string adUnitId, DaroAdInfo info) =>
             _onAdImpression?.Invoke(adUnitId, info);
+        void IDaroIosEventSink.Hidden(string adUnitId, DaroAdInfo info) =>
+            _onAdHidden?.Invoke(adUnitId, info);
         void IDaroIosEventSink.Dismissed(string adUnitId, DaroAdInfo info) =>
             _onAdDismissed?.Invoke(adUnitId, info);
         void IDaroIosEventSink.EarnedReward(string adUnitId, DaroAdInfo info, DaroRewardItem reward) =>

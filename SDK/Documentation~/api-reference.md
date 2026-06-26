@@ -149,18 +149,18 @@ namespace Daro
         public DaroBannerPosition Position  { get; }   // updated via SetPosition
 
         // --- methods ---
-        public void Load();                                  // async — result via OnAdLoaded / OnAdFailedToLoad
+        public void Load();                                  // async — displays banner by default on success
         public bool IsReady();                               // never throws; false after Dispose
         public void Show();                                  // throws InvalidOperationException when !IsReady()
-                                                             // OnAdShown fires SYNCHRONOUSLY inside this call
+                                                             // re-display after Hide; no-op if already visible
         public void Hide();                                  // remove overlay, pause refresh; ad stays loaded
-        public void SetPosition(DaroBannerPosition pos);     // immediate if shown, else applied on next Show
+        public void SetPosition(DaroBannerPosition pos);     // immediate if visible, else applied on next display
         public void Dispose();                               // idempotent; subsequent Load/Show/Hide → ObjectDisposedException
 
         // --- events (6, all main-thread; no OnAdFailedToShow, no OnAdDismissed) ---
         public event Action<DaroAdInfo>      OnAdLoaded;
         public event Action<DaroAdLoadError> OnAdFailedToLoad;
-        public event Action<DaroAdInfo>      OnAdShown;        // synchronous from Show()
+        public event Action<DaroAdInfo>      OnAdShown;        // Load success display or Show after Hide
         public event Action<DaroAdInfo>      OnAdClicked;
         public event Action<DaroAdInfo>      OnAdImpression;
         public event Action<DaroAdInfo>      OnAdHidden;
@@ -471,7 +471,7 @@ public enum DaroAdDisplayErrorCode
 - **`Dispose()` is idempotent**. Calling it twice is safe.
 - **Finalizer ensures native handles are released** even if you forget `Dispose()`, but the timing is non-deterministic.
 - **AppOpen + Android**: the Unity shim makes `Load()` cache-aware. Cache-empty loads use a polling-backed readiness bridge; cache-filled loads complete immediately with `latency=0`. Always gate `Show()` with `IsReady()`. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
-- **Banner `OnAdShown` is synchronous** — emitted from inside `Show()` itself, not from a native callback. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
+- **Banner displays by default after `Load()` succeeds**. `OnAdShown` is synthesized by the C# facade after default display, and again after `Hide()` → `Show()`. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
 - **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
 - **Native textures are owned by the instance**: `Info.Icon` / `Info.MediaImage` are destroyed by `Dispose()`. Do not retain past disposal.
 - **LightPopup options are baked at construct time**: post-construct mutations of `DaroLightPopupAdOptions` are not propagated. Dispose + reconstruct to change colors.
