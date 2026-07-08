@@ -15,7 +15,7 @@ Daro Unity SDK는 Unity용 Daro 광고 미디에이션 어댑터입니다. 이 �
 
 ## 요구사항
 
-- Unity 2019.4 LTS 이상
+- Unity 2021.3 LTS 이상
 - 타깃 플랫폼에 맞는 Android Build Support 및/또는 iOS Build Support
 - EDM4U. Bootstrap installer가 자동으로 설치합니다.
 

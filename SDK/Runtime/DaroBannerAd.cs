@@ -287,9 +287,10 @@ namespace Daro
 
             try
             {
-                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                    DaroAdFormat.Banner, AdUnitId, this, _registryGeneration,
-                    () => DaroPlatform.Current.DestroyBanner(AdUnitId));
+                DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
+                    DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                        DaroAdFormat.Banner, AdUnitId, this, _registryGeneration,
+                        () => platform.DestroyBanner(AdUnitId)));
             }
             catch (Exception e)
             {
@@ -313,7 +314,14 @@ namespace Daro
         internal void FireOnAdLoaded(DaroAdInfo info)
         {
             if (_disposed) return;
+            bool suppressHiddenReloadEvent = _loaded && !_visibleIntent;
             _loaded = true;
+            if (suppressHiddenReloadEvent)
+            {
+                DaroLog.Verbose("Banner",
+                    $"Suppress hidden refresh OnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+                return;
+            }
             DaroLog.Verbose("Banner", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
             _dispatchingLoad = true;
             try

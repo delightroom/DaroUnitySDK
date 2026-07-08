@@ -92,6 +92,7 @@ Effective immediately if currently shown; applied on the next default `Load()` d
 The Daro dashboard configures a per-ad-unit `refreshInterval`. The native banner view runs its own refresh timer; each cycle fires `OnAdLoaded` → `OnAdImpression` again. You don't call `Load()` again.
 
 - `Hide()` pauses the refresh timer; `Show()` resumes.
+- If a refresh was already in flight when `Hide()` ran, the native side may finish it, but the SDK suppresses extra public `OnAdLoaded` events for already-loaded hidden banners. A first load that completes after an immediate `Hide()` still fires `OnAdLoaded` so `IsReady()` can become true for a later `Show()`.
 - App backgrounded → auto-paused via lifecycle observer.
 - `refreshInterval = 0` on the dashboard disables refresh.
 

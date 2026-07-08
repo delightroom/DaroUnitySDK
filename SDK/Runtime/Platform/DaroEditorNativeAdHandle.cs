@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Daro.Internal
@@ -30,6 +31,10 @@ namespace Daro.Internal
         private readonly DaroEditorSettings _settings;
         private bool _disposed;
         private bool _loaded;
+        private readonly List<CtaRectCall> _ctaRectCalls = new();
+
+        internal IReadOnlyList<CtaRectCall> CtaRectCalls => _ctaRectCalls;
+        internal int ClearCtaScreenRectCallCount { get; private set; }
 
         internal DaroEditorNativeAdHandle(
             string adUnitId,
@@ -136,17 +141,19 @@ namespace Daro.Internal
             });
         }
 
-        // CTA overlay sync — iOS-only. Editor mock has no overlay concept; the
+        // CTA overlay sync. Editor mock has no overlay concept; the
         // mock click path stays through NotifyClicked above. Verbose log only
         // for cross-platform interface uniformity + smoke-detection parity.
         public void SetCtaScreenRect(UnityEngine.Rect rect, bool touchEnabled)
         {
+            _ctaRectCalls.Add(new CtaRectCall(rect, touchEnabled));
             DaroLog.Verbose("Native",
                 $"Handle[Editor].SetCtaScreenRect adUnit='{_adUnitId}' rect={rect} touchEnabled={touchEnabled} (mock no-op)");
         }
 
         public void ClearCtaScreenRect()
         {
+            ClearCtaScreenRectCallCount += 1;
             DaroLog.Verbose("Native",
                 $"Handle[Editor].ClearCtaScreenRect adUnit='{_adUnitId}' (mock no-op)");
         }
@@ -175,6 +182,18 @@ namespace Daro.Internal
                 callToAction: "Learn More",
                 icon:         icon,
                 mediaImage:   null);   // v1 image-only; video deferred
+        }
+
+        internal readonly struct CtaRectCall
+        {
+            internal CtaRectCall(Rect rect, bool touchEnabled)
+            {
+                Rect = rect;
+                TouchEnabled = touchEnabled;
+            }
+
+            internal Rect Rect { get; }
+            internal bool TouchEnabled { get; }
         }
     }
 }

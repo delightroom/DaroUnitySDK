@@ -40,10 +40,22 @@ namespace Daro.Editor
         // daro-m requires Android API 23+.
         internal const int MinSdk = 23;
 
-        // Daro keep rule — covers all Daro packages (`so.daro.*`). Sub-
-        // network adapters declare their own keeps via consumer-proguard
-        // metadata in their AARs, so we do not duplicate them here.
-        internal const string ProguardKeepRule = "-keep class so.daro.** { *; }";
+        // Daro keep rules. The shim's own AAR embeds so.daro.* consumer rules,
+        // but the exported Gradle project may omit UPM-package-level
+        // proguard-user.txt files. Mirror the daro-m JNI/reflection keeps here
+        // so PatchProguard delivers them through the stable export hook.
+        internal const string ProguardKeepRule =
+            "-keep class so.daro.** { *; }\n" +
+            "\n" +
+            "-keep class droom.daro.core.model.DaroAdLoadError { *; }\n" +
+            "-keep class droom.daro.core.model.DaroAdDisplayFailError { *; }\n" +
+            "-keep class droom.daro.core.model.DaroAdInfo { *; }\n" +
+            "-keep class droom.daro.core.model.DaroRewardedAd$DaroRewardedItem { *; }\n" +
+            "\n" +
+            "-keepclassmembers class droom.daro.view.DaroAdView {\n" +
+            "    public void setAutoDetectLifecycle(boolean);\n" +
+            "    public void setRefreshSeconds(int);\n" +
+            "}";
 
         // AppLovin maven URL — needed in the *root buildscript.repositories*
         // so the AppLovinQualityServiceGradlePlugin classpath can resolve

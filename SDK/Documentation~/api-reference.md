@@ -462,14 +462,14 @@ public enum DaroAdDisplayErrorCode
 
 ## Invariants — easy-to-miss rules
 
-- **Every callback fires on Unity's main thread**. Background-thread calls into `Load()` / `Show()` are marshalled internally; the resulting callback still arrives on the main thread.
+- **Every callback fires on Unity's main thread**. Public SDK methods and constructors are main-thread APIs; marshal your own background work back to the Unity main thread before calling `Load()` / `Show()` / `Hide()` / `Dispose()`.
 - **Subscribe before `Load()`**. Subscribing after Load can race with a fast `OnAdLoaded`.
 - **`OnSdkInitialized` is the only event with late-subscriber semantics**. The others fire only after their triggering call.
 - **Post-`Dispose()` behavior**:
   - `IsReady()` → returns `false` (no throw).
   - `Load()` / `Show()` / `SetCustomData()` → `ObjectDisposedException`.
 - **`Dispose()` is idempotent**. Calling it twice is safe.
-- **Finalizer ensures native handles are released** even if you forget `Dispose()`, but the timing is non-deterministic.
+- **Finalizer provides a best-effort native resource backstop** if you forget `Dispose()`, but the timing is non-deterministic. Explicit `Dispose()` is still the supported lifecycle boundary.
 - **AppOpen + Android**: the Unity shim makes `Load()` cache-aware. Cache-empty loads use a polling-backed readiness bridge; cache-filled loads complete immediately with `latency=0`. Always gate `Show()` with `IsReady()`. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
 - **Banner displays by default after `Load()` succeeds**. `OnAdShown` is synthesized by the C# facade after default display, and again after `Hide()` → `Show()`. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
 - **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.

@@ -194,7 +194,7 @@ namespace Daro.Editor
             return true;
         }
 
-        // .NET Standard 2.0 / Unity 2019.4 LTS doesn't expose Path.GetRelativePath,
+        // Unity's .NET Standard 2.0 profile doesn't expose Path.GetRelativePath,
         // so roll our own. Both paths are assumed to be absolute under the same
         // os-canonical form (callers always pass directory-rooted absolute paths).
         private static string GetRelativePath(string root, string fullPath)

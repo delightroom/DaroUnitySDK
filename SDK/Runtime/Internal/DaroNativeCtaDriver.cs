@@ -16,7 +16,7 @@ namespace Daro.Internal
     /// when the hash changes.
     /// </summary>
     /// <remarks>
-    /// <para><b>Composite touchEnabled</b> = <c>IsInteractable() &amp;&amp;
+    /// <para><b>Composite touchEnabled</b> = <c>ad.IsReady &amp;&amp; IsInteractable() &amp;&amp;
     /// CanReceiveRaycasts(go) &amp;&amp; activeInHierarchy &amp;&amp;
     /// isActiveAndEnabled &amp;&amp; ad.IsSlotViewActive</c>.
     /// <see cref="Selectable.IsInteractable"/> walks ancestor CanvasGroup
@@ -70,6 +70,13 @@ namespace Daro.Internal
         /// <see cref="Detach"/>). Read by <c>DaroNativeAd.WireCtaButton</c>
         /// for idempotence (same-Button check).</summary>
         internal Button? Button => _button;
+
+        /// <summary>
+        /// Force the next active <see cref="LateUpdate"/> to re-send geometry even
+        /// when the Button rect did not change. Native shims rebuild overlay hosts
+        /// on each load, so a same-instance re-load needs a fresh sync.
+        /// </summary>
+        internal void InvalidateSync() => _hasLastHash = false;
 
         /// <summary>
         /// Factory — attach driver to <paramref name="button"/>'s GameObject.
@@ -126,6 +133,7 @@ namespace Daro.Internal
             }
 
             bool touchEnabled =
+                _ad.IsReady &&
                 _button.IsInteractable() &&
                 CanReceiveRaycasts(_button.gameObject) &&
                 _button.gameObject.activeInHierarchy &&

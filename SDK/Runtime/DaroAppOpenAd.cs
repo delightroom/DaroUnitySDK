@@ -150,9 +150,10 @@ namespace Daro
 
             try
             {
-                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                    DaroAdFormat.AppOpen, AdUnitId, this, _registryGeneration,
-                    () => DaroPlatform.Current.DestroyAppOpen(AdUnitId));
+                DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
+                    DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                        DaroAdFormat.AppOpen, AdUnitId, this, _registryGeneration,
+                        () => platform.DestroyAppOpen(AdUnitId)));
             }
             catch (Exception e)
             {

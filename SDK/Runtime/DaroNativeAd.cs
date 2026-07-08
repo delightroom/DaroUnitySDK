@@ -136,6 +136,8 @@ namespace Daro
             var w = Mathf.Max(1, IconSize.x);
             var h = Mathf.Max(1, IconSize.y);
             DaroLog.Verbose("Native", $"Load adUnit='{AdUnitId}' iconSize={w}x{h}");
+            _loaded = false;
+            _ctaDriver?.InvalidateSync();
             _handle!.Load(w, h);
         }
 
@@ -177,7 +179,7 @@ namespace Daro
             _handle?.NotifyClicked();
         }
 
-        // ── CTA overlay wiring (iOS native click; Android/Editor inert) ────
+        // ── CTA overlay wiring (native click overlay; Editor inert) ─────────
         //
         // iOS overlay is a **single touch consumer** — a real UITouch on the
         // Unity Button visual area is caught by the native UIKit overlay,
@@ -190,9 +192,9 @@ namespace Daro
         /// <summary>
         /// Helper-bound CTA wiring (primary raw-path API). SDK takes ownership
         /// of the Button's screen geometry + composite interactability state,
-        /// syncing them to the iOS native overlay every <c>LateUpdate</c>.
-        /// Android / Editor: no-op (click still flows through
-        /// <see cref="NotifyClicked"/>).
+        /// syncing them to the native overlay every <c>LateUpdate</c>.
+        /// iOS / Android use that overlay as the real click target. Editor:
+        /// no native overlay, click still flows through <see cref="NotifyClicked"/>.
         /// </summary>
         /// <param name="button">Publisher's uGUI CTA Button. Must not be null.
         /// Idempotent on the same Button; auto-unwires the previous Button if
@@ -204,7 +206,7 @@ namespace Daro
         /// ad that can't dispatch clicks (silent broken state). Use
         /// ScreenSpaceOverlay or ScreenSpaceCamera.</exception>
         /// <remarks>
-        /// No-op after <see cref="Dispose"/>. iOS only — the actual driver
+        /// No-op after <see cref="Dispose"/>. The actual driver
         /// MonoBehaviour attach happens in <c>DaroNativeCtaDriver.Attach</c>
         /// (see <c>SDK/Runtime/Internal/DaroNativeCtaDriver.cs</c>).
         /// </remarks>
@@ -283,8 +285,6 @@ namespace Daro
                     $"SetCtaScreenRect adUnit='{AdUnitId}' rejected — non-finite rect {screenRect}.");
                 return;
             }
-            DaroLog.Verbose("Native",
-                $"SetCtaScreenRect adUnit='{AdUnitId}' rect={screenRect} touchEnabled={touchEnabled}");
             _handle?.SetCtaScreenRect(screenRect, touchEnabled);
         }
 
@@ -321,8 +321,9 @@ namespace Daro
         }
 
         /// <summary>
-        /// Finalizer backstop: releases the handle if the consumer dropped
-        /// the reference without calling <see cref="Dispose"/>.
+        /// Finalizer backstop: attempts to release the handle and owned textures
+        /// if the consumer dropped the reference without calling
+        /// <see cref="Dispose"/>.
         /// </summary>
         ~DaroNativeAd()
         {
@@ -332,6 +333,8 @@ namespace Daro
         private void Dispose(bool disposing)
         {
             if (_disposed) return;
+            var info = Info;
+            var handle = _handle;
 
             // Driver Detach must happen BEFORE _disposed=true — the Detach
             // path calls ClearCtaScreenRect through the still-live handle.
@@ -359,16 +362,18 @@ namespace Daro
                 OnAdImpression   = null;
                 OnAdClicked      = null;
                 OnAdRevenuePaid  = null;
-
-                // Texture2D.Destroy is main-thread-only — only safe here in the
-                // disposing branch. Finalizer path skips it.
-                DestroyInfoTextures(Info);
-                Info = null;
             }
+            Info = null;
 
             try
             {
-                _handle?.Dispose();
+                DaroFinalizerRelease.RunRelease(disposing, () =>
+                {
+                    // Texture2D.Destroy is main-thread-only; RunRelease marshals
+                    // the finalizer path and explicit Dispose is a main-thread API.
+                    DestroyInfoTextures(info);
+                    handle?.Dispose();
+                });
             }
             catch (Exception e)
             {
@@ -404,6 +409,7 @@ namespace Daro
             var previousInfo = Info;
             _loaded = true;
             Info    = nativeInfo;
+            _ctaDriver?.InvalidateSync();
             DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitId}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, adInfo);
             if (!ReferenceEquals(previousInfo, nativeInfo))

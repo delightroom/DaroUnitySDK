@@ -170,9 +170,10 @@ namespace Daro
 
             try
             {
-                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                    DaroAdFormat.Rewarded, AdUnitId, this, _registryGeneration,
-                    () => DaroPlatform.Current.DestroyRewarded(AdUnitId));
+                DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
+                    DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                        DaroAdFormat.Rewarded, AdUnitId, this, _registryGeneration,
+                        () => platform.DestroyRewarded(AdUnitId)));
             }
             catch (Exception e)
             {

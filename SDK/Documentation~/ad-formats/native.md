@@ -12,7 +12,7 @@ Native is the only format with **multi-instance** support: N independent `DaroNa
 
 ### Scene setup
 
-1. Add a Canvas. (Native uses legacy uGUI — `Text` / `RawImage` / `Button` — for Unity 2019.4 compatibility.)
+1. Add a Canvas. (Native uses legacy uGUI — `Text` / `RawImage` / `Button` — for Unity 2021.3 compatibility.)
 2. Add a child GameObject with a `DaroNativeAdView` component (menu: `Daro/Native Ad View`).
 3. Inside that GameObject, add UI children: Title (`Text`), Body (`Text`), Icon (`RawImage`), CTA (`Button` with child `Text`), Media (`RawImage`).
 4. Drag the children into the matching inspector slots on `DaroNativeAdView`. All slots are optional — wire only what your layout uses.
@@ -115,7 +115,7 @@ _ad.Load();
 5. Visibility activates → `NotifyVisible()` (auto on slot path, manual on raw) → impression accounting begins.
 6. Mediation viewability rule met → `OnAdImpression`.
 7. User taps CTA → `NotifyClicked()` (auto on slot path, manual on raw) → `OnAdClicked` + native click chain (deep link / browser / store).
-8. Cleanup → `Dispose()` → handle released, `Info.Icon` / `Info.MediaImage` Texture2D destroyed.
+8. Cleanup → `Dispose()` → handle released, `Info.Icon` / `Info.MediaImage` Texture2D destroyed. If the publisher forgets `Dispose()`, the finalizer backstop also attempts to release the handle and owned textures later, but that timing is non-deterministic.
 
 There is no `Show()`, no `OnAdShown`, no `OnAdDismissed`. Publisher controls visibility by activating / deactivating the prefab.
 

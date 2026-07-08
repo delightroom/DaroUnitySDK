@@ -6,21 +6,21 @@
 //
 //  Lifecycle (sketch §5):
 //    Create        → entry slot only, no view yet
-//    Load          → construct host UIView (alpha=0, hitTest:nil) +
+//    Load          → construct host UIView (alpha=1, clearColor, touch gate off) +
 //                    DaroObjCNativeView (autoLoad=NO) + bound view tree +
 //                    bindNativeViews + loadNativeAd
 //    NotifyVisible → log only (v1 parity with Android signature)
 //    NotifyHidden  → log only
-//    NotifyClicked → dispatch hidden CTA UIButton sendActions(.touchUpInside)
+//    NotifyClicked → diagnostic log only; real clicks use UIKit overlay touch
 //    Destroy       → Layer-1 destroyed=YES + view removeFromSuperview + dict nil
 //
 //  Multi-instance (CD-1, CD-8): handleId-keyed s_nativeAds NSDictionary;
 //  same adUnitId across N handles yields N independent entries.
 //
-//  Threading: dictionary mutations on s_adQueue (serial); UIView ops dispatched
-//  to dispatch_get_main_queue. DaroMObjCBridge guarantees delegate callbacks
-//  on the main queue (sketch CD-7 + DaroUnityBridge.mm:14-17), so emit-side
-//  s_nativeAdCallback invocations need no further marshaling.
+//  Threading: dictionary mutations on s_adQueue (serial); UIView ops and native
+//  ad delegate handling run on dispatch_get_main_queue. Native callback origin
+//  can vary by MAX adapter callback; delegate entrypoints re-enter main before
+//  touching state/UI, and the emit helper preserves main-queue Unity delivery.
 //
 //  Asset transport (CD-2): dedicated callback channel
 //    void(*)(int handleId, const char* eventJson, const uint8_t* iconPng, int iconLen)
@@ -29,6 +29,7 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <DaroMObjCBridge/DaroMObjCBridge.h>
 #import <DaroMObjCBridge/DaroMObjCBridge-Swift.h>
 #import "DaroUnityBridgeInternal.h"
@@ -48,13 +49,40 @@ typedef void (*DaroNativeAdCallbackFn)(int handleId,
                                        int iconLen);
 static DaroNativeAdCallbackFn s_nativeAdCallback = NULL;
 
+static void DaroUnityNativeAdEmitCallback(int handleId,
+                                          NSString* eventJson,
+                                          const uint8_t* iconPng,
+                                          int iconLen) {
+    DaroNativeAdCallbackFn callback = s_nativeAdCallback;
+    if (!callback || !eventJson) return;
+
+    BOOL hasIcon = iconPng != NULL && iconLen > 0;
+    if ([NSThread isMainThread]) {
+        callback(handleId,
+                 [eventJson UTF8String],
+                 hasIcon ? iconPng : NULL,
+                 hasIcon ? iconLen : 0);
+        return;
+    }
+
+    NSString* eventCopy = [NSString stringWithString:eventJson];
+    NSData*   iconCopy  = hasIcon ? [NSData dataWithBytes:iconPng length:(NSUInteger)iconLen] : nil;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        const uint8_t* copiedIcon = iconCopy ? (const uint8_t*)iconCopy.bytes : NULL;
+        int            copiedLen  = iconCopy ? (int)iconCopy.length : 0;
+        callback(handleId, [eventCopy UTF8String], copiedIcon, copiedLen);
+    });
+}
+
 #pragma mark - Entry, delegate, host
 
 // Per-instance entry — strong refs survive ARC drop until s_nativeAds[id] = nil.
 @interface DaroUnityNativeAdEntry : NSObject
 @property (nonatomic, copy)   NSString*                                  adUnitId;
 @property (nonatomic, assign) int                                        handleId;
-@property (nonatomic, strong, nullable) DaroObjCNativeView*              nativeView;
+// Load writes this on main, while destroy paths snapshot it on s_adQueue
+// before hopping to main for UIKit teardown.
+@property (atomic, strong, nullable) DaroObjCNativeView*                 nativeView;
 @property (nonatomic, strong, nullable) DaroUnityNativeAdDelegate*       delegate;
 @property (nonatomic, strong, nullable) DaroUnityNativeAdHost*           host;
 
@@ -73,16 +101,12 @@ static DaroNativeAdCallbackFn s_nativeAdCallback = NULL;
 // scrape recursion.
 @property (atomic, assign) BOOL destroyed;
 
-// Order-fix queue. MAX's didPayRevenue fires synchronously during renderAd
-// (CommonAdNativeView.swift:185), which runs BEFORE listener.onAdLoadSuccess
-// (line 187) — so nativeViewDidRecordImpression runs BEFORE nativeViewDidLoad.
-// We queue every impression unconditionally; scrapeAndDeliver flushes it
-// after adLoaded emits. Impressions are 1:1 with successful renders so the
-// queue depth stays at 0 or 1 and the queued impression always belongs to the
-// in-flight load (memory: feedback_daro_ios_impression_revenue_gating.md).
-// loadedEmitted retained as a diagnostic / future hook — currently unused
-// in the emission path but resets per cycle so refresh-driven loads (which
-// bypass DaroUnity_NativeAd_Load) start clean.
+// Order-fix queue. MAX/daro-m adapter ordering has been observed both ways:
+// impression/revenue can arrive before or after listener.onAdLoadSuccess.
+// When impression beats adLoaded, pendingImpression queues it until
+// scrapeAndDeliver emits adLoaded; when it arrives after adLoaded,
+// loadedEmitted lets us emit immediately. Queue depth stays 0/1 because
+// impressions are 1:1 with successful renders.
 @property (atomic, assign)              BOOL              loadedEmitted;
 @property (nonatomic, strong, nullable) DaroObjCAdInfo*   pendingImpression;
 
@@ -97,10 +121,28 @@ static DaroNativeAdCallbackFn s_nativeAdCallback = NULL;
 @property (atomic, assign) BOOL   pendingCtaTouchEnabled;
 @property (atomic, assign) BOOL   hasPendingCta;
 @property (atomic, assign) BOOL   ctaInteractive;
+#if DARO_DEV || DEBUG
+@property (nonatomic, assign) NSTimeInterval lastCtaOverlayEchoTime;
+#endif
 @end
 
 @implementation DaroUnityNativeAdEntry
 @end
+
+static BOOL DaroUnityNativeAdRedispatchToMainIfNeeded(DaroUnityNativeAdEntry* entry,
+                                                      DaroObjCNativeView* view,
+                                                      dispatch_block_t block) {
+    if ([NSThread isMainThread]) return NO;
+
+    DaroUnityNativeAdEntry* entrySnapshot = entry;
+    DaroObjCNativeView*     viewSnapshot  = view;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (entrySnapshot.destroyed) return;
+        if (entrySnapshot.nativeView != viewSnapshot) return;
+        block();
+    });
+    return YES;
+}
 
 // CD-4 SUPERSEDED: host gains a runtime `_touchEnabled` gate. Default NO
 // preserves the original CD-4 intent (touch-blocking) for the Load →
@@ -216,6 +258,7 @@ static DaroNativeAdCallbackFn s_nativeAdCallback = NULL;
 @interface DaroUnityNativeAdDelegate : NSObject <DaroObjCNativeViewDelegate>
 @property (nonatomic, weak) DaroUnityNativeAdEntry* entry;   // weak — entry owns delegate strong
 - (void)scrapeAndDeliver:(DaroUnityNativeAdEntry*)entry
+              nativeView:(DaroObjCNativeView*)view
                   adInfo:(DaroObjCAdInfo*)info
                  attempt:(int)attempt;
 @end
@@ -247,6 +290,10 @@ static const double kIconPollIntervalSec = 0.2;
     // a nil weak read — and `nil.destroyed` returns NO, defeating the guard.
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
+    if (DaroUnityNativeAdRedispatchToMainIfNeeded(entry, view, ^{
+        [self nativeViewDidLoad:view adInfo:adInfo];
+    })) return;
+    if (entry.nativeView != view) return;
 
     // Order-fix: reset loadedEmitted at the start of EVERY load delivery —
     // covers daro-internal refresh-driven loads (CommonAdNativeView's
@@ -259,25 +306,31 @@ static const double kIconPollIntervalSec = 0.2;
     // after adLoaded emits.
     entry.loadedEmitted = NO;
 
-    [self scrapeAndDeliver:entry adInfo:adInfo attempt:0];
+    [self scrapeAndDeliver:entry nativeView:view adInfo:adInfo attempt:0];
 }
 
 - (void)nativeView:(DaroObjCNativeView*)view
   didFailWithError:(NSError*)error {
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
+    if (DaroUnityNativeAdRedispatchToMainIfNeeded(entry, view, ^{
+        [self nativeView:view didFailWithError:error];
+    })) return;
+    if (entry.nativeView != view) return;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToLoad\",\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
-    if (s_nativeAdCallback) {
-        s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
-    }
+    DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
 }
 
 - (void)nativeViewDidClick:(DaroObjCNativeView*)view
                     adInfo:(DaroObjCAdInfo*)adInfo {
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
+    if (DaroUnityNativeAdRedispatchToMainIfNeeded(entry, view, ^{
+        [self nativeViewDidClick:view adInfo:adInfo];
+    })) return;
+    if (entry.nativeView != view) return;
     // Click truth signal — production-useful click attribution log.
     // The iOS overlay is a single touch consumer, so this delegate is the
     // only path that confirms a real UITouch reached AppLovin's GR.
@@ -287,15 +340,17 @@ static const double kIconPollIntervalSec = 0.2;
     DaroLogW(@"Native", @"nativeViewDidClick callback h=%d", entry.handleId);
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adClicked\"%@}", LatencyField(adInfo)];
-    if (s_nativeAdCallback) {
-        s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
-    }
+    DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
 }
 
 - (void)nativeViewDidRecordImpression:(DaroObjCNativeView*)view
                                adInfo:(DaroObjCAdInfo*)adInfo {
     DaroUnityNativeAdEntry* entry = self.entry;
     if (!entry || entry.destroyed) return;
+    if (DaroUnityNativeAdRedispatchToMainIfNeeded(entry, view, ^{
+        [self nativeViewDidRecordImpression:view adInfo:adInfo];
+    })) return;
+    if (entry.nativeView != view) return;
 
     // Order-fix v2: handle BOTH callback orderings. The original code
     // assumed didPayRevenue (→ this delegate) ALWAYS runs BEFORE
@@ -319,11 +374,9 @@ static const double kIconPollIntervalSec = 0.2;
              entry.loadedEmitted ? @"emitting directly" : @"queueing for flush");
 
     if (entry.loadedEmitted) {
-        if (s_nativeAdCallback) {
-            NSString* json = [NSString stringWithFormat:
-                @"{\"event\":\"adImpression\"%@}", LatencyField(adInfo)];
-            s_nativeAdCallback(entry.handleId, [json UTF8String], NULL, 0);
-        }
+        NSString* json = [NSString stringWithFormat:
+            @"{\"event\":\"adImpression\"%@}", LatencyField(adInfo)];
+        DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
     } else {
         entry.pendingImpression = adInfo;
     }
@@ -333,9 +386,11 @@ static const double kIconPollIntervalSec = 0.2;
 // resolve icon synchronously (image is non-nil at delegate fire time), but
 // URL-based adapters (rare) may not — parity with Android Glide polling.
 - (void)scrapeAndDeliver:(DaroUnityNativeAdEntry*)entry
+              nativeView:(DaroObjCNativeView*)view
                   adInfo:(DaroObjCAdInfo*)info
                  attempt:(int)attempt {
     if (entry.destroyed) return;
+    if (entry.nativeView != view) return;
 
     // GR survey + click-disabled-load detection.
     // Render completed synchronously upstream (CommonAdNativeView.swift:185
@@ -385,7 +440,7 @@ static const double kIconPollIntervalSec = 0.2;
             dispatch_time(DISPATCH_TIME_NOW,
                           (int64_t)(kIconPollIntervalSec * NSEC_PER_SEC)),
             dispatch_get_main_queue(), ^{
-                [weakSelf scrapeAndDeliver:entry adInfo:info attempt:attempt + 1];
+                [weakSelf scrapeAndDeliver:entry nativeView:view adInfo:info attempt:attempt + 1];
             });
         return;
     }
@@ -421,21 +476,17 @@ static const double kIconPollIntervalSec = 0.2;
         EscapeJson(title), EscapeJson(body), EscapeJson(cta),
         entry.ctaInteractive ? @"true" : @"false"];
 
-    if (s_nativeAdCallback) {
-        // png lifetime: NSData is autoreleased; the synchronous PInvoke call
-        // returns before the autorelease pool drains, so png.bytes is valid
-        // for the duration of the callback. C# Marshal.Copy's to a managed
-        // byte[] before returning. Do NOT refactor this call to dispatch_async
-        // — that would let the autorelease pool drain first and dangle the
-        // pointer.
-        //
-        // ObjC++ note: NSData.bytes returns `const void*`, which ObjC++
-        // (.mm) refuses to implicitly convert to `const uint8_t*` (unlike
-        // ObjC .m). Explicit cast required.
-        const uint8_t* iconBytes = png ? (const uint8_t*)png.bytes : nullptr;
-        int            iconLen   = png ? (int)png.length : 0;
-        s_nativeAdCallback(entry.handleId, [json UTF8String], iconBytes, iconLen);
-    }
+    // png lifetime: scrapeAndDeliver is main-only, so the emit helper calls
+    // synchronously here and C# Marshal.Copy's png.bytes to a managed byte[]
+    // before returning. Do NOT dispatch this icon-bearing call asynchronously
+    // without copying first; the autorelease pool can drain and dangle bytes.
+    //
+    // ObjC++ note: NSData.bytes returns `const void*`, which ObjC++
+    // (.mm) refuses to implicitly convert to `const uint8_t*` (unlike
+    // ObjC .m). Explicit cast required.
+    const uint8_t* iconBytes = png ? (const uint8_t*)png.bytes : nullptr;
+    int            iconLen   = png ? (int)png.length : 0;
+    DaroUnityNativeAdEmitCallback(entry.handleId, json, iconBytes, iconLen);
 
     // Order-fix: mark adLoaded emitted; flush any impression that arrived
     // during the scrape polling window (would otherwise have beaten
@@ -444,10 +495,10 @@ static const double kIconPollIntervalSec = 0.2;
     entry.loadedEmitted = YES;
     DaroObjCAdInfo* pending = entry.pendingImpression;
     entry.pendingImpression = nil;
-    if (pending && s_nativeAdCallback) {
+    if (pending) {
         NSString* impressionJson = [NSString stringWithFormat:
             @"{\"event\":\"adImpression\"%@}", LatencyField(pending)];
-        s_nativeAdCallback(entry.handleId, [impressionJson UTF8String], NULL, 0);
+        DaroUnityNativeAdEmitCallback(entry.handleId, impressionJson, NULL, 0);
     }
 }
 
@@ -458,8 +509,8 @@ static const double kIconPollIntervalSec = 0.2;
 // Raw geometry-apply path. Writes host / nativeView / button frames in the
 // order parent → child + flips host touch gate. internal_ + maNativeAdView
 // follow via Autolayout edge-anchors. No `entry.ctaInteractive` check —
-// that's the Guarded wrapper's job. Direct callers (eg. force-off from
-// non-positive-size guard) call Raw with effectiveTouch=NO explicitly.
+// that's the Guarded wrapper's job. Defensive force-off branches close touch
+// directly via `setOverlayTouchEnabled:NO` without moving geometry.
 //
 // Main-queue only. Caller must dispatch.
 static void DaroUnityNativeAdApplyCtaRectRaw(DaroUnityNativeAdEntry* entry,
@@ -483,12 +534,77 @@ static void DaroUnityNativeAdApplyCtaRectRaw(DaroUnityNativeAdEntry* entry,
 // from C# can re-open the gate.
 //
 // Main-queue only. Caller must dispatch.
-static void DaroUnityNativeAdApplyCtaRectGuarded(DaroUnityNativeAdEntry* entry,
+static BOOL DaroUnityNativeAdApplyCtaRectGuarded(DaroUnityNativeAdEntry* entry,
                                                   CGRect uiRect,
                                                   BOOL   requestedTouch) {
     BOOL effectiveTouch = requestedTouch && entry.ctaInteractive;
     DaroUnityNativeAdApplyCtaRectRaw(entry, uiRect, effectiveTouch);
+    return effectiveTouch;
 }
+
+#if DARO_DEV || DEBUG
+static NSString* DaroUnityNativeAdHitName(DaroUnityNativeAdEntry* entry, UIView* hit) {
+    if (!hit) return @"nil";
+    if (hit == entry.callToActionButton || [hit isDescendantOfView:entry.callToActionButton]) {
+        return @"cta";
+    }
+    if (hit == entry.nativeView || [hit isDescendantOfView:entry.nativeView]) {
+        return @"native";
+    }
+    if (hit == entry.host || [hit isDescendantOfView:entry.host]) {
+        return @"host";
+    }
+
+    UIViewController* vc = UnityGetGLViewController();
+    if (vc && hit == vc.view) return @"UnityView";
+    return NSStringFromClass(hit.class);
+}
+
+static void DaroUnityNativeAdLogCtaOverlayEcho(DaroUnityNativeAdEntry* entry,
+                                                CGRect unityRectPx,
+                                                CGRect uiRect,
+                                                CGFloat scale,
+                                                CGFloat unityScreenH_px,
+                                                BOOL requestedTouch,
+                                                BOOL effectiveTouch) {
+    UIViewController* vc = UnityGetGLViewController();
+    DaroUnityNativeAdHost* host = entry.host;
+    if (!vc || !host) return;
+
+    NSTimeInterval now = CACurrentMediaTime();
+    if (entry.lastCtaOverlayEchoTime > 0.0 &&
+        now - entry.lastCtaOverlayEchoTime < 0.25) {
+        return;
+    }
+    entry.lastCtaOverlayEchoTime = now;
+
+    CGPoint center = CGPointMake(CGRectGetMidX(uiRect), CGRectGetMidY(uiRect));
+    UIView* hit = [vc.view hitTest:center withEvent:nil];
+    BOOL inHost = hit && (hit == host || [hit isDescendantOfView:host]);
+    NSUInteger subviewIndex = host.superview
+        ? [host.superview.subviews indexOfObject:host]
+        : NSNotFound;
+
+    DaroLogD(@"Native",
+             @"CtaOverlayEcho h=%d unity=(%.1f,%.1f,%.1f,%.1f) ui=%@ scale=%.2f screenHpx=%.1f requested=%d effective=%d interactive=%d attached=%d subviewIndex=%ld hit=%@ inHost=%d point=%@",
+             entry.handleId,
+             unityRectPx.origin.x,
+             unityRectPx.origin.y,
+             unityRectPx.size.width,
+             unityRectPx.size.height,
+             NSStringFromCGRect(uiRect),
+             scale,
+             unityScreenH_px,
+             (int)requestedTouch,
+             (int)effectiveTouch,
+             (int)entry.ctaInteractive,
+             host.window ? 1 : 0,
+             (long)(subviewIndex == NSNotFound ? -1 : subviewIndex),
+             DaroUnityNativeAdHitName(entry, hit),
+             (int)inHost,
+             NSStringFromCGPoint(center));
+}
+#endif
 
 #pragma mark - extern C surface (matches [DllImport] in DaroIOSNativeAdHandle.cs)
 
@@ -590,19 +706,21 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             DaroObjCNativeView* nativeView = [[DaroObjCNativeView alloc]
                 initWithUnitId:entry.adUnitId autoLoad:NO];
             nativeView.delegate = entry.delegate;
-            // ILRD: handle-routed (multi-instance) — unlike unit-routed formats,
-            // native revenue must reach the exact handle, so we capture handleId.
+            // ILRD is a billing datapoint and does not mutate entry state, so
+            // keep it handle-routed even if the originating view was reloaded.
             NSString* paidToken = DaroUnityPaidEventToken();
             if (paidToken) {
                 int handleId = entry.handleId;
                 [nativeView registerPluginWithIdentifier:paidToken
                     onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
                                   NSString* currencyCode, NSInteger precisionType) {
-                        if (!s_nativeAdCallback) return;
+                        // Revenue callbacks are the remaining path that can
+                        // originate off-main, so they intentionally rely on
+                        // DaroUnityNativeAdEmitCallback's main-queue marshal.
                         NSString* json = [NSString stringWithFormat:
                             @"{\"event\":\"adRevenuePaid\"%@%@}",
                             RevenueFields(value, currencyCode, precisionType), LatencyField(adInfo)];
-                        s_nativeAdCallback(handleId, [json UTF8String], NULL, 0);
+                        DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
                     }];
             }
             nativeView.frame = host.bounds;
@@ -706,9 +824,9 @@ void DaroUnity_NativeAd_NotifyClicked(int handleId) {
 // CTA overlay geometry sync. C# DaroNativeCtaDriver.LateUpdate sends
 // per-frame (dirty-checked) rect + composite touchEnabled. Conversion:
 // Unity pixel space + bottom-left → UIKit point + top-left here. Pre-Load
-// → cache, Load replays after loadNativeAd. All apply paths route through
-// the Guarded helper so `entry.ctaInteractive=NO` (set by GR survey on
-// unsupported fills) locks the touch gate closed.
+// → cache, Load replays after loadNativeAd. All touch-enabling apply paths
+// route through the Guarded helper so `entry.ctaInteractive=NO` (set by GR
+// survey on unsupported fills) locks the touch gate closed.
 void DaroUnity_NativeAd_SetCtaScreenRect(int   handleId,
                                           float x,
                                           float y,
@@ -759,8 +877,21 @@ void DaroUnity_NativeAd_SetCtaScreenRect(int   handleId,
                 return;
             }
 
-            // Post-Load fast path. Guarded helper enforces ctaInteractive lock.
-            DaroUnityNativeAdApplyCtaRectGuarded(entry, uiRect, touchEnabled ? YES : NO);
+            BOOL requestedTouch = touchEnabled ? YES : NO;
+            BOOL effectiveTouch = DaroUnityNativeAdApplyCtaRectGuarded(
+                entry,
+                uiRect,
+                requestedTouch);
+#if DARO_DEV || DEBUG
+            DaroUnityNativeAdLogCtaOverlayEcho(
+                entry,
+                CGRectMake(x, y, w, h),
+                uiRect,
+                scale,
+                unityScreenH_px,
+                requestedTouch,
+                effectiveTouch);
+#endif
             DaroLogD(@"Native", @"SetCtaScreenRect h=%d applied rect=%@ touch=%d",
                      handleId, NSStringFromCGRect(uiRect), (int)touchEnabled);
         });

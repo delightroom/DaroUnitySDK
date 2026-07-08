@@ -21,9 +21,11 @@ namespace Daro.Editor
     //
     //   1. Info.plist additive injection — DaroAppKey / GADApplicationIdentifier
     //      (when set) / NSUserTrackingUsageDescription / SKAdNetworkItems
-    //      (merged with any existing list) / NSAppTransportSecurity.
-    //      All injections are *additive only* — existing non-empty consumer values
-    //      survive untouched.
+    //      (merged with any existing list). All injections are *additive only* —
+    //      existing non-empty consumer values survive untouched. The SDK never
+    //      injects an ATS (NSAppTransportSecurity) exception: MAX requires none,
+    //      and weakening app-wide transport security is the consumer's call (see
+    //      docs/study/ios-ats-mediation.md).
     //
     //   2. PBXProject — copy ios-daro-key.txt into Xcode project root and add it
     //      to the main app target's Copy Bundle Resources phase. Daro plugin reads
@@ -103,9 +105,6 @@ namespace Daro.Editor
             // SKAdNetworkItems — merge-additive (dedupe by SKAdNetworkIdentifier).
             MergeSkAdNetworkItems(root, skAdNetworkIds);
 
-            // NSAppTransportSecurity.NSAllowsArbitraryLoads — additive only-if-absent.
-            EnsureAtsAllowArbitraryLoads(root);
-
             plist.WriteToFile(plistFullPath);
         }
 
@@ -134,17 +133,6 @@ namespace Daro.Editor
                 array.AddDict().SetString("SKAdNetworkIdentifier", id);
                 existing.Add(id);
             }
-        }
-
-        private static void EnsureAtsAllowArbitraryLoads(PlistElementDict root)
-        {
-            var ats = root.values.ContainsKey("NSAppTransportSecurity")
-                ? root.values["NSAppTransportSecurity"].AsDict()
-                : root.CreateDict("NSAppTransportSecurity");
-
-            // Additive only-if-absent — preserve consumer's explicit setting.
-            if (!ats.values.ContainsKey("NSAllowsArbitraryLoads"))
-                ats.SetBoolean("NSAllowsArbitraryLoads", true);
         }
 
         private static void ApplyPbxChanges(DaroSettings settings, string pathToBuiltProject)

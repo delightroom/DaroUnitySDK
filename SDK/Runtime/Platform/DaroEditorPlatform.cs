@@ -724,10 +724,14 @@ namespace Daro.Internal
         // Each DaroNativeAd gets its own DaroEditorNativeAdHandle (per-instance
         // coroutine + per-instance mock asset). Multi-instance: N handles with
         // same adUnitId run independently. See sketch-native-ad-android.md §7.
+        internal DaroEditorNativeAdHandle? LastNativeAdHandle { get; private set; }
+
         public INativeAdHandle CreateNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink)
         {
             DaroLog.Verbose("Native", $"Platform[Editor].CreateNativeAdHandle adUnit='{adUnitId}' placement='{placement}'");
-            return new DaroEditorNativeAdHandle(adUnitId, placement, sink, _settings);
+            var handle = new DaroEditorNativeAdHandle(adUnitId, placement, sink, _settings);
+            LastNativeAdHandle = handle;
+            return handle;
         }
     }
 }

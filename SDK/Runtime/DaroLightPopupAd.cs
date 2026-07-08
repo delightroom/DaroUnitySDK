@@ -190,12 +190,13 @@ namespace Daro
 
             try
             {
-                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                    DaroAdFormat.LightPopup,
-                    AdUnitId,
-                    this,
-                    _registryGeneration,
-                    () => DaroPlatform.Current.DestroyLightPopup(AdUnitId));
+                DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
+                    DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                        DaroAdFormat.LightPopup,
+                        AdUnitId,
+                        this,
+                        _registryGeneration,
+                        () => platform.DestroyLightPopup(AdUnitId)));
             }
             catch (Exception e)
             {

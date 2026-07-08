@@ -64,7 +64,7 @@ namespace Daro.Internal
             // survive into the next play session even after ResetStatics wiped
             // _instance. Find and destroy any stale dispatcher before creating a
             // fresh one to avoid doubled instances.
-            var stale = FindFirstObjectByType<MainThreadDispatcher>(FindObjectsInactive.Include);
+            var stale = FindObjectOfType<MainThreadDispatcher>(includeInactive: true);
             if (stale != null)
             {
                 DestroyImmediate(stale.gameObject);

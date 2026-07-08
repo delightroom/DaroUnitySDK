@@ -15,7 +15,7 @@ The recommended installation path is the bootstrap installer.
 
 ## Requirements
 
-- Unity 2019.4 LTS or newer
+- Unity 2021.3 LTS or newer
 - Android Build Support and/or iOS Build Support for your target platforms
 - EDM4U, installed by the bootstrap installer
 

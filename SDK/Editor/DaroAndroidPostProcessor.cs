@@ -111,6 +111,13 @@ namespace Daro.Editor
                 @".*?//\s*daro-block:\s*END\s+" + Regex.Escape(area),
                 RegexOptions.Singleline);
 
+        private static Regex LineBlockRegex(string area) =>
+            new Regex(
+                @"^[ \t]*//\s*daro-block:\s*BEGIN\s+" + Regex.Escape(area) +
+                @".*?^[ \t]*//\s*daro-block:\s*END\s+" + Regex.Escape(area) +
+                @"[ \t]*(?:\r?\n)?",
+                RegexOptions.Singleline | RegexOptions.Multiline);
+
         // gradle.properties historically used the regular `// daro-block`
         // marker by mistake. Match both the legacy `//` form and the correct
         // `#` form so re-running the post-processor migrates old exports.
@@ -512,7 +519,7 @@ namespace Daro.Editor
         // duplicate or fight EDM4U's output.
 
         // =====================================================================
-        // proguard-user.txt — append keep rule
+        // proguard-user.txt — sync keep rules
         // =====================================================================
 
         private static void PatchProguard(string filePath)
@@ -523,10 +530,19 @@ namespace Daro.Editor
             // a stable home in either Unity version.
             var text = File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty;
             const string area = "proguard";
-            if (BlockRegex(area).IsMatch(text)) return;
 
             var body = DaroAndroidGradleContent.ProguardKeepRule + "\n";
             var block = Wrap(area, body);
+            var blockRegex = LineBlockRegex(area);
+
+            if (blockRegex.IsMatch(text))
+            {
+                var updated = blockRegex.Replace(text, block, 1);
+                if (updated != text)
+                    File.WriteAllText(filePath, updated);
+                return;
+            }
+
             if (text.Length > 0 && !text.EndsWith("\n")) text += "\n";
 
             var dir = Path.GetDirectoryName(filePath);

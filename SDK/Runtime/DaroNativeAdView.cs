@@ -15,7 +15,7 @@ namespace Daro
     /// <remarks>
     /// <para>All slots are optional — publisher wires only the slots present
     /// in their layout. Slots use legacy Unity UI (<see cref="Text"/>,
-    /// <see cref="RawImage"/>, <see cref="Button"/>) for Unity 2019.4
+    /// <see cref="RawImage"/>, <see cref="Button"/>) for Unity 2021.3
     /// compatibility. <see cref="RawImage"/> over <see cref="Image"/> because
     /// the icon comes as a raw <see cref="Texture2D"/>, not a <c>Sprite</c>.
     /// Publishers needing TextMeshPro / custom widgets should use the raw path

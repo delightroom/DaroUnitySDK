@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Daro.Internal
 {
@@ -21,10 +22,22 @@ namespace Daro.Internal
         {
             get
             {
+                DaroFinalizerRelease.EnsureMainThreadReleaseTarget();
                 if (_current != null) return _current;
                 _current = CreateForCurrentRuntime();
                 return _current;
             }
+        }
+
+        /// <summary>
+        /// Returns the already-created platform without triggering lazy
+        /// construction. Used by finalizer backstops, where creating Unity/JNI
+        /// objects from the GC thread is unsafe.
+        /// </summary>
+        internal static bool TryGetCurrent([MaybeNullWhen(false)] out IDaroPlatform platform)
+        {
+            platform = _current;
+            return platform != null;
         }
 
         private static IDaroPlatform CreateForCurrentRuntime()

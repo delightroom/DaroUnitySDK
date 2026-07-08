@@ -179,9 +179,10 @@ namespace Daro
             // must not throw (§4.1); platform-level faults are logged and swallowed.
             try
             {
-                DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                    DaroAdFormat.Interstitial, AdUnitId, this, _registryGeneration,
-                    () => DaroPlatform.Current.DestroyInterstitial(AdUnitId));
+                DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
+                    DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
+                        DaroAdFormat.Interstitial, AdUnitId, this, _registryGeneration,
+                        () => platform.DestroyInterstitial(AdUnitId)));
             }
             catch (Exception e)
             {

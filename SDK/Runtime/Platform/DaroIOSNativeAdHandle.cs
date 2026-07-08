@@ -43,10 +43,9 @@ namespace Daro.Internal
     ///
     /// <para><b>No <see cref="MainThreadDispatcher.Enqueue"/></b> — unlike
     /// Android (where JNI callbacks fire on the daro-m worker thread and
-    /// <c>Texture2D</c> construction must defer to the main thread),
-    /// <c>DaroUnityBridge.mm</c>'s emit path runs on the main queue
-    /// (sketch CD-7 + <c>DaroUnityBridge.mm:14-17</c>). The static dispatcher
-    /// builds <see cref="Texture2D"/> inline.</para>
+    /// <c>Texture2D</c> construction must defer to the main thread), the
+    /// iOS native-ad shim main-queue-marshals its dedicated callback channel
+    /// before this dispatcher builds <see cref="Texture2D"/> inline.</para>
     ///
     /// <para>Stripping defense: <c>SDK/Runtime/link.xml</c> already preserves
     /// the <c>Daro.Internal</c> namespace. <see cref="OnNativeAdEvent"/> +
@@ -175,6 +174,8 @@ namespace Daro.Internal
         [Preserve, MonoPInvokeCallback(typeof(DaroNativeAdCallbackFn))]
         private static void OnNativeAdEvent(int handleId, string eventJson, IntPtr iconPng, int iconLen)
         {
+            if (DaroAdInstanceRegistry.IsShuttingDown) return;
+
             // (1) Resolve handle (lock + Layer-2 guard).
             DaroIOSNativeAdHandle? handle;
             lock (s_lock) { s_handles.TryGetValue(handleId, out handle); }
@@ -184,8 +185,8 @@ namespace Daro.Internal
             // (2) Parse + dispatch. Identical schema to Android proxy
             //     (DaroAdInfo on Native format + DaroAdLoadError mapping +
             //     DaroNativeAdInfo string-empty-to-null). No
-            //     MainThreadDispatcher.Enqueue — DaroUnityBridge already
-            //     main-queue-marshals every callback.
+            //     MainThreadDispatcher.Enqueue — the iOS native-ad shim
+            //     main-queue-marshals this dedicated callback channel.
             string? evt = DaroJsonHelpers.GetJsonString(eventJson, "event");
             if (evt == null) return;             // malformed → silent drop
 

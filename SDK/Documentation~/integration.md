@@ -98,12 +98,12 @@ Fullscreen order: **Construct → `+=` events → `Load()` → (wait) → `Show(
 
 ## 4. Main-thread guarantee
 
-**Every SDK callback fires on Unity's main thread.** The internal `MainThreadDispatcher` marshals worker-thread events for you. Inside a callback you can safely:
+**Every SDK callback fires on Unity's main thread.** The internal `MainThreadDispatcher` marshals native worker-thread events for you. Inside a callback you can safely:
 
 - Call `Debug.Log`, mutate `UnityEngine.UI` widgets, invoke other `MonoBehaviour` methods.
 - Read `Time.unscaledTime`, `Camera.main`, `SceneManager.GetActiveScene()`.
 
-If your own code spawns a background thread and calls into the SDK from there, the SDK still marshals the resulting callback back to the main thread — you don't have to.
+Public SDK methods and constructors are main-thread APIs because they may synchronously touch Unity objects, JNI, or native views. If your own code spawns a background task, marshal back to the Unity main thread before calling `Load()`, `Show()`, `Hide()`, `Dispose()`, or native-ad notification methods.
 
 Bonus: **exception isolation**. If one event handler throws, the remaining handlers on the same event still fire (the SDK's internal `SafeEventInvoker`). The throw is reported via the project's log helper. This is intentional, but to avoid silent failures, wrap risky handler bodies with your own try/catch and a meaningful log.
 
@@ -153,10 +153,11 @@ public static DaroInterstitialAd Shared;
 ```
 ✓ Hold the ad in a `MonoBehaviour` instance field, scoped to the scene that uses it.
 
-### 6-5. Calling Show() from a background thread
+### 6-5. Calling SDK methods from a background thread
 ```csharp
 // ✗ Native bridges expect main-thread calls.
 Task.Run(() => _ad.Show());
+Task.Run(() => _ad.Dispose());
 ```
 ✓ Use a coroutine, `Update()`, or any user-input callback (all main-thread). If you must coordinate with a background task, marshal back yourself before calling SDK methods.
 

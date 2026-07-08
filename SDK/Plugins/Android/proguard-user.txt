@@ -1,7 +1,9 @@
 # Daro Unity SDK — supplemental R8 / ProGuard keep rules.
 #
 # Unity 6 automatically merges any `proguard-user.txt` placed under
-# Plugins/Android/ into the consumer's Gradle build.
+# Plugins/Android/ into the consumer's Gradle build. The Editor postprocessor
+# mirrors these rules into exported Gradle projects as a fallback because some
+# Unity exports omit package-level proguard-user.txt inputs.
 #
 # Shim keeps (`so.daro.unity.*`) live inside daro-android-wrapper.aar's
 # embedded `proguard.txt` (consumerProguardFiles in build.gradle.kts) —
@@ -19,3 +21,13 @@
 -keep class droom.daro.core.model.DaroAdDisplayFailError { *; }
 -keep class droom.daro.core.model.DaroAdInfo { *; }
 -keep class droom.daro.core.model.DaroRewardedAd$DaroRewardedItem { *; }
+
+# ── Native ad publisher-rendered bridge internals ───────────────────────────
+# Android native ads use a Unity-rendered CTA overlay and reflect into daro-m's
+# DaroAdView public lifecycle setters to disable its default auto reload path.
+# Keep the reflected methods stable under consumer minification.
+
+-keepclassmembers class droom.daro.view.DaroAdView {
+    public void setAutoDetectLifecycle(boolean);
+    public void setRefreshSeconds(int);
+}
