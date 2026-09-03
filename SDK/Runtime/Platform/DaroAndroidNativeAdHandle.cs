@@ -47,15 +47,12 @@ namespace Daro.Internal
 
         internal DaroAndroidNativeAdHandle(
             string adUnitId,
-            string? placement,
             INativeAdEventSink sink,
             AndroidJavaObject? activity)
         {
             _adUnitId = adUnitId;
             _sink     = sink;
             _activity = activity;
-            // placement: not used by Kotlin shim v1 — captured by the Kotlin
-            // class internally if/when DaroAdInfoManager exposes placement.
 
             _adObject = new AndroidJavaObject("so.daro.unity.DaroUnityNativeAd", adUnitId);
             _proxy    = new CallbackProxy(this);

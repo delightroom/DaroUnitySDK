@@ -37,7 +37,6 @@ namespace Daro
     {
         // ── Identity ─────────────────────────────────────────────────────
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         /// <summary>
         /// Pixel dimensions hint the platform shim uses to size the off-screen
@@ -98,7 +97,7 @@ namespace Daro
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroNativeAd(string adUnitId, string? placement = null)
+        public DaroNativeAd(string adUnitId)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -108,13 +107,12 @@ namespace Daro
             }
 
             AdUnitId  = adUnitId;
-            Placement = placement;
 
             // Sink holds a direct reference to this instance — routing is
             // per-instance, no registry lookup needed.
             var sink = new InstanceSink(this);
-            _handle  = DaroPlatform.Current.CreateNativeAdHandle(adUnitId, placement, sink);
-            DaroLog.Verbose("Native", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
+            _handle  = DaroPlatform.Current.CreateNativeAdHandle(adUnitId, sink);
+            DaroLog.Verbose("Native", $"ctor adUnit='{AdUnitId}'");
         }
 
         /// <summary>

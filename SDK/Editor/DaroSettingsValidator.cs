@@ -205,22 +205,41 @@ namespace Daro.Editor
 
         private static void AddIosChecks(List<ValidationResult> results, DaroSettings settings)
         {
-            if (string.IsNullOrWhiteSpace(settings.iosDaroAppKey))
+            if (string.IsNullOrWhiteSpace(settings.iosIntegrationKey))
             {
-                results.Add(new ValidationResult(
-                    "ios.daroAppKey",
-                    ValidationSeverity.Fail,
-                    "iOS Daro App Key empty — native fatalError at launch.",
-                    "Enter iosDaroAppKey."));
+                // Migration detection — Android 와 같은 이유(구 필드는
+                // Inspector 에서 숨겨져 있어 왜 멈췄는지 안 보인다).
+                var hasLegacy = !string.IsNullOrWhiteSpace(settings.iosDaroAppKey) ||
+                                settings.iosKeyFile != null ||
+                                !string.IsNullOrWhiteSpace(settings.iosAdMobAppId);
+                if (hasLegacy)
+                {
+                    results.Add(new ValidationResult(
+                        "ios.integrationKey.migrate",
+                        ValidationSeverity.Fail,
+                        "Legacy iOS app key / key file / AdMob ID detected — the unified SDK replaced them with a single INTEGRATION KEY.",
+                        "Issue an INTEGRATION KEY from the Daro dashboard and enter iosIntegrationKey. The legacy fields are ignored."));
+                }
+                else
+                {
+                    results.Add(new ValidationResult(
+                        "ios.integrationKey",
+                        ValidationSeverity.Fail,
+                        "iOS INTEGRATION KEY empty — the daro CLI cannot inject Info.plist values and the app crashes at launch.",
+                        "Enter iosIntegrationKey (issued from the Daro dashboard)."));
+                }
             }
-
-            if (settings.iosKeyFile == null)
+            else
             {
-                results.Add(new ValidationResult(
-                    "ios.keyFile",
-                    ValidationSeverity.Fail,
-                    "ios-daro-key.txt not assigned.",
-                    "Assign in DaroSettings > iOS Key File."));
+                var shape = DaroIntegrationKeyLint.Check(settings.iosIntegrationKey);
+                if (shape != DaroIntegrationKeyShape.Ok)
+                {
+                    results.Add(new ValidationResult(
+                        "ios.integrationKey.format",
+                        ValidationSeverity.Fail,
+                        DaroIntegrationKeyLint.Describe(shape),
+                        "Paste the INTEGRATION KEY exactly as issued (\"di\" + base64)."));
+                }
             }
 
             // ATT description Fail — empty value causes App Store rejection (D7-I).
@@ -234,38 +253,51 @@ namespace Daro.Editor
                     "Enter attPromptDescription."));
             }
 
-            // GADApplicationIdentifier (iosAdMobAppId) Fail — daro-m
-            // transitively links GoogleMobileAds framework via the AppLovin
-            // google-adapter; missing Info.plist key crashes the app at
-            // launch. Daro 가이드 명시 + Apple/Google 강제 요구.
-            if (string.IsNullOrWhiteSpace(settings.iosAdMobAppId))
-            {
-                results.Add(new ValidationResult(
-                    "ios.admobAppId",
-                    ValidationSeverity.Fail,
-                    "AdMob Key empty — GADApplicationIdentifier missing → app crashes at launch.",
-                    "Enter iosAdMobAppId (AdMob console → App Settings → App ID)."));
-            }
+            // GADApplicationIdentifier 체크는 없앴다 — 봉투가 admobAppKey 를
+            // 실어 오고 `daro platform-key --inject` 가 심는다. 별도 입력이
+            // 없으니 검사할 대상도 없다. 주입 실패는 빌드를 세우므로
+            // (DaroIosPostProcessor) 누락이 조용히 지나가지 않는다.
         }
 
         private static void AddAndroidChecks(List<ValidationResult> results, DaroSettings settings)
         {
-            if (string.IsNullOrWhiteSpace(settings.androidDaroAppKey))
+            if (string.IsNullOrWhiteSpace(settings.androidIntegrationKey))
             {
-                results.Add(new ValidationResult(
-                    "android.daroAppKey",
-                    ValidationSeverity.Fail,
-                    "Android Daro App Key empty — init fails with daroErrorCode=-3.",
-                    "Enter androidDaroAppKey."));
+                // Migration detection: a legacy key pair with no INTEGRATION
+                // KEY means the asset predates the unified SDK — say so
+                // explicitly instead of a generic "empty" error (the legacy
+                // fields are hidden in the Inspector, so the user cannot see
+                // why the old setup stopped working).
+                var hasLegacy = !string.IsNullOrWhiteSpace(settings.androidDaroAppKey) ||
+                                settings.androidKeyFile != null;
+                if (hasLegacy)
+                {
+                    results.Add(new ValidationResult(
+                        "android.integrationKey.migrate",
+                        ValidationSeverity.Fail,
+                        "Legacy Android app key / key file detected — the unified SDK replaced them with a single INTEGRATION KEY.",
+                        "Issue an INTEGRATION KEY from the Daro dashboard and enter androidIntegrationKey. The legacy fields are ignored."));
+                }
+                else
+                {
+                    results.Add(new ValidationResult(
+                        "android.integrationKey",
+                        ValidationSeverity.Fail,
+                        "Android INTEGRATION KEY empty — the so.daro gradle plugin fails the consumer build.",
+                        "Enter androidIntegrationKey (issued from the Daro dashboard)."));
+                }
             }
-
-            if (settings.androidKeyFile == null)
+            else
             {
-                results.Add(new ValidationResult(
-                    "android.keyFile",
-                    ValidationSeverity.Fail,
-                    "android-daro-key.txt not assigned.",
-                    "Assign in DaroSettings > Android Key File."));
+                var shape = DaroIntegrationKeyLint.Check(settings.androidIntegrationKey);
+                if (shape != DaroIntegrationKeyShape.Ok)
+                {
+                    results.Add(new ValidationResult(
+                        "android.integrationKey.format",
+                        ValidationSeverity.Fail,
+                        DaroIntegrationKeyLint.Describe(shape),
+                        "Paste the INTEGRATION KEY exactly as issued (\"di\" + base64)."));
+                }
             }
         }
     }

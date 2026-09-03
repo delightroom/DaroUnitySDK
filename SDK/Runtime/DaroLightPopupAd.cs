@@ -25,7 +25,6 @@ namespace Daro
     public sealed class DaroLightPopupAd : IDisposable
     {
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         public event Action<DaroAdInfo>?         OnAdLoaded;
         public event Action<DaroAdLoadError>?    OnAdFailedToLoad;
@@ -65,8 +64,7 @@ namespace Daro
         /// </exception>
         public DaroLightPopupAd(
             string adUnitId,
-            DaroLightPopupAdOptions? options = null,
-            string? placement = null)
+            DaroLightPopupAdOptions? options = null)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -76,7 +74,6 @@ namespace Daro
             }
 
             AdUnitId  = adUnitId;
-            Placement = placement;
 
             // Null options → daro-m defaults via field initializers. Platform
             // impls always receive non-null.
@@ -85,8 +82,8 @@ namespace Daro
                 AdUnitId,
                 this,
                 () => DaroPlatform.Current.CreateLightPopup(
-                    AdUnitId, Placement, options ?? new DaroLightPopupAdOptions()));
-            DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitId}' placement='{Placement}' optionsProvided={options != null}");
+                    AdUnitId, options ?? new DaroLightPopupAdOptions()));
+            DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitId}' optionsProvided={options != null}");
         }
 
         /// <summary>

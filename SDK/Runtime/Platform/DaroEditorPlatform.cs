@@ -156,22 +156,22 @@ namespace Daro.Internal
 
         // ── IDaroPlatform: Per-format CRUD (fans into shared helpers) ───────
 
-        public void CreateInterstitial(string adUnitId, string? placement)
+        public void CreateInterstitial(string adUnitId)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Editor].CreateInterstitial adUnit='{adUnitId}' placement='{placement}'");
-            CreateUnit(adUnitId, DaroAdFormat.Interstitial, placement);
+            DaroLog.Verbose("Interstitial", $"Platform[Editor].CreateInterstitial adUnit='{adUnitId}'");
+            CreateUnit(adUnitId, DaroAdFormat.Interstitial);
         }
 
-        public void CreateRewarded(string adUnitId, string? placement)
+        public void CreateRewarded(string adUnitId)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].CreateRewarded adUnit='{adUnitId}' placement='{placement}'");
-            CreateUnit(adUnitId, DaroAdFormat.Rewarded, placement);
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].CreateRewarded adUnit='{adUnitId}'");
+            CreateUnit(adUnitId, DaroAdFormat.Rewarded);
         }
 
-        public void CreateAppOpen(string adUnitId, string? placement)
+        public void CreateAppOpen(string adUnitId)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Editor].CreateAppOpen adUnit='{adUnitId}' placement='{placement}'");
-            CreateUnit(adUnitId, DaroAdFormat.AppOpen, placement);
+            DaroLog.Verbose("AppOpen", $"Platform[Editor].CreateAppOpen adUnit='{adUnitId}'");
+            CreateUnit(adUnitId, DaroAdFormat.AppOpen);
         }
 
         public void LoadInterstitial(string adUnitId)
@@ -276,10 +276,10 @@ namespace Daro.Internal
         private readonly Dictionary<string, GameObject> _bannerViews = new();
 #endif
 
-        public void CreateBanner(string adUnitId, string? placement)
+        public void CreateBanner(string adUnitId)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].CreateBanner adUnit='{adUnitId}' placement='{placement}'");
-            CreateUnit(adUnitId, DaroAdFormat.Banner, placement);
+            DaroLog.Verbose("Banner", $"Platform[Editor].CreateBanner adUnit='{adUnitId}'");
+            CreateUnit(adUnitId, DaroAdFormat.Banner);
         }
 
         public void LoadBanner(string adUnitId, DaroBannerSize size)
@@ -422,10 +422,10 @@ namespace Daro.Internal
         // Color options silently ignored (sketch decision — visual fidelity not
         // worth IMGUI cost when format is fullscreen modal).
 
-        public void CreateLightPopup(string adUnitId, string? placement, DaroLightPopupAdOptions options)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Editor].CreateLightPopup adUnit='{adUnitId}' placement='{placement}'");
-            CreateUnit(adUnitId, DaroAdFormat.LightPopup, placement);
+            DaroLog.Verbose("LightPopup", $"Platform[Editor].CreateLightPopup adUnit='{adUnitId}'");
+            CreateUnit(adUnitId, DaroAdFormat.LightPopup);
         }
 
         public void LoadLightPopup(string adUnitId)
@@ -458,7 +458,6 @@ namespace Daro.Internal
         {
             public readonly string      AdUnitId;
             public readonly DaroAdFormat Format;
-            public readonly string?     Placement;
             public bool                 Loaded;
             public bool                 Showing;
             public volatile bool        Destroyed;
@@ -470,15 +469,14 @@ namespace Daro.Internal
             public DaroBannerSize       BannerSize;
             public DaroBannerPosition   BannerPosition;
 
-            public PerUnitState(string adUnitId, DaroAdFormat format, string? placement)
+            public PerUnitState(string adUnitId, DaroAdFormat format)
             {
                 AdUnitId  = adUnitId;
                 Format    = format;
-                Placement = placement;
             }
         }
 
-        private void CreateUnit(string adUnitId, DaroAdFormat format, string? placement)
+        private void CreateUnit(string adUnitId, DaroAdFormat format)
         {
             // Duplicate-construction-replaces rule (§2.4): destroy existing first.
             if (_units.TryGetValue(adUnitId, out var existing))
@@ -487,7 +485,7 @@ namespace Daro.Internal
                 _units.Remove(adUnitId);
             }
 
-            _units[adUnitId] = new PerUnitState(adUnitId, format, placement);
+            _units[adUnitId] = new PerUnitState(adUnitId, format);
         }
 
         private void LoadUnit(string adUnitId)
@@ -726,10 +724,10 @@ namespace Daro.Internal
         // same adUnitId run independently. See sketch-native-ad-android.md §7.
         internal DaroEditorNativeAdHandle? LastNativeAdHandle { get; private set; }
 
-        public INativeAdHandle CreateNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink)
+        public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
         {
-            DaroLog.Verbose("Native", $"Platform[Editor].CreateNativeAdHandle adUnit='{adUnitId}' placement='{placement}'");
-            var handle = new DaroEditorNativeAdHandle(adUnitId, placement, sink, _settings);
+            DaroLog.Verbose("Native", $"Platform[Editor].CreateNativeAdHandle adUnit='{adUnitId}'");
+            var handle = new DaroEditorNativeAdHandle(adUnitId, sink, _settings);
             LastNativeAdHandle = handle;
             return handle;
         }

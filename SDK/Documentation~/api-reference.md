@@ -48,11 +48,10 @@ namespace Daro
     public sealed class DaroInterstitialAd : IDisposable
     {
         // --- construction ---
-        public DaroInterstitialAd(string adUnitId, string? placement = null);
+        public DaroInterstitialAd(string adUnitId);
 
         // --- properties ---
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         // --- methods ---
         public void Load();         // async — outcome arrives via OnAdLoaded / OnAdFailedToLoad
@@ -81,7 +80,7 @@ namespace Daro
 {
     public sealed class DaroRewardedAd : IDisposable
     {
-        public DaroRewardedAd(string adUnitId, string? placement = null);
+        public DaroRewardedAd(string adUnitId);
 
         // ... (same Load / IsReady / Show / Dispose + seven events as DaroInterstitialAd) ...
 
@@ -103,10 +102,9 @@ namespace Daro
 {
     public sealed class DaroAppOpenAd : IDisposable
     {
-        public DaroAppOpenAd(string adUnitId, string? placement = null);
+        public DaroAppOpenAd(string adUnitId);
 
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         public void Load();
         public bool IsReady();
@@ -139,12 +137,10 @@ namespace Daro
         public DaroBannerAd(
             string adUnitId,
             DaroBannerSize size = DaroBannerSize.Standard,
-            DaroBannerPosition position = DaroBannerPosition.BottomCenter,
-            string? placement = null);
+            DaroBannerPosition position = DaroBannerPosition.BottomCenter);
 
         // --- properties ---
         public string             AdUnitId  { get; }
-        public string?            Placement { get; }
         public DaroBannerSize     Size      { get; }
         public DaroBannerPosition Position  { get; }   // updated via SetPosition
 
@@ -204,11 +200,10 @@ namespace Daro
     public sealed class DaroNativeAd : IDisposable
     {
         // --- construction ---
-        public DaroNativeAd(string adUnitId, string? placement = null);
+        public DaroNativeAd(string adUnitId);
 
         // --- properties ---
         public string            AdUnitId  { get; }
-        public string?           Placement { get; }
         public Vector2Int        IconSize  { get; set; }     // default (200, 200); set BEFORE Load
         public DaroNativeAdInfo? Info      { get; }          // null until OnAdLoaded; cleared on failed reload + Dispose
         public bool              IsReady   { get; }          // property (not method) — false after Dispose
@@ -286,12 +281,10 @@ namespace Daro
         // --- construction ---
         public DaroLightPopupAd(
             string adUnitId,
-            DaroLightPopupAdOptions? options = null,    // null → daro defaults
-            string? placement = null);
+            DaroLightPopupAdOptions? options = null);   // null → daro defaults
 
         // --- properties ---
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         // --- methods ---
         public void Load();
@@ -363,6 +356,10 @@ public sealed class DaroAdInfo
     public double?      Latency   { get; }   // milliseconds, nullable
 }
 ```
+
+`Latency` is **always `null` on iOS** — the iOS native layer does not report it,
+so treat any latency-dependent logic as Android-only. Android and the Editor mock
+both supply a value.
 
 ### DaroAdLoadError
 

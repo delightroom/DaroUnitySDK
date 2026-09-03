@@ -5,7 +5,7 @@
 //  these two files.
 //
 //  Sketch §"File Strategy" + §"DaroUnityBridgeInternal.h" — the shared
-//  symbols (s_adQueue, DaroDispatch, EscapeJson, LatencyField,
+//  symbols (s_adQueue, DaroDispatch, EscapeJson, RevenueFields,
 //  UnityGetGLViewController) live in DaroUnityBridge.mm, banner code links
 //  to them via these extern declarations.
 //
@@ -50,13 +50,6 @@ extern void DaroDispatch(NSString* _Nullable adUnitId, NSString* eventJson);
 // (",", "\\", "\n", "\t", "\r", control chars). Defined in DaroUnityBridge.mm.
 extern NSString* EscapeJson(NSString* _Nullable s);
 
-// `,"latency":<num|null>` JSON fragment for ad-info-bearing events. The
-// argument is `id` rather than `DaroObjCAdInfo*` to avoid a cross-file
-// dependency on the DaroMObjCBridge Swift-generated header at the .h level
-// (the .mm definition still casts to DaroObjCAdInfo* internally). Defined
-// in DaroUnityBridge.mm.
-extern NSString* LatencyField(id _Nullable info);
-
 // `,"value":"<decimal>","currencyCode":"USD","precisionType":N` JSON fragment
 // for adRevenuePaid events (ILRD sprint). `value` crosses as a decimal string
 // (NSDecimalNumber → invariant "." description) so the C# side parses to
@@ -90,14 +83,9 @@ extern UIViewController* UnityGetGLViewController(void);
 extern "C" {
 #endif
 
-// Cached capability token for the per-instance paid-event hook (ILRD). Derived
-// once from DaroUnityRevenueToken.swift; empty when the app key is absent.
-// Defined in DaroUnityBridge.mm.
-NSString* DaroUnityPaidEventToken(void);
-
-// Wires a per-instance paid-event plugin on a unit-routed ad (interstitial /
+// Attaches the per-instance revenue callback on a unit-routed ad (interstitial /
 // rewarded / appOpen / banner / lightPopup); adFormat is the wire format code.
-// Native is handle-routed and wires its own block. Defined in DaroUnityBridge.mm.
+// Native is handle-routed and attaches its own block. Defined in DaroUnityBridge.mm.
 void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat);
 
 void DaroUnityNativeAd_DestroyAll(void);

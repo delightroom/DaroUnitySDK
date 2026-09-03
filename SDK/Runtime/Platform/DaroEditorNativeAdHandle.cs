@@ -38,14 +38,12 @@ namespace Daro.Internal
 
         internal DaroEditorNativeAdHandle(
             string adUnitId,
-            string? placement,
             INativeAdEventSink sink,
             DaroEditorSettings settings)
         {
             _adUnitId = adUnitId;
             _sink     = sink;
             _settings = settings;
-            // placement: ignored in mock (no analytics simulation in v1).
         }
 
         public void Load(int iconWidth, int iconHeight)

@@ -46,7 +46,6 @@ namespace Daro
     {
         // ── Identity ─────────────────────────────────────────────────────
         public string             AdUnitId  { get; }
-        public string?            Placement { get; }
         public DaroBannerSize     Size      { get; }
         public DaroBannerPosition Position  { get; private set; }
 
@@ -97,8 +96,7 @@ namespace Daro
         public DaroBannerAd(
             string adUnitId,
             DaroBannerSize size = DaroBannerSize.Standard,
-            DaroBannerPosition position = DaroBannerPosition.BottomCenter,
-            string? placement = null)
+            DaroBannerPosition position = DaroBannerPosition.BottomCenter)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -110,14 +108,13 @@ namespace Daro
             AdUnitId  = adUnitId;
             Size      = size;
             Position  = position;
-            Placement = placement;
 
             // Platform handles native create + the "replace prior instance" rule
             // (KU-1); registry serializes same-adUnit create/destroy.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.Banner, AdUnitId, this,
-                () => DaroPlatform.Current.CreateBanner(AdUnitId, Placement));
-            DaroLog.Verbose("Banner", $"ctor adUnit='{AdUnitId}' size={Size} position={Position} placement='{Placement}'");
+                () => DaroPlatform.Current.CreateBanner(AdUnitId));
+            DaroLog.Verbose("Banner", $"ctor adUnit='{AdUnitId}' size={Size} position={Position}");
         }
 
         /// <summary>

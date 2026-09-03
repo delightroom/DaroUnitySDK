@@ -1,6 +1,6 @@
 //
 //  DaroUnityBridge.mm
-//  Unity ↔ DaroMObjCBridge thin shim (sketch CD-1, CD-3, CD-4, CD-5, CD-6, CD-9, CD-13).
+//  Unity ↔ DaroObjCBridge thin shim (sketch CD-1, CD-3, CD-4, CD-5, CD-6, CD-9, CD-13).
 //
 //  Hosts 21 extern C entry points (init / runtime settings / Interstitial /
 //  Rewarded / AppOpen) called from DaroIOSPlatform.cs via
@@ -9,18 +9,18 @@
 //  §"Event JSON Schema" for the exact key set.
 //
 //  Banner is in a peer file: DaroUnityBannerAd.mm (banner-ios sprint).
-//  Shared symbols (s_adQueue, DaroDispatch, EscapeJson, LatencyField,
+//  Shared symbols (s_adQueue, DaroDispatch, EscapeJson, RevenueFields,
 //  s_banners init) are exposed via DaroUnityBridgeInternal.h.
 //
-//  Threading: DaroMObjCBridge wraps every delegate call in
+//  Threading: DaroObjCBridge wraps every delegate call in
 //  DispatchQueue.main.async, so DaroDispatch runs on the Unity main thread
 //  and the C# side does not need to enqueue (sketch CD-5).
 //
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <DaroMObjCBridge/DaroMObjCBridge.h>
-#import <DaroMObjCBridge/DaroMObjCBridge-Swift.h>
+#import <DaroObjCBridge/DaroObjCBridge.h>
+#import <DaroObjCBridge/DaroObjCBridge-Swift.h>
 #import "DaroUnityBridgeInternal.h"
 #import "DaroUnityLog.h"
 
@@ -62,16 +62,6 @@ NSString* EscapeJson(NSString* s) {
     return out;
 }
 
-// External linkage — used by DaroUnityBannerAd.mm.
-// `,"latency":<num|null>` fragment for ad-info-bearing events. Argument is
-// `id _Nullable` (matching the extern in DaroUnityBridgeInternal.h) so the
-// header doesn't need to import DaroMObjCBridge-Swift.h; cast happens here.
-NSString* LatencyField(id _Nullable info) {
-    DaroObjCAdInfo* adInfo = (DaroObjCAdInfo*)info;
-    if (!adInfo || !adInfo.latency) return @",\"latency\":null";
-    return [NSString stringWithFormat:@",\"latency\":%@", adInfo.latency];
-}
-
 // External linkage — used by every shim file's didPayRevenue delegate method.
 // NSDecimalNumber description with nil locale always renders "." as the
 // decimal separator, so the payload stays invariant-culture parseable.
@@ -87,7 +77,7 @@ NSString* RevenueFields(NSDecimalNumber* _Nullable value,
 
 #pragma mark - Ad instance container (sketch CD-4)
 
-// DaroMObjCBridge does NOT retain ad instances, and ad.delegate is `weak` —
+// DaroObjCBridge does NOT retain ad instances, and ad.delegate is `weak` —
 // the shim must hold strong refs to both. Pairing them in one entry means a
 // dictionary nil-assignment releases ad + delegate atomically.
 @interface DaroUnityAdEntry : NSObject
@@ -139,8 +129,7 @@ static void EnsureInitialized(void) {
 
 - (void)interstitialAdDidLoad:(DaroObjCInterstitialAd *)ad
                        adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adLoaded\",\"adFormat\":1%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":1}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -154,8 +143,7 @@ static void EnsureInitialized(void) {
 
 - (void)interstitialAdDidShow:(DaroObjCInterstitialAd *)ad
                        adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adShown\",\"adFormat\":1%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":1}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -170,22 +158,19 @@ static void EnsureInitialized(void) {
 
 - (void)interstitialAdDidClick:(DaroObjCInterstitialAd *)ad
                         adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adClicked\",\"adFormat\":1%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":1}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)interstitialAdDidRecordImpression:(DaroObjCInterstitialAd *)ad
                                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adImpression\",\"adFormat\":1%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":1}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)interstitialAdDidDismiss:(DaroObjCInterstitialAd *)ad
                           adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adDismissed\",\"adFormat\":1%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":1}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -199,8 +184,7 @@ static void EnsureInitialized(void) {
 
 - (void)rewardedAdDidLoad:(DaroObjCRewardedAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adLoaded\",\"adFormat\":2%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":2}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -214,8 +198,7 @@ static void EnsureInitialized(void) {
 
 - (void)rewardedAdDidShow:(DaroObjCRewardedAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adShown\",\"adFormat\":2%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":2}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -232,29 +215,26 @@ static void EnsureInitialized(void) {
                          adInfo:(DaroObjCAdInfo * _Nullable)adInfo
                    rewardedItem:(DaroObjCRewardedItem *)item {
     NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"earnedReward\",\"adFormat\":2%@,\"rewardAmount\":%ld,\"rewardType\":\"%@\"}",
-        LatencyField(adInfo), (long)item.amount, EscapeJson(item.rewardType)];
+        @"{\"event\":\"earnedReward\",\"adFormat\":2,\"rewardAmount\":%ld,\"rewardType\":\"%@\"}",
+        (long)item.amount, EscapeJson(item.rewardType)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidClick:(DaroObjCRewardedAd *)ad
                     adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adClicked\",\"adFormat\":2%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":2}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidRecordImpression:(DaroObjCRewardedAd *)ad
                                adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adImpression\",\"adFormat\":2%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":2}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidDismiss:(DaroObjCRewardedAd *)ad
                       adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adDismissed\",\"adFormat\":2%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":2}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -268,8 +248,7 @@ static void EnsureInitialized(void) {
 
 - (void)appOpenAdDidLoad:(DaroObjCAppOpenAd *)ad
                   adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adLoaded\",\"adFormat\":4%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":4}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -283,8 +262,7 @@ static void EnsureInitialized(void) {
 
 - (void)appOpenAdDidShow:(DaroObjCAppOpenAd *)ad
                   adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adShown\",\"adFormat\":4%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":4}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -299,22 +277,19 @@ static void EnsureInitialized(void) {
 
 - (void)appOpenAdDidClick:(DaroObjCAppOpenAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adClicked\",\"adFormat\":4%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":4}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)appOpenAdDidRecordImpression:(DaroObjCAppOpenAd *)ad
                               adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adImpression\",\"adFormat\":4%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":4}";
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)appOpenAdDidDismiss:(DaroObjCAppOpenAd *)ad
                      adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = [NSString stringWithFormat:@"{\"event\":\"adDismissed\",\"adFormat\":4%@}",
-                      LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":4}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -330,46 +305,23 @@ void DaroUnity_SetCallback(DaroUnityCallbackFn callback) {
     s_callback = callback;
 }
 
-#pragma mark · Paid event (ILRD) plugin registration
-
-// Implemented in DaroUnityRevenueToken.swift (CryptoKit). Returns a strdup'd
-// token = base64(nonce || AES-GCM("adPaidEvent", SHA256(appKey)) || tag),
-// matching DaroSDK's gate. Caller frees. nil if the app key is absent.
-extern "C" char* DaroDerivePaidEventToken(void);
-
-// External linkage — every ad creation site (across the shim files) registers a
-// per-instance plugin with this token. Each DaroObjC* ad exposes only a generic,
-// identifier-gated hook; revenue meaning lives entirely here (the Unity-side
-// plugin). Per-instance so multi-instance formats (native) route to the right
-// handle. Token is derived once (DaroUnityRevenueToken.swift, CryptoKit) and
-// cached; empty when the app key is absent.
-NSString* DaroUnityPaidEventToken(void) {
-    static NSString* token = nil;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        char* c = DaroDerivePaidEventToken();
-        if (c) {
-            token = [NSString stringWithUTF8String:c];
-            free(c);
-        }
-    });
-    return token;
-}
+#pragma mark · Paid event (ILRD)
 
 // External linkage — used by every unit-routed creation site (incl. the other
-// shim files) to wire a per-instance paid-event plugin. Native is handle-routed
-// and wires its own block (DaroUnityNativeAd.mm).
+// shim files) to attach the per-instance revenue callback. Native is
+// handle-routed and attaches its own block (DaroUnityNativeAd.mm).
+//
+// 통합 SDK 는 광고를 만드는 시점에 스스로 훅을 걸고 소비자에겐 net 값만
+// 내린다 — 능력을 증명해 훅을 얻던 절차가 없어져 토큰 유도도 사라졌다.
+// 콜백이 받는 것은 DaroObjCAdRevenue 하나뿐이다.
 void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat) {
-    NSString* token = DaroUnityPaidEventToken();
-    if (!token || !ad) return;
-    [ad registerPluginWithIdentifier:token
-        onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
-                      NSString* currencyCode, NSInteger precisionType) {
-            DaroDispatch(adUnitId, [NSString stringWithFormat:
-                @"{\"event\":\"adRevenuePaid\",\"adFormat\":%ld%@%@}",
-                (long)adFormat, RevenueFields(value, currencyCode, precisionType),
-                LatencyField(adInfo)]);
-        }];
+    if (!ad) return;
+    [ad setOnPaidEvent:^(DaroObjCAdRevenue* revenue) {
+        DaroDispatch(adUnitId, [NSString stringWithFormat:
+            @"{\"event\":\"adRevenuePaid\",\"adFormat\":%ld%@}",
+            (long)adFormat,
+            RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)]);
+    }];
 }
 
 #pragma mark · SDK lifecycle
@@ -388,9 +340,17 @@ void DaroUnity_Initialize(int hasGdprConsent,
     if (gdprConsentString)   ads.gdprConsentString = [NSString stringWithUTF8String:gdprConsentString];
     if (doNotSell      >= 0) ads.doNotSell         = @(doNotSell == 1);
     if (ccpaConsentString)   ads.ccpaString        = [NSString stringWithUTF8String:ccpaConsentString];
-    // CD-12: isTaggedForCoppa exists on DaroObjCAds only under #if DARO_ADDMOB.
-    // MAX variant ignores — accepted for ABI uniformity, not forwarded.
-    (void)isTaggedForCoppa;
+    // 통합 SDK 는 `setCoppa:` 를 미디에이션 변종과 무관하게 노출한다 — 구
+    // DaroMObjCBridge 에서 이 심볼이 `#if DARO_ADDMOB` 안에만 있어 MAX 변종이
+    // 값을 버려야 했던 제약(CD-12)이 사라졌다. 이제 Android 와 같이 전달한다.
+    //
+    // DaroCoppaStatus 는 child / notChild 둘뿐이라 C# 의 tri-state 중 null 을
+    // 표현할 값이 없다. null 이면 호출하지 않고 SDK 기본값에 맡긴다 — 아무 말도
+    // 안 한 퍼블리셔를 대신해 "아동 대상 아님"을 단언하지 않는다.
+    if (isTaggedForCoppa >= 0) {
+        [ads setCoppa:(isTaggedForCoppa == 1 ? DaroCoppaStatusChild
+                                             : DaroCoppaStatusNotChild)];
+    }
     // log-module-ios: raw `Daro.DaroLogLevel` int (0..4) crosses the boundary;
     // collapse here for daro iOS internal `DaroObjCLogLevel`. Shim-side gate
     // keeps full granularity in `gDaroUnityLogLevel`.
@@ -427,11 +387,10 @@ void DaroUnity_SetLogLevel(int level) {
 
 #pragma mark · Interstitial
 
-void DaroUnity_CreateInterstitial(const char* adUnitId, const char* placement) {
+void DaroUnity_CreateInterstitial(const char* adUnitId) {
     EnsureInitialized();
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
-    (void)placement;  // CD-13: Interstitial has no setPlacement — accepted for ABI uniformity, dropped.
 
     dispatch_async(s_adQueue, ^{
         // Replace any existing entry — duplicate-construction-replaces (sketch §CD-4).
@@ -492,11 +451,10 @@ void DaroUnity_DestroyInterstitial(const char* adUnitId) {
 
 #pragma mark · Rewarded
 
-void DaroUnity_CreateRewarded(const char* adUnitId, const char* placement) {
+void DaroUnity_CreateRewarded(const char* adUnitId) {
     EnsureInitialized();
     if (!adUnitId) return;
-    NSString* unit       = [NSString stringWithUTF8String:adUnitId];
-    NSString* placementS = placement ? [NSString stringWithUTF8String:placement] : nil;
+    NSString* unit = [NSString stringWithUTF8String:adUnitId];
 
     dispatch_async(s_adQueue, ^{
         s_rewarded[unit] = nil;
@@ -505,7 +463,6 @@ void DaroUnity_CreateRewarded(const char* adUnitId, const char* placement) {
         delegate.adUnitId = unit;
         DaroObjCRewardedAd* ad = [[DaroObjCRewardedAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
-        if (placementS) [ad setPlacement:placementS];  // CD-13: only Rewarded exposes setPlacement.
         DaroUnityWireRevenue(ad, unit, 2);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
@@ -567,11 +524,10 @@ void DaroUnity_SetRewardedCustomData(const char* adUnitId, const char* customDat
 
 #pragma mark · AppOpen
 
-void DaroUnity_CreateAppOpen(const char* adUnitId, const char* placement) {
+void DaroUnity_CreateAppOpen(const char* adUnitId) {
     EnsureInitialized();
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
-    (void)placement;  // CD-13: AppOpen has no setPlacement — accepted for ABI uniformity, dropped.
 
     dispatch_async(s_adQueue, ^{
         s_appOpen[unit] = nil;
@@ -617,7 +573,7 @@ void DaroUnity_ShowAppOpen(const char* adUnitId) {
         if (!ad) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             // AppOpen `show` takes no UIViewController argument (verified
-            // against DaroObjCAppOpenAd in DaroMObjCBridge-Swift.h).
+            // against DaroObjCAppOpenAd in DaroObjCBridge-Swift.h).
             [ad show];
         });
     });

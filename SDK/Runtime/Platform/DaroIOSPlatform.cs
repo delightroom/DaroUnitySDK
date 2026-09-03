@@ -10,7 +10,7 @@ namespace Daro.Internal
 {
     /// <summary>
     /// iOS implementation of <see cref="IDaroPlatform"/>. Sits on top of
-    /// <c>DaroUnityBridge.mm</c> (which wraps <c>DaroMObjCBridge</c>).
+    /// <c>DaroUnityBridge.mm</c> (which wraps <c>DaroObjCBridge</c>).
     /// See sketch CD-1, CD-3, CD-5, CD-6, CD-8.
     /// </summary>
     /// <remarks>
@@ -70,9 +70,10 @@ namespace Daro.Internal
                 initParams.GdprConsentString,
                 DaroIOSEncoding.NullableBoolToInt(initParams.DoNotSell),
                 initParams.CcpaConsentString,
-                // CD-12: isTaggedForChildDirectedTreatment exists on DaroObjCAds
-                // only under #if DARO_ADDMOB; MAX variant ignores. Always pass -1.
-                -1,
+                // 통합 SDK 는 변종과 무관하게 `setCoppa:` 를 노출하므로 실제
+                // 값을 넘긴다. CD-12 의 `-1` 하드코딩은 구 브리지에서 이 심볼이
+                // MAX 변종에 없던 시절의 제약이었다 — Android 와 어긋나 있었다.
+                DaroIOSEncoding.NullableBoolToInt(initParams.IsTaggedForChildDirectedTreatment),
                 (int)initParams.LogLevel);
 
             return tcs.Task;
@@ -123,22 +124,22 @@ namespace Daro.Internal
 
         // ── IDaroPlatform: Instance lifecycle ────────────────────────────
 
-        public void CreateInterstitial(string adUnitId, string? placement)
+        public void CreateInterstitial(string adUnitId)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[iOS].CreateInterstitial adUnit='{adUnitId}' placement='{placement}'");
-            DaroUnity_CreateInterstitial(adUnitId, placement);
+            DaroLog.Verbose("Interstitial", $"Platform[iOS].CreateInterstitial adUnit='{adUnitId}'");
+            DaroUnity_CreateInterstitial(adUnitId);
         }
 
-        public void CreateRewarded(string adUnitId, string? placement)
+        public void CreateRewarded(string adUnitId)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[iOS].CreateRewarded adUnit='{adUnitId}' placement='{placement}'");
-            DaroUnity_CreateRewarded(adUnitId, placement);
+            DaroLog.Verbose("Rewarded", $"Platform[iOS].CreateRewarded adUnit='{adUnitId}'");
+            DaroUnity_CreateRewarded(adUnitId);
         }
 
-        public void CreateAppOpen(string adUnitId, string? placement)
+        public void CreateAppOpen(string adUnitId)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[iOS].CreateAppOpen adUnit='{adUnitId}' placement='{placement}'");
-            DaroUnity_CreateAppOpen(adUnitId, placement);
+            DaroLog.Verbose("AppOpen", $"Platform[iOS].CreateAppOpen adUnit='{adUnitId}'");
+            DaroUnity_CreateAppOpen(adUnitId);
         }
 
         public void LoadInterstitial(string adUnitId)
@@ -224,16 +225,14 @@ namespace Daro.Internal
         // ── Banner (native-view-overlay-on-GL-surface) ───────────────────
         //
         // See docs/features/native-bridge.md (Banner overlay / iOS).
-        // - placement: dropped (no concept on iOS banner — DaroObjCBannerView
-        //   ctor doesn't take it; sketch §"Platform C# Implementation").
         // - DaroBannerSize / DaroBannerPosition: ordinal pass-through —
         //   C# enum values match DaroObjCBannerSize and the native shim's
         //   gravity ordinal contract directly (sketch §"Event Routing —
         //   Zero Dispatcher Changes").
 
-        public void CreateBanner(string adUnitId, string? placement)
+        public void CreateBanner(string adUnitId)
         {
-            DaroLog.Verbose("Banner", $"Platform[iOS].CreateBanner adUnit='{adUnitId}' placement='{placement}'");
+            DaroLog.Verbose("Banner", $"Platform[iOS].CreateBanner adUnit='{adUnitId}'");
             DaroUnity_CreateBanner(adUnitId);
         }
 
@@ -349,20 +348,20 @@ namespace Daro.Internal
         // Native side shipped in prior turn — see SDK/Plugins/iOS/DaroUnityBridge.mm.
         [DllImport(DLL)] private static extern void DaroUnity_DestroyAll();
 
-        [DllImport(DLL)] private static extern void DaroUnity_CreateInterstitial(string adUnitId, string? placement);
+        [DllImport(DLL)] private static extern void DaroUnity_CreateInterstitial(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_LoadInterstitial(string adUnitId);
         [DllImport(DLL)] private static extern int  DaroUnity_IsInterstitialReady(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_ShowInterstitial(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_DestroyInterstitial(string adUnitId);
 
-        [DllImport(DLL)] private static extern void DaroUnity_CreateRewarded(string adUnitId, string? placement);
+        [DllImport(DLL)] private static extern void DaroUnity_CreateRewarded(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_LoadRewarded(string adUnitId);
         [DllImport(DLL)] private static extern int  DaroUnity_IsRewardedReady(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_ShowRewarded(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_DestroyRewarded(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_SetRewardedCustomData(string adUnitId, string customData);
 
-        [DllImport(DLL)] private static extern void DaroUnity_CreateAppOpen(string adUnitId, string? placement);
+        [DllImport(DLL)] private static extern void DaroUnity_CreateAppOpen(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_LoadAppOpen(string adUnitId);
         [DllImport(DLL)] private static extern int  DaroUnity_IsAppOpenReady(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_ShowAppOpen(string adUnitId);
@@ -388,7 +387,7 @@ namespace Daro.Internal
         // sketch §"Configuration extern C signature" for the rejected
         // alternatives (byte 4-arg, packed int).
         [DllImport(DLL)] private static extern void DaroUnity_CreateLightPopup(
-            string adUnitId, string? placement,
+            string adUnitId,
             float bgR,        float bgG,        float bgB,        float bgA,
             float containerR, float containerG, float containerB, float containerA,
             float adMarkTextR,float adMarkTextG,float adMarkTextB,float adMarkTextA,
@@ -407,8 +406,6 @@ namespace Daro.Internal
         // ── Light Popup (modal popup + auto-dismiss preset) ──────────────
         //
         // See docs/features/native-bridge.md (Light Popup / iOS).
-        // - placement: dropped on iOS (CD-4) — DaroObjCLightPopupAdLoader.init
-        //   takes unitId only; non-null placement triggers a Warn log.
         // - 9 Color32 → 36 float (RGBA per channel, pre-divided to [0,1] via
         //   B(byte) helper); shim builds DaroObjCLightPopupConfiguration with
         //   [UIColor colorWithRed:green:blue:alpha:] (no further conversion).
@@ -416,14 +413,11 @@ namespace Daro.Internal
         //   Mapping"); CloseButtonColor → closeButtonTextColor only because
         //   iOS lacks a separate icon-color slot (CD-3).
 
-        public void CreateLightPopup(string adUnitId, string? placement, DaroLightPopupAdOptions o)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions o)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[iOS].CreateLightPopup adUnit='{adUnitId}' placement='{placement}'");
-            if (placement != null)
-                DaroLog.Warn("LightPopup",
-                    $"placement='{placement}' ignored on iOS — DaroObjCLightPopupAdLoader is unitId-only");
+            DaroLog.Verbose("LightPopup", $"Platform[iOS].CreateLightPopup adUnit='{adUnitId}'");
             DaroUnity_CreateLightPopup(
-                adUnitId, placement,
+                adUnitId,
                 B(o.BackgroundColor.r),            B(o.BackgroundColor.g),            B(o.BackgroundColor.b),            B(o.BackgroundColor.a),
                 B(o.ContainerColor.r),             B(o.ContainerColor.g),             B(o.ContainerColor.b),             B(o.ContainerColor.a),
                 B(o.AdMarkLabelTextColor.r),       B(o.AdMarkLabelTextColor.g),       B(o.AdMarkLabelTextColor.b),       B(o.AdMarkLabelTextColor.a),
@@ -466,10 +460,10 @@ namespace Daro.Internal
         // other formats); same adUnitId × N instances yields N independent
         // handles. Implementation: see DaroIOSNativeAdHandle (this directory)
         // + DaroUnityNativeAd.mm (peer to DaroUnityBannerAd.mm).
-        public INativeAdHandle CreateNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink)
+        public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
         {
-            DaroLog.Verbose("Native", $"Platform[iOS].CreateNativeAdHandle adUnit='{adUnitId}' placement='{placement}'");
-            return new DaroIOSNativeAdHandle(adUnitId, placement, sink);
+            DaroLog.Verbose("Native", $"Platform[iOS].CreateNativeAdHandle adUnit='{adUnitId}'");
+            return new DaroIOSNativeAdHandle(adUnitId, sink);
         }
     }
 }

@@ -1,6 +1,6 @@
 //
 //  DaroUnityBannerAd.mm
-//  Banner ObjC++ shim — wraps DaroObjCBannerView (DaroMObjCBridge module)
+//  Banner ObjC++ shim — wraps DaroObjCBannerView (DaroObjCBridge module)
 //  for Unity. Parallel to Android's DaroUnityBannerAd.kt; full design in
 //  See docs/features/native-bridge.md (Banner overlay / iOS).
 //
@@ -13,7 +13,7 @@
 //    DestroyBanner       → removeFromSuperview + nil entry (ARC releases all)
 //
 //  Threading: dictionary mutations on s_adQueue (serial); UIView ops dispatched
-//  to dispatch_get_main_queue. DaroMObjCBridge guarantees delegate callbacks
+//  to dispatch_get_main_queue. DaroObjCBridge guarantees delegate callbacks
 //  on the main queue (sketch CD-7), so DaroDispatch from delegate methods
 //  needs no further marshaling.
 //
@@ -24,8 +24,8 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <DaroMObjCBridge/DaroMObjCBridge.h>
-#import <DaroMObjCBridge/DaroMObjCBridge-Swift.h>
+#import <DaroObjCBridge/DaroObjCBridge.h>
+#import <DaroObjCBridge/DaroObjCBridge-Swift.h>
 #import "DaroUnityBridgeInternal.h"
 #import "DaroUnityLog.h"
 
@@ -76,20 +76,16 @@ static BOOL BannerIsCurrent(NSString* unit,
 
 static void DaroUnityWireBannerRevenue(DaroObjCBannerView* view,
                                        NSString* unit) {
-    NSString* token = DaroUnityPaidEventToken();
-    if (!token || !view || !unit) return;
+    if (!view || !unit) return;
 
     __weak DaroObjCBannerView* weakView = view;
-    [view registerPluginWithIdentifier:token
-        onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
-                      NSString* currencyCode, NSInteger precisionType) {
-            DaroObjCBannerView* strongView = weakView;
-            if (!strongView || !BannerIsCurrent(unit, strongView, YES)) return;
-            DaroDispatch(unit, [NSString stringWithFormat:
-                @"{\"event\":\"adRevenuePaid\",\"adFormat\":0%@%@}",
-                RevenueFields(value, currencyCode, precisionType),
-                LatencyField(adInfo)]);
-        }];
+    view.onPaidEvent = ^(DaroObjCAdRevenue* revenue) {
+        DaroObjCBannerView* strongView = weakView;
+        if (!strongView || !BannerIsCurrent(unit, strongView, YES)) return;
+        DaroDispatch(unit, [NSString stringWithFormat:
+            @"{\"event\":\"adRevenuePaid\",\"adFormat\":0%@}",
+            RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)]);
+    };
 }
 
 #pragma mark - Geometry helpers
@@ -138,8 +134,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
     if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
     DaroLogD(@"Banner", @"didLoad adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
-        [NSString stringWithFormat:@"{\"event\":\"adLoaded\",\"adFormat\":0%@}",
-            LatencyField(adInfo)]);
+        @"{\"event\":\"adLoaded\",\"adFormat\":0}");
 }
 
 - (void)bannerView:(DaroObjCBannerView*)bannerView
@@ -170,8 +165,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
     if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didClick adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
-        [NSString stringWithFormat:@"{\"event\":\"adClicked\",\"adFormat\":0%@}",
-            LatencyField(adInfo)]);
+        @"{\"event\":\"adClicked\",\"adFormat\":0}");
 }
 
 - (void)bannerViewDidRecordImpression:(DaroObjCBannerView*)bannerView
@@ -179,8 +173,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
     if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didRecordImpression adUnit='%@'", self.adUnitId);
     DaroDispatch(self.adUnitId,
-        [NSString stringWithFormat:@"{\"event\":\"adImpression\",\"adFormat\":0%@}",
-            LatencyField(adInfo)]);
+        @"{\"event\":\"adImpression\",\"adFormat\":0}");
 }
 
 @end

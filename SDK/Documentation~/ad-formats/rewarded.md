@@ -60,7 +60,7 @@ public sealed class RewardedHost : MonoBehaviour
 
 ## Differences vs Interstitial (the whole list)
 
-1. **Class**: `DaroRewardedAd` (constructor signature identical: `(string adUnitId, string? placement = null)`).
+1. **Class**: `DaroRewardedAd` (constructor signature identical: `(string adUnitId)`).
 2. **Extra event**: `OnEarnedReward` — `Action<DaroAdInfo, DaroRewardItem>`. Fires once per completed view.
 3. **Extra method**: `SetCustomData(string)` — opaque string forwarded to your mediation's reward callback for S2S validation. Call before `Show()`.
 

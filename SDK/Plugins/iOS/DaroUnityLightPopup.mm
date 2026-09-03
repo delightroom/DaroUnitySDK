@@ -1,7 +1,7 @@
 //
 //  DaroUnityLightPopup.mm
 //  Light Popup ObjC++ shim — wraps DaroObjCLightPopupAdLoader + DaroObjCLightPopupAd
-//  + DaroObjCLightPopupConfiguration (DaroMObjCBridge module) for Unity.
+//  + DaroObjCLightPopupConfiguration (DaroObjCBridge module) for Unity.
 //  Parallel to Android's DaroUnityLightPopupAd.kt; full design in
 //  See docs/features/native-bridge.md (Light Popup / iOS).
 //
@@ -35,8 +35,8 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <DaroMObjCBridge/DaroMObjCBridge.h>
-#import <DaroMObjCBridge/DaroMObjCBridge-Swift.h>
+#import <DaroObjCBridge/DaroObjCBridge.h>
+#import <DaroObjCBridge/DaroObjCBridge-Swift.h>
 #import "DaroUnityBridgeInternal.h"
 #import "DaroUnityLog.h"
 
@@ -84,8 +84,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
 - (void)lightPopupAdLoaderDidLoad:(DaroObjCLightPopupAdLoader*)loader
                                ad:(DaroObjCLightPopupAd*)ad
                            adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"loader.didLoad adUnit='%@' latency=%@",
-             self.adUnitId, adInfo.latency ?: @"nil");
+    DaroLogD(@"LightPopup", @"loader.didLoad adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
 
@@ -100,8 +99,11 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     e.adDelegate   = adDel;
     e.ad           = ad;
 
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adLoaded\",\"adFormat\":5%@}", LatencyField(adInfo)];
+    // ILRD: 통합 브리지는 onPaidEvent 를 광고에 둔다(로더에는 없다). 로드마다
+    // 새 광고 객체가 오므로 여기서 per-loaded-ad 로 건다.
+    DaroUnityWireRevenue(ad, self.adUnitId, 5);
+
+    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":5}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -122,8 +124,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"loader.didClick adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adClicked\",\"adFormat\":5%@}", LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":5}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -132,8 +133,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"loader.didRecordImpression adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adImpression\",\"adFormat\":5%@}", LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":5}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -148,8 +148,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"ad.didShow adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adShown\",\"adFormat\":5%@}", LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":5}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -160,8 +159,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     if (!e || e.destroyed) return;
     // Clear ad ref — dismissed ad is consumed (parallel to Android ad=null after dismiss).
     e.ad = nil;
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adDismissed\",\"adFormat\":5%@}", LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":5}";
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -216,7 +214,6 @@ extern "C" {
 
 void DaroUnity_CreateLightPopup(
     const char* adUnitId,
-    const char* placement,
     float bgR,        float bgG,        float bgB,        float bgA,
     float containerR, float containerG, float containerB, float containerA,
     float adMarkTextR,float adMarkTextG,float adMarkTextB,float adMarkTextA,
@@ -232,9 +229,6 @@ void DaroUnity_CreateLightPopup(
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
     DaroLogD(@"LightPopup", @"CreateLightPopup adUnit='%@'", unit);
 
-    // placement: confirmed dropped — DaroObjCLightPopupAdLoader has no placement arg
-    // (sketch CD-4). Warn log emitted by C# side before this DllImport call.
-    (void)placement;
 
     NSString* closeBtnTextS = closeButtonText
         ? [NSString stringWithUTF8String:closeButtonText] : @"Close";
@@ -272,7 +266,6 @@ void DaroUnity_CreateLightPopup(
         entry.destroyed      = NO;
         loaderDel.entry      = entry;   // weak back-ref — set after entry exists
         loader.delegate      = loaderDel;
-        DaroUnityWireRevenue(loader, unit, 5);
 
         s_lightPopups[unit] = entry;
     });

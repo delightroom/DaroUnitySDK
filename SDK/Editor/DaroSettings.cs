@@ -18,21 +18,38 @@ namespace Daro.Editor
         public Mediation mediation = Mediation.MAX;
 
         [Header("iOS")]
-        public string iosDaroAppKey;
-        public TextAsset iosKeyFile;        // ios-daro-key.txt (.txt → TextAsset, NOT DefaultAsset)
-        // AdMob app ID — pasted from AdMob console (`ca-app-pub-XXXX~XXXX`).
-        // Injected as Info.plist key `GADApplicationIdentifier`. REQUIRED on
-        // iOS even for MAX mediation: daro-m has the AppLovin google-adapter
-        // transitively, which links the GoogleMobileAds framework — Apple
-        // crashes the app at launch if Info.plist lacks this key.
-        // Daro 대시보드 표기 = "AdMob Key".
-        public string iosAdMobAppId;
+        // INTEGRATION KEY — Android 와 같은 봉투 한 줄("di" + base64).
+        // 빌드타임에 `daro platform-key --inject` 가 봉투를 풀어 Info.plist 에
+        // 네 값을 심는다: GADApplicationIdentifier / DaroAppKey /
+        // DaroAppLovinSdkKey / DaroAppLovinAdReviewKey. 래퍼는 문자열을
+        // 배달만 한다 — Editor 는 복호화하지 않는다(시크릿은 네이티브 도구에만).
+        public string iosIntegrationKey;
+
         [TextArea(2, 4)]
         public string attPromptDescription;
 
+        // Legacy iOS 입력 (통합 이전 세대). 마이그레이션 감지용으로만
+        // 직렬화를 유지한다 — 주입에는 절대 쓰지 않는다.
+        // AdMob app ID 는 이제 봉투가 실어 오므로 별도 입력이 없다.
+        [HideInInspector] public string iosDaroAppKey;
+        [HideInInspector] public TextAsset iosKeyFile;     // ios-daro-key.txt
+        [HideInInspector] public string iosAdMobAppId;
+
         [Header("Android")]
-        public string androidDaroAppKey;
-        public TextAsset androidKeyFile;    // android-daro-key.txt
+        // INTEGRATION KEY — one envelope string per platform, issued by the
+        // Daro dashboard ("di" + base64). The so.daro gradle plugin decrypts
+        // it at build time and fills the DARO_APP_KEY / ADMOB_ID /
+        // APPLOVIN_KEY manifest placeholders. The wrapper only delivers the
+        // string — the Editor never decrypts (the secret lives only in the
+        // native tools).
+        public string androidIntegrationKey;
+
+        // Legacy key pair (pre-unified generation, daro-m 1.3.x). Kept
+        // serialized so the validator can detect an un-migrated settings
+        // asset and fail the build with migration guidance — never read
+        // these for injection.
+        [HideInInspector] public string androidDaroAppKey;
+        [HideInInspector] public TextAsset androidKeyFile;    // android-daro-key.txt
 
         [Header("Editor Mock")]
         public Daro.DaroEditorSettings editorMock;  // created by another agent in Daro.Runtime

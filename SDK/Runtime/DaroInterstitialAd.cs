@@ -15,7 +15,6 @@ namespace Daro
     public sealed class DaroInterstitialAd : IDisposable
     {
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         public event Action<DaroAdInfo>?         OnAdLoaded;
         public event Action<DaroAdLoadError>?    OnAdFailedToLoad;
@@ -53,7 +52,7 @@ namespace Daro
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroInterstitialAd(string adUnitId, string? placement = null)
+        public DaroInterstitialAd(string adUnitId)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -63,15 +62,14 @@ namespace Daro
             }
 
             AdUnitId  = adUnitId;
-            Placement = placement;
 
             // Platform handles native create + the "replace prior instance"
             // rule (§2.4); registry serializes same-adUnit create/destroy so
             // stale finalizers cannot destroy the new platform state.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.Interstitial, AdUnitId, this,
-                () => DaroPlatform.Current.CreateInterstitial(AdUnitId, Placement));
-            DaroLog.Verbose("Interstitial", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
+                () => DaroPlatform.Current.CreateInterstitial(AdUnitId));
+            DaroLog.Verbose("Interstitial", $"ctor adUnit='{AdUnitId}'");
         }
 
         /// <summary>

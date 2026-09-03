@@ -208,16 +208,10 @@ namespace Daro.Editor
                 RefreshValidation());
 
             rootVisualElement.Q<Button>("im-validate-ios-btn")?.RegisterCallback<ClickEvent>(_ =>
-                RunKeyfileValidation(
-                    iosNotAndroid: true,
-                    appKey: _settings?.iosDaroAppKey,
-                    keyfile: _settings?.iosKeyFile));
+                RunIntegrationKeyLint(iosNotAndroid: true));
 
             rootVisualElement.Q<Button>("im-validate-android-btn")?.RegisterCallback<ClickEvent>(_ =>
-                RunKeyfileValidation(
-                    iosNotAndroid: false,
-                    appKey: _settings?.androidDaroAppKey,
-                    keyfile: _settings?.androidKeyFile));
+                RunIntegrationKeyLint(iosNotAndroid: false));
 
             // Mediation EnumField is hidden in v1 (single-value enum) but the
             // change-callback wiring is in place so v2 AdMob introduction
@@ -337,16 +331,13 @@ namespace Daro.Editor
             SetLabel("im-section-android-title",        "section.android");
 
             SetEnumLabel("im-mediation-field",          "field.mediation");
-            SetTextLabel("im-ios-appkey-field",         "field.daroAppKey");
-            SetObjectLabel("im-ios-keyfile-field",      "field.keyFile");
-            SetTextLabel("im-ios-admob-field",          "field.adMobKey");
+            SetTextLabel("im-ios-integrationkey-field", "field.integrationKey");
             SetTextLabel("im-ios-att-field",            "field.attDescription");
-            SetTextLabel("im-android-appkey-field",     "field.daroAppKey");
-            SetObjectLabel("im-android-keyfile-field",  "field.keyFile");
+            SetTextLabel("im-android-integrationkey-field", "field.integrationKey");
 
             SetButton("im-validate-btn",                "btn.runChecks");
-            SetButton("im-validate-ios-btn",            "btn.validate");
-            SetButton("im-validate-android-btn",        "btn.validate");
+            SetButton("im-validate-ios-btn",            "btn.validateKey");
+            SetButton("im-validate-android-btn",        "btn.validateKey");
 
             // Reset result labels to idle on language switch — old result
             // text would be in the previous language and confuse the reader.
@@ -386,60 +377,44 @@ namespace Daro.Editor
             if (el != null) el.label = DaroImLocalization.Get(key);
         }
 
-        private void SetObjectLabel(string name, string key)
-        {
-            var el = rootVisualElement.Q<ObjectField>(name);
-            if (el != null) el.label = DaroImLocalization.Get(key);
-        }
-
         private void SetEnumLabel(string name, string key)
         {
             var el = rootVisualElement.Q<EnumField>(name);
             if (el != null) el.label = DaroImLocalization.Get(key);
         }
 
-        // Runs DaroKeyfileValidator on the platform's (appKey, keyfile) pair
-        // and renders the result inline next to the validate button. This is
-        // a *pre-build* equivalent of what the Daro gradle plugin does at
-        // configure time — surfaces "Tag mismatch" type errors in O(ms) so
-        // the user doesn't have to wait for a full APK build to discover
-        // a credential mismatch.
-        //
-        // The crypto layer (DaroAesGcm) is built atop Aes-ECB primitives
-        // available on every Mono platform — no .NET Standard 2.1 floor.
-        private void RunKeyfileValidation(bool iosNotAndroid, string appKey, TextAsset keyfile)
+        // 양 플랫폼 공통 — INTEGRATION KEY 형식 린트만 한다. Editor 는 봉투를
+        // 복호화하지 않는다(시크릿 비확산, DaroIntegrationKeyLint 참조).
+        // 실검증은 빌드 시점의 네이티브 도구가 한다 — Android 는 so.daro
+        // gradle 플러그인, iOS 는 `daro platform-key --inject`.
+        private void RunIntegrationKeyLint(bool iosNotAndroid)
         {
             var resultLabel = iosNotAndroid ? _validateIosResult : _validateAndroidResult;
             if (resultLabel == null) return;
 
-            var keyfileText = keyfile != null ? keyfile.text : null;
-            var result = DaroKeyfileValidator.Validate(appKey, keyfileText);
-            ApplyValidateResult(resultLabel, result);
-        }
-
-        private static void ApplyValidateResult(Label label, DaroKeyfileValidator.Result result)
-        {
+            var shape = DaroIntegrationKeyLint.Check(
+                iosNotAndroid ? _settings?.iosIntegrationKey : _settings?.androidIntegrationKey);
             string key;
             string css;
-            switch (result)
+            switch (shape)
             {
-                case DaroKeyfileValidator.Result.Valid:
-                    key = "validate.valid";          css = "im-validate-result--valid";   break;
-                case DaroKeyfileValidator.Result.TagMismatch:
-                    key = "validate.tagMismatch";    css = "im-validate-result--invalid"; break;
-                case DaroKeyfileValidator.Result.EmptyAppKey:
-                    key = "validate.emptyAppKey";    css = "im-validate-result--invalid"; break;
-                case DaroKeyfileValidator.Result.NoKeyfile:
-                    key = "validate.noKeyfile";      css = "im-validate-result--invalid"; break;
-                case DaroKeyfileValidator.Result.InvalidBase64:
-                    key = "validate.invalidBase64";  css = "im-validate-result--invalid"; break;
-                case DaroKeyfileValidator.Result.TooShort:
-                    key = "validate.tooShort";       css = "im-validate-result--invalid"; break;
+                case DaroIntegrationKeyShape.Ok:
+                    key = "validate.ik.ok";            css = "im-validate-result--valid";   break;
+                case DaroIntegrationKeyShape.Empty:
+                    key = "validate.ik.empty";         css = "im-validate-result--invalid"; break;
+                case DaroIntegrationKeyShape.LegacyAppKey:
+                    key = "validate.ik.legacyAppKey";  css = "im-validate-result--invalid"; break;
+                case DaroIntegrationKeyShape.MissingPrefix:
+                    key = "validate.ik.missingPrefix"; css = "im-validate-result--invalid"; break;
+                case DaroIntegrationKeyShape.InvalidBase64:
+                    key = "validate.ik.invalidBase64"; css = "im-validate-result--invalid"; break;
+                case DaroIntegrationKeyShape.TooShort:
+                    key = "validate.ik.tooShort";      css = "im-validate-result--invalid"; break;
                 default:
-                    key = "validate.idle";           css = "im-validate-result--neutral"; break;
+                    key = "validate.idle";             css = "im-validate-result--neutral"; break;
             }
-            label.text = DaroImLocalization.Get(key);
-            ApplyResultClass(label, css);
+            resultLabel.text = DaroImLocalization.Get(key);
+            ApplyResultClass(resultLabel, css);
         }
 
         private static void ApplyResultClass(Label label, string activeClass)

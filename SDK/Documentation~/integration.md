@@ -53,7 +53,7 @@ public sealed class AdHost : MonoBehaviour
 
     private void OnEnable()
     {
-        // 1. Construct (ad unit id, optional placement).
+        // 1. Construct (ad unit id).
         _ad = new DaroInterstitialAd(AdUnitId);
 
         // 2. Register every event handler BEFORE calling Load().

@@ -33,16 +33,16 @@ namespace Daro.Editor
         // as a prebuilt AAR (SDK/Plugins/Android/daro-android-wrapper.aar),
         // so the consumer's build never compiles our Kotlin source. Removed
         // 2026-05-11 (release-pipeline sprint, editor-hook-cleanup task).
-        internal const string DaroPluginCoords = "so.daro:daro-plugin:1.0.13";
+        internal const string DaroPluginCoords = "so.daro:daro-plugin:1.1.0-beta04";
         internal const string AppLovinQualityServiceClasspath =
             "com.applovin.quality:AppLovinQualityServiceGradlePlugin:5.5.2";
 
-        // daro-m requires Android API 23+.
+        // daro-sdk requires Android API 23+.
         internal const int MinSdk = 23;
 
         // Daro keep rules. The shim's own AAR embeds so.daro.* consumer rules,
         // but the exported Gradle project may omit UPM-package-level
-        // proguard-user.txt files. Mirror the daro-m JNI/reflection keeps here
+        // proguard-user.txt files. Mirror the daro-sdk JNI/reflection keeps here
         // so PatchProguard delivers them through the stable export hook.
         internal const string ProguardKeepRule =
             "-keep class so.daro.** { *; }\n" +
@@ -75,23 +75,23 @@ namespace Daro.Editor
             new Dictionary<string, string>(0);
 
         // True iff the post-processor should apply patches. False = silent
-        // no-op. Validator (BuildValidator order=0) already fails fast on
-        // empty appKey — this is a defense-in-depth so callers can compose
-        // ShouldApply without a separate null check.
+        // no-op. Validator (BuildValidator order=0) already fails fast on an
+        // empty INTEGRATION KEY — this is a defense-in-depth so callers can
+        // compose ShouldApply without a separate null check.
         internal static bool ShouldApply(DaroSettings settings) =>
-            settings != null && !string.IsNullOrEmpty(settings.androidDaroAppKey);
+            settings != null && !string.IsNullOrEmpty(settings.androidIntegrationKey);
 
-        // Returns the gradle plugin id to apply in unityLibrary's plugins
-        // block. v1 = MAX only. v2 will branch on AdMob (`so.daro.a`) once
-        // the AdMob mediation variant lands.
-        internal static string GetPluginId(Mediation mediation) => mediation switch
-        {
-            Mediation.MAX => "so.daro.m",
-            _ => throw new ArgumentOutOfRangeException(nameof(mediation), mediation, null),
-        };
+        // Gradle plugin id applied to the launcher's plugins block. The
+        // unified generation registers `so.daro` as the canonical id
+        // (`so.daro.a` / `so.daro.m` remain as aliases of the same plugin
+        // class) — mediation is a runtime routing concern, not a build-time
+        // variant, so the id no longer branches.
+        internal const string GradlePluginId = "so.daro";
 
         // gradle.properties keys to set additively (only if absent).
-        // `daroAppKey` is the only key we own — EDM4U writes
+        // `daroIntegrationKey` is the only key we own — the so.daro plugin's
+        // IntegrationKeySource reads the gradle property first, then the
+        // app manifest's DARO_INTEGRATION_KEY meta-data. EDM4U writes
         // `android.useAndroidX=true` + `android.enableJetifier=true` itself
         // (verified against EDM4U 1.2.x output 2026-04-29: `# Android Resolver
         // Properties Start` block). We do NOT duplicate those.
@@ -100,7 +100,7 @@ namespace Daro.Editor
             if (!ShouldApply(settings)) return EmptyProps;
             return new Dictionary<string, string>(1)
             {
-                ["daroAppKey"] = settings.androidDaroAppKey,
+                ["daroIntegrationKey"] = settings.androidIntegrationKey,
             };
         }
     }

@@ -23,7 +23,7 @@ The ad wasn't ready. Common causes:
 
 ### `ObjectDisposedException` on `Load()` / `Show()` / `Hide()`
 
-The instance was disposed. After `Dispose()`, the only safe operations on most ad types are reading immutable properties (`AdUnitId`, `Placement`) and checking readiness (`IsReady()` / `IsReady`, which returns `false`). Lifecycle calls such as `Load()` / `Show()` / `Hide()` throw. Native ad notification calls (`NotifyVisible()` / `NotifyHidden()` / `NotifyClicked()`) are the exception: they no-op after disposal.
+The instance was disposed. After `Dispose()`, the only safe operations on most ad types are reading immutable properties (`AdUnitId`) and checking readiness (`IsReady()` / `IsReady`, which returns `false`). Lifecycle calls such as `Load()` / `Show()` / `Hide()` throw. Native ad notification calls (`NotifyVisible()` / `NotifyHidden()` / `NotifyClicked()`) are the exception: they no-op after disposal.
 
 Construct a fresh instance to use a new one.
 

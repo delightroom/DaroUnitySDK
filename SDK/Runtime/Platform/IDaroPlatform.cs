@@ -32,9 +32,9 @@ namespace Daro.Internal
         void SetLogLevel(DaroLogLevel level);
 
         // ── Instance lifecycle ────────────────────────────────────────────
-        void CreateInterstitial(string adUnitId, string? placement);
-        void CreateRewarded(string adUnitId, string? placement);
-        void CreateAppOpen(string adUnitId, string? placement);
+        void CreateInterstitial(string adUnitId);
+        void CreateRewarded(string adUnitId);
+        void CreateAppOpen(string adUnitId);
 
         // ── Ad operations ─────────────────────────────────────────────────
         void LoadInterstitial(string adUnitId);
@@ -58,7 +58,7 @@ namespace Daro.Internal
         // ── Banner ad operations (always-on overlay) ──────────────────────
         // Size baked at Load (DaroBannerAdView 가 ctor 시점에 size 고정).
         // Position 은 Show 후에도 변경 가능.
-        void CreateBanner(string adUnitId, string? placement);
+        void CreateBanner(string adUnitId);
         void LoadBanner(string adUnitId, DaroBannerSize size);
         void ShowBanner(string adUnitId);
         void HideBanner(string adUnitId);
@@ -72,10 +72,9 @@ namespace Daro.Internal
         bool TryGetBannerScreenRect(string adUnitId, out Rect rect);
 
         // ── Light Popup ad operations ─────────────────────────────────────
-        // Options baked at Create time (immutable per instance). placement forwarded
-        // through Kotlin shim to DaroLightPopupAdUnit. Mirrors the v1 fullscreen
+        // Options baked at Create time (immutable per instance). Mirrors the v1 fullscreen
         // 5-method mold (Create / Load / IsReady / Show / Destroy).
-        void CreateLightPopup(string adUnitId, string? placement, DaroLightPopupAdOptions options);
+        void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options);
         void LoadLightPopup(string adUnitId);
         bool IsLightPopupReady(string adUnitId);
         void ShowLightPopup(string adUnitId);
@@ -89,7 +88,7 @@ namespace Daro.Internal
         // is per-instance via the supplied INativeAdEventSink. No platform
         // event slots required for native — the sink replaces them.
         // See sketch-native-ad-android.md §4.
-        INativeAdHandle CreateNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink);
+        INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink);
 
         // ── Event callbacks (set once by DaroSdk; fire on main thread) ────
         // string adUnitId routes to the correct ad instance.

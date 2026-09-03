@@ -14,7 +14,6 @@ namespace Daro
     public sealed class DaroRewardedAd : IDisposable
     {
         public string  AdUnitId  { get; }
-        public string? Placement { get; }
 
         public event Action<DaroAdInfo>?                 OnAdLoaded;
         public event Action<DaroAdLoadError>?            OnAdFailedToLoad;
@@ -49,7 +48,7 @@ namespace Daro
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroRewardedAd(string adUnitId, string? placement = null)
+        public DaroRewardedAd(string adUnitId)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -59,12 +58,11 @@ namespace Daro
             }
 
             AdUnitId  = adUnitId;
-            Placement = placement;
 
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.Rewarded, AdUnitId, this,
-                () => DaroPlatform.Current.CreateRewarded(AdUnitId, Placement));
-            DaroLog.Verbose("Rewarded", $"ctor adUnit='{AdUnitId}' placement='{Placement}'");
+                () => DaroPlatform.Current.CreateRewarded(AdUnitId));
+            DaroLog.Verbose("Rewarded", $"ctor adUnit='{AdUnitId}'");
         }
 
         /// <summary>

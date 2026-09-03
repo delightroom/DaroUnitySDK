@@ -14,7 +14,6 @@ extern "C" {
 
 void DaroUnity_CreateLightPopup(
     const char* adUnitId,
-    const char* placement,
     float bgR,        float bgG,        float bgB,        float bgA,
     float containerR, float containerG, float containerB, float containerA,
     float adMarkTextR,float adMarkTextG,float adMarkTextB,float adMarkTextA,

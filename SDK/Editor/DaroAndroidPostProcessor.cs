@@ -32,12 +32,12 @@ namespace Daro.Editor
     //      Daro plugin's hooks expect plugins-DSL coordination semantics)
     //      + `minSdk` floor bump to 23.
     //   3. unityLibrary/build.gradle — `minSdk` floor bump only.
-    //   4. gradle.properties — daroAppKey only (AndroidX/Jetifier are
-    //      EDM4U's territory).
+    //   4. gradle.properties — daroIntegrationKey only (AndroidX/Jetifier
+    //      are EDM4U's territory).
     //   5. proguard-user.txt — Daro keep rule (creates the file if absent).
     //
-    // Plus DaroAndroidKeyFileCopier at order=51 (unityLibrary/ → launcher/
-    // keyfile copy — also out-of-scope for EDM4U).
+    // (The order=51 DaroAndroidKeyFileCopier is gone — the unified SDK has
+    // no key file; the INTEGRATION KEY travels as a gradle property only.)
     //
     // **All inserted blocks are wrapped in marker comments** so re-running
     // on an already-patched gradle tree is a no-op. Gradle/Groovy files use
@@ -51,11 +51,12 @@ namespace Daro.Editor
     // Where <area> ∈ {root-buildscript-repos, root-classpath,
     // launcher-plugin, gradle-properties, proguard}.
     //
-    // daroAppKey: only via gradle.properties (the canonical pathway per Daro
-    // guide). The earlier `unityLibrary-defaultConfig daroAppKey "..."`
-    // injection has been removed — guide does not document defaultConfig as
-    // a daroAppKey source, and unityLibrary-level defaultConfig wouldn't
-    // reach the launcher (app) module that Daro plugin reads from anyway.
+    // daroIntegrationKey: only via gradle.properties. The so.daro plugin's
+    // IntegrationKeySource resolves the gradle property first, then the app
+    // manifest's DARO_INTEGRATION_KEY meta-data — the property is the
+    // canonical pathway for a build-tool integration like this one. (The
+    // pre-unified `daroAppKey` property and the unityLibrary-defaultConfig
+    // injection are both gone with the legacy generation.)
     public sealed class DaroAndroidPostProcessor : IPostGenerateGradleAndroidProject
     {
         public int callbackOrder => 50;
@@ -338,8 +339,9 @@ namespace Daro.Editor
         // launcher/build.gradle — Daro plugin apply + minSdk floor bump
         // =====================================================================
         //
-        // The Daro plugin (`so.daro.m` / `so.daro.a`) transitively applies
-        // `applovin-quality-service`, which only supports
+        // The Daro plugin (`so.daro`; `so.daro.a` / `so.daro.m` are aliases
+        // of the same class) applies
+        // `applovin-quality-service` on release builds, which only supports
         // `com.android.application` projects. Unity's `launcher/` module is
         // the application module (`com.android.application`); `unityLibrary/`
         // is a library (`com.android.library`). So plugin apply MUST be on
@@ -364,7 +366,7 @@ namespace Daro.Editor
         // com.android.application AND the Daro plugin. This is the pattern
         // the Daro plugin's apply-time hooks are designed for.
         //
-        // Why not just `apply plugin: 'so.daro.m'` somewhere in the file?
+        // Why not just `apply plugin: 'so.daro'` somewhere in the file?
         // Verified empirically (Unity 6 6000.3.13f1, AGP 8.10): both
         //   (a) directly after `apply plugin: 'com.android.application'`
         //   (b) at file end (after the `android { }` block)
@@ -372,20 +374,22 @@ namespace Daro.Editor
         // "Daro 앱 키를 찾을 수 없습니다 (variant: debug)". The Daro plugin's
         // hook timing relies on plugins-DSL coordination: AGP applies first
         // and registers its variant configuration via plugins-DSL's
-        // ordered apply mechanism, then so.daro.m applies and registers its
-        // afterEvaluate hooks atop AGP's already-installed pipeline.
+        // ordered apply mechanism, then so.daro applies and registers its
+        // afterEvaluate hooks atop AGP's already-installed pipeline. (The
+        // empirics were measured on the pre-unified `so.daro.m` alias — the
+        // plugin class is the same, so the timing contract carries over.)
         //
         // `id 'com.android.application'` here omits the version because
         // Unity's root build.gradle declares
         //   `id 'com.android.application' version '8.10.0' apply false`
-        // which provides the version. `id 'so.daro.m'` resolves via the
+        // which provides the version. `id 'so.daro'` resolves via the
         // root buildscript classpath (so.daro:daro-plugin) we injected.
         private static string InjectLauncherPluginApply(string text, DaroSettings settings)
         {
             const string area = "launcher-plugin";
             if (BlockRegex(area).IsMatch(text)) return text;
 
-            var pluginId = DaroAndroidGradleContent.GetPluginId(settings.mediation);
+            var pluginId = DaroAndroidGradleContent.GradlePluginId;
 
             // Match Unity's `apply plugin: 'com.android.application'` line
             // (with single OR double quotes, optional whitespace).
@@ -425,9 +429,9 @@ namespace Daro.Editor
 
             text = BumpMinSdk(text);
 
-            // No InjectDependencies — `implementation("so.daro:daro-m:...")`
+            // No InjectDependencies — `implementation("so.daro:daro-sdk:...")`
             // is EDM4U's responsibility (declared in DaroDependencies.xml).
-            // No plugin apply — see PatchLauncherBuildGradle (so.daro.m
+            // No plugin apply — see PatchLauncherBuildGradle (so.daro
             // requires com.android.application).
 
             File.WriteAllText(filePath, text);
@@ -452,7 +456,7 @@ namespace Daro.Editor
         }
 
         // =====================================================================
-        // gradle.properties — daroAppKey only (AndroidX / Jetifier are EDM4U-owned)
+        // gradle.properties — daroIntegrationKey only (AndroidX / Jetifier are EDM4U-owned)
         // =====================================================================
 
         private static void PatchGradleProperties(string filePath, DaroSettings settings)

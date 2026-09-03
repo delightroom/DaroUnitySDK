@@ -1,6 +1,6 @@
 //
 //  DaroUnityNativeAd.mm
-//  Native ad ObjC++ shim — wraps DaroObjCNativeView (DaroMObjCBridge module)
+//  Native ad ObjC++ shim — wraps DaroObjCNativeView (DaroObjCBridge module)
 //  for Unity. Parallel to Android's DaroUnityNativeAd.kt; full design in
 //  See docs/features/native-bridge.md (Native ad / iOS).
 //
@@ -30,8 +30,8 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
-#import <DaroMObjCBridge/DaroMObjCBridge.h>
-#import <DaroMObjCBridge/DaroMObjCBridge-Swift.h>
+#import <DaroObjCBridge/DaroObjCBridge.h>
+#import <DaroObjCBridge/DaroObjCBridge-Swift.h>
 #import "DaroUnityBridgeInternal.h"
 #import "DaroUnityLog.h"
 
@@ -338,8 +338,7 @@ static const double kIconPollIntervalSec = 0.2;
     // success signal; `NotifyClicked` on iOS = overlay-miss diagnostic
     // (Unity Button received the touch instead).
     DaroLogW(@"Native", @"nativeViewDidClick callback h=%d", entry.handleId);
-    NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adClicked\"%@}", LatencyField(adInfo)];
+    NSString* json = @"{\"event\":\"adClicked\"}";
     DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
 }
 
@@ -374,8 +373,7 @@ static const double kIconPollIntervalSec = 0.2;
              entry.loadedEmitted ? @"emitting directly" : @"queueing for flush");
 
     if (entry.loadedEmitted) {
-        NSString* json = [NSString stringWithFormat:
-            @"{\"event\":\"adImpression\"%@}", LatencyField(adInfo)];
+        NSString* json = @"{\"event\":\"adImpression\"}";
         DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
     } else {
         entry.pendingImpression = adInfo;
@@ -470,9 +468,8 @@ static const double kIconPollIntervalSec = 0.2;
     // DaroJsonHelpers.GetJsonBool with default true (back-compat for
     // Android/Editor sinks that don't emit this field).
     NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"adLoaded\"%@,\"title\":\"%@\",\"body\":\"%@\","
+        @"{\"event\":\"adLoaded\",\"title\":\"%@\",\"body\":\"%@\","
         @"\"callToAction\":\"%@\",\"isCtaInteractive\":%@}",
-        LatencyField(info),
         EscapeJson(title), EscapeJson(body), EscapeJson(cta),
         entry.ctaInteractive ? @"true" : @"false"];
 
@@ -496,8 +493,7 @@ static const double kIconPollIntervalSec = 0.2;
     DaroObjCAdInfo* pending = entry.pendingImpression;
     entry.pendingImpression = nil;
     if (pending) {
-        NSString* impressionJson = [NSString stringWithFormat:
-            @"{\"event\":\"adImpression\"%@}", LatencyField(pending)];
+        NSString* impressionJson = @"{\"event\":\"adImpression\"}";
         DaroUnityNativeAdEmitCallback(entry.handleId, impressionJson, NULL, 0);
     }
 }
@@ -614,13 +610,10 @@ void DaroUnity_NativeAd_SetCallback(DaroNativeAdCallbackFn callback) {
     s_nativeAdCallback = callback;
 }
 
-void DaroUnity_NativeAd_Create(int handleId, const char* adUnitId, const char* placement) {
+void DaroUnity_NativeAd_Create(int handleId, const char* adUnitId) {
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
     NSNumber* key  = @(handleId);
-    (void)placement;   // v1 parity with DaroUnity_CreateInterstitial — placement
-                       // accepted for ABI uniformity, dropped (DaroObjCNativeView
-                       // exposes no placement setter at the ObjC layer).
 
     dispatch_async(s_adQueue, ^{
         // Replace any existing entry — duplicate-construction-replaces.
@@ -708,21 +701,16 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             nativeView.delegate = entry.delegate;
             // ILRD is a billing datapoint and does not mutate entry state, so
             // keep it handle-routed even if the originating view was reloaded.
-            NSString* paidToken = DaroUnityPaidEventToken();
-            if (paidToken) {
-                int handleId = entry.handleId;
-                [nativeView registerPluginWithIdentifier:paidToken
-                    onPaidEvent:^(DaroObjCAdInfo* adInfo, NSDecimalNumber* value,
-                                  NSString* currencyCode, NSInteger precisionType) {
-                        // Revenue callbacks are the remaining path that can
-                        // originate off-main, so they intentionally rely on
-                        // DaroUnityNativeAdEmitCallback's main-queue marshal.
-                        NSString* json = [NSString stringWithFormat:
-                            @"{\"event\":\"adRevenuePaid\"%@%@}",
-                            RevenueFields(value, currencyCode, precisionType), LatencyField(adInfo)];
-                        DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
-                    }];
-            }
+            int handleId = entry.handleId;
+            nativeView.onPaidEvent = ^(DaroObjCAdRevenue* revenue) {
+                // Revenue callbacks are the remaining path that can
+                // originate off-main, so they intentionally rely on
+                // DaroUnityNativeAdEmitCallback's main-queue marshal.
+                NSString* json = [NSString stringWithFormat:
+                    @"{\"event\":\"adRevenuePaid\"%@}",
+                    RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)];
+                DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
+            };
             nativeView.frame = host.bounds;
             entry.nativeView = nativeView;
 

@@ -84,10 +84,10 @@ namespace Daro.Internal
 
         // ── Banner ad operations ─────────────────────────────────────────────
 
-        public void CreateBanner(string adUnitId, string? placement)
+        public void CreateBanner(string adUnitId)
         {
-            DaroLog.Verbose("Banner", $"Platform[Android].CreateBanner adUnit='{adUnitId}' placement='{placement}'");
-            CreateAdObject(adUnitId, placement, DaroAdFormat.Banner,
+            DaroLog.Verbose("Banner", $"Platform[Android].CreateBanner adUnit='{adUnitId}'");
+            CreateAdObject(adUnitId, DaroAdFormat.Banner,
                 "so.daro.unity.DaroUnityBannerAd");
         }
 
@@ -239,29 +239,29 @@ namespace Daro.Internal
 
         // ── Instance lifecycle ───────────────────────────────────────────────
 
-        public void CreateInterstitial(string adUnitId, string? placement)
+        public void CreateInterstitial(string adUnitId)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Android].CreateInterstitial adUnit='{adUnitId}' placement='{placement}'");
-            CreateAdObject(adUnitId, placement, DaroAdFormat.Interstitial,
+            DaroLog.Verbose("Interstitial", $"Platform[Android].CreateInterstitial adUnit='{adUnitId}'");
+            CreateAdObject(adUnitId, DaroAdFormat.Interstitial,
                 "so.daro.unity.DaroUnityInterstitialAd");
         }
 
-        public void CreateRewarded(string adUnitId, string? placement)
+        public void CreateRewarded(string adUnitId)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].CreateRewarded adUnit='{adUnitId}' placement='{placement}'");
-            CreateAdObject(adUnitId, placement, DaroAdFormat.Rewarded,
+            DaroLog.Verbose("Rewarded", $"Platform[Android].CreateRewarded adUnit='{adUnitId}'");
+            CreateAdObject(adUnitId, DaroAdFormat.Rewarded,
                 "so.daro.unity.DaroUnityRewardedAd");
         }
 
-        public void CreateAppOpen(string adUnitId, string? placement)
+        public void CreateAppOpen(string adUnitId)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Android].CreateAppOpen adUnit='{adUnitId}' placement='{placement}'");
-            CreateAdObject(adUnitId, placement, DaroAdFormat.AppOpen,
+            DaroLog.Verbose("AppOpen", $"Platform[Android].CreateAppOpen adUnit='{adUnitId}'");
+            CreateAdObject(adUnitId, DaroAdFormat.AppOpen,
                 "so.daro.unity.DaroUnityAppOpenAd");
         }
 
         private void CreateAdObject(
-            string adUnitId, string? placement, DaroAdFormat format, string kotlinClass)
+            string adUnitId, DaroAdFormat format, string kotlinClass)
         {
             // Tear down any stale object for this adUnitId before creating fresh.
             DestroyAdObject(adUnitId);
@@ -273,9 +273,7 @@ namespace Daro.Internal
                 _                     => new DaroAdCallbackProxy(adUnitId, format, this),
             };
 
-            // Kotlin ctor signature is `(adUnitId: String)` for all three classes
-            // — placement is captured at load() time inside the shim (always "" today
-            // since the Unity surface has no placement parameter; sketch CD-2).
+            // Kotlin ctor signature is `(adUnitId: String)` for all three classes.
             var adObj = new AndroidJavaObject(kotlinClass, adUnitId);
 
             _proxies[adUnitId]   = proxy;
@@ -558,9 +556,13 @@ namespace Daro.Internal
                 string adUnitId, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
-                // Pass errorCode through as rawCode — preserves the original
-                // MaxError.code int even when the typed enum mapping falls
-                // back to Unspecified, keeping a debugging breadcrumb.
+                // rawCode = 네이티브가 준 값 그대로. shim 이 `DaroError.errorCode`
+                // 를 보내므로 이것은 **Daro 코드**다 — `DaroAdLoadError.RawCode`
+                // 의 계약("DaroSDK DaroError.Code.rawValue")과 iOS 경로에 맞는다.
+                //
+                // DARO-1542 전에는 shim 이 deprecated 콜백을 물어 `MaxError.code`
+                // 를 그대로 보냈다. 그 시절엔 여기 주석이 "MaxError.code 를 보존한다"
+                // 였는데, 그게 계약이 아니라 Android 만의 이탈이었다.
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
                     errorMessage, adUnitId, errorCode);
@@ -911,25 +913,24 @@ namespace Daro.Internal
 
         // ── Light Popup ad operations ────────────────────────────────────
         // Cannot use the generic CreateAdObject helper — Kotlin ctor takes
-        // 37 params beyond adUnitId (placement + 9×4 ARGB ints + closeButtonText),
+        // 36 params beyond adUnitId (9×4 ARGB ints + closeButtonText),
         // and the proxy needs interface name IDaroLightPopupCallback rather than
         // IDaroAdCallback. Sketch §Android Bridge / DaroAndroidPlatform additions.
-        public void CreateLightPopup(string adUnitId, string? placement, DaroLightPopupAdOptions options)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitId}' placement='{placement}'");
+            DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitId}'");
             // Native-first dispose ordering for any stale instance (CD-9).
             DestroyAdObject(adUnitId);
 
             var proxy = new DaroLightPopupCallbackProxy(adUnitId, this);
 
-            // 38-arg ctor: adUnitId + placement + 9 colors × 4 channels (A,R,G,B order
+            // 37-arg ctor: adUnitId + 9 colors × 4 channels (A,R,G,B order
             // per field, matching Kotlin ctor signature) + closeButtonText. Color32 byte
             // (0–255 unsigned) cast to int for JNI — no sign-extension risk because
             // C# `byte` is unsigned, so `(int)(byte)0xB2 == 178`, never negative.
             var adObj = new AndroidJavaObject(
                 "so.daro.unity.DaroUnityLightPopupAd",
                 adUnitId,
-                placement ?? "",
                 (int)options.BackgroundColor.a,            (int)options.BackgroundColor.r,            (int)options.BackgroundColor.g,            (int)options.BackgroundColor.b,
                 (int)options.ContainerColor.a,             (int)options.ContainerColor.r,             (int)options.ContainerColor.g,             (int)options.ContainerColor.b,
                 (int)options.AdMarkLabelTextColor.a,       (int)options.AdMarkLabelTextColor.r,       (int)options.AdMarkLabelTextColor.g,       (int)options.AdMarkLabelTextColor.b,
@@ -980,10 +981,10 @@ namespace Daro.Internal
         // AndroidJavaObject + AndroidJavaProxy). Native ad does NOT use
         // _adObjects / _proxies dicts — multi-instance for the same adUnitId
         // is supported (CD-8). See sketch-native-ad-android.md §5.6.
-        public INativeAdHandle CreateNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink)
+        public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
         {
-            DaroLog.Verbose("Native", $"Platform[Android].CreateNativeAdHandle adUnit='{adUnitId}' placement='{placement}'");
-            return new DaroAndroidNativeAdHandle(adUnitId, placement, sink, _activity);
+            DaroLog.Verbose("Native", $"Platform[Android].CreateNativeAdHandle adUnit='{adUnitId}'");
+            return new DaroAndroidNativeAdHandle(adUnitId, sink, _activity);
         }
     }
 }

@@ -71,7 +71,7 @@ namespace Daro.Internal
         private static int s_nextId;   // accessed via Interlocked.Increment
 
         // ── ctor ───────────────────────────────────────────────────────────
-        internal DaroIOSNativeAdHandle(string adUnitId, string? placement, INativeAdEventSink sink)
+        internal DaroIOSNativeAdHandle(string adUnitId, INativeAdEventSink sink)
         {
             _adUnitId = adUnitId;
             _sink     = sink;
@@ -82,7 +82,7 @@ namespace Daro.Internal
             lock (s_lock) { s_handles[_handleId] = this; }
 
             EnsureNativeAdCallbackRegistered();
-            DaroUnity_NativeAd_Create(_handleId, adUnitId, placement);
+            DaroUnity_NativeAd_Create(_handleId, adUnitId);
         }
 
         // ── INativeAdHandle ────────────────────────────────────────────────
@@ -294,7 +294,7 @@ namespace Daro.Internal
             DaroNativeAdCallbackFn callback);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Create(
-            int handleId, string adUnitId, string? placement);
+            int handleId, string adUnitId);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Load(
             int handleId, int iconWidth, int iconHeight);
