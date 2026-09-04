@@ -31,6 +31,12 @@ namespace Daro.Editor
         private const string CreateDir  = "Assets/Daro";
 
         private DaroSettings     _settings;
+
+        // The target the last Validate() call was given. Row templates that name
+        // a target format from this, not from EditorUserBuildSettings — reading
+        // the global a second time would let the label drift from the result it
+        // is labelling.
+        private BuildTarget      _lastValidatedTarget = BuildTarget.NoTarget;
         private SerializedObject _serializedSettings;
 
         // Named element cache (populated in CreateGUI)
@@ -496,8 +502,8 @@ namespace Daro.Editor
 
             if (_settings == null) return;
 
-            var results = DaroSettingsValidator.Validate(
-                _settings, EditorUserBuildSettings.activeBuildTarget);
+            _lastValidatedTarget = EditorUserBuildSettings.activeBuildTarget;
+            var results = DaroSettingsValidator.Validate(_settings, _lastValidatedTarget);
             var rows = DaroValidationRowFactory.Build(results);
 
             foreach (var row in rows)
@@ -585,6 +591,8 @@ namespace Daro.Editor
                     return string.Format(template, AssetDatabase.GetAssetPath(_settings));
                 case "any.mediation":
                     return string.Format(template, _settings.mediation);
+                case "any.platformChecks":
+                    return string.Format(template, _lastValidatedTarget);
                 default:
                     return template;
             }

@@ -11,7 +11,7 @@ The recommended installation path is the bootstrap installer.
 1. Download `DaroPackageInstaller.unitypackage` from the Daro website or from this repository's GitHub Releases.
 2. Import it into your Unity project.
 3. The installer patches `Packages/manifest.json` with the OpenUPM scoped registry, EDM4U, and `so.daro.unity`.
-4. After installation, open **Assets > Daro > Integration Manager** to validate project setup.
+4. After installation, open **Daro > Integration Manager** from the Unity Editor menu bar to validate project setup. `Daro` is a top-level menu, not an entry under `Assets`.
 
 ## Requirements
 

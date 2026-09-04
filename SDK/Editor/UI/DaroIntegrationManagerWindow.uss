@@ -8,6 +8,9 @@
 .im-header-left {
     flex-direction: row;
     align-items: center;
+    /* Yields width to the language field instead of running under it. */
+    flex-shrink: 1;
+    min-width: 0;
 }
 .im-logo {
     width: 28px;
@@ -19,6 +22,10 @@
     font-size: 14px;
     color: #FFFFFF;
     -unity-font-style: bold;
+    /* Truncates rather than overlapping the header's right-hand controls. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .im-os-warning {
     font-size: 11px;
@@ -28,9 +35,19 @@
 .im-header-right {
     flex-direction: row;
     align-items: center;
+    flex-shrink: 0;
 }
+/* EnumField inherits flex-grow: 1 from .unity-base-field, and its label slot
+   reserves width even when empty. Both are cleared so the field keeps a fixed
+   box on the right instead of stretching across the header. */
 .im-lang-field {
     min-width: 110px;
+    width: 130px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+.im-lang-field > .unity-base-field__label {
+    display: none;
 }
 
 .im-section {

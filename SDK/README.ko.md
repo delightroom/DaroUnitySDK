@@ -11,7 +11,7 @@ Daro Unity SDK는 Unity용 Daro 광고 미디에이션 어댑터입니다. 이 �
 1. Daro 홈페이지 또는 이 저장소의 GitHub Releases에서 `DaroPackageInstaller.unitypackage`를 다운로드합니다.
 2. Unity 프로젝트에 import합니다.
 3. installer가 `Packages/manifest.json`에 OpenUPM scoped registry, EDM4U, `so.daro.unity` 의존성을 추가합니다.
-4. 설치 후 **Assets > Daro > Integration Manager**를 열어 프로젝트 설정을 검증합니다.
+4. 설치 후 Unity Editor 메뉴 막대에서 **Daro > Integration Manager**를 열어 프로젝트 설정을 검증합니다. `Daro`는 `Assets` 아래가 아니라 최상위 메뉴입니다.
 
 ## 요구사항
 

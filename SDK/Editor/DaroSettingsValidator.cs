@@ -138,7 +138,18 @@ namespace Daro.Editor
             {
                 AddAndroidChecks(results, settings);
             }
-            // BuildTarget.NoTarget (or other targets): platform checks skipped — agnostic only.
+            else
+            {
+                // BuildTarget.NoTarget (or other targets): platform checks skipped
+                // — agnostic only. Say so, otherwise an all-green list reads as
+                // "everything is configured" while the INTEGRATION KEY was never
+                // looked at.
+                results.Add(new ValidationResult(
+                    "any.platformChecks",
+                    ValidationSeverity.Warn,
+                    $"Platform checks skipped — active build target is {target}.",
+                    "Switch to Android or iOS in File > Build Settings, then run the checks again."));
+            }
 
             return results;
         }
