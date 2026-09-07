@@ -166,16 +166,22 @@ namespace Daro.Internal
                 _parent = parent;
             }
 
+            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 네이티브는 onAdLoaded 가
+            // 아이콘 폴링 뒤에 와서 impression 이 먼저 도착할 수 있고, 그때 기억한 값은 없거나 이전 광고 것이다.
+            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs, mediationPlatform, adNetwork);
+
             public void onAdLoaded(
                 string adUnitId,
                 string title, string body, string callToAction,
                 byte[] iconPngBytes,
-                int latencyMs)
+                int latencyMs,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
 
                 // Build DaroAdInfo on this (worker) thread — pure data, no Unity API.
-                var adInfo = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs);
+                var adInfo = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
 
                 // Texture2D construction is main-thread-only — defer to Enqueue.
                 MainThreadDispatcher.Enqueue(() =>
@@ -210,10 +216,10 @@ namespace Daro.Internal
                 });
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs)
+            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
@@ -221,10 +227,10 @@ namespace Daro.Internal
                 });
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs)
+            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
@@ -233,10 +239,11 @@ namespace Daro.Internal
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info    = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latency: null);
+                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
                 {

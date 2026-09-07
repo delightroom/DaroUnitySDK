@@ -196,8 +196,7 @@ namespace Daro.Internal
             {
                 case "adLoaded":
                 {
-                    var latency = DaroJsonHelpers.GetJsonDouble(eventJson, "latency");
-                    var adInfo  = new DaroAdInfo(DaroAdFormat.Native, adUnitId, latency);
+                    var adInfo  = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
 
                     Texture2D? icon = BuildTexture(iconPng, iconLen);
 
@@ -232,27 +231,21 @@ namespace Daro.Internal
                 }
                 case "adImpression":
                 {
-                    var info = new DaroAdInfo(
-                        DaroAdFormat.Native, adUnitId,
-                        DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
                     Safely(() => handle._sink.OnAdImpression(info));
                     break;
                 }
                 case "adClicked":
                 {
-                    var info = new DaroAdInfo(
-                        DaroAdFormat.Native, adUnitId,
-                        DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
                     Safely(() => handle._sink.OnAdClicked(info));
                     break;
                 }
                 case "adRevenuePaid":
                 {
-                    var info = new DaroAdInfo(
-                        DaroAdFormat.Native, adUnitId,
-                        DaroJsonHelpers.GetJsonDouble(eventJson, "latency"));
-                    var revenue = DaroRevenueInfo.FromDecimalString(
-                        DaroJsonHelpers.GetJsonString(eventJson, "value"),
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
+                    var revenue = DaroRevenueInfo.FromMicros(
+                        DaroJsonHelpers.GetJsonLong(eventJson, "valueMicros"),
                         DaroJsonHelpers.GetJsonString(eventJson, "currencyCode") ?? "USD",
                         DaroJsonHelpers.GetJsonInt(eventJson, "precisionType"));
                     Safely(() => handle._sink.OnAdRevenuePaid(info, revenue));

@@ -44,7 +44,7 @@ namespace Daro
 
         [Header("Revenue (ILRD)")]
         /// <summary>
-        /// Mock net revenue per impression, in USD micros (1,000,000 = $1) —
+        /// Mock revenue per impression, in USD micros (1,000,000 = $1) —
         /// integer so the Editor path exercises the same micros→decimal
         /// conversion as the Android wire. 12,340 micros = $0.01234.
         /// </summary>

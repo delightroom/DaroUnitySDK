@@ -64,11 +64,10 @@ namespace Daro
         public event Action<DaroAdInfo>?      OnAdHidden;
 
         /// <summary>
-        /// Fires once per paid impression with the net (fee-adjusted) revenue
-        /// reported by the mediation layer (ILRD). Auto-refresh banners fire
-        /// this on every refreshed impression. May lag
-        /// <see cref="OnAdImpression"/> by a beat; not every impression is
-        /// guaranteed a revenue report.
+        /// Fires once per paid impression with the revenue reported by the
+        /// mediation layer (ILRD). Auto-refresh banners fire this on every
+        /// refreshed impression. May lag <see cref="OnAdImpression"/> by a
+        /// beat; not every impression is guaranteed a revenue report.
         /// </summary>
         public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
 
@@ -85,6 +84,9 @@ namespace Daro
         // Main-thread only access — FireOnAdLoaded(set) / Show()(read) /
         // IsReady()(read) 모두 Unity main thread 에서 실행. volatile 불필요.
         private bool _loaded;
+        // DARO-1683 — 마지막 로드의 DaroAdInfo. OnAdShown 은 배너에서만 C# 이 합성하는데(Kotlin IDaroBannerCallback
+        // 에 onAdShown 이 없다) 3인자 생성자로 만들면 귀속이 비어 앞뒤 OnAdLoaded·OnAdImpression 과 어긋난다.
+        private DaroAdInfo? _lastLoadedInfo;
         private bool _visibleIntent;
         private bool _shownReported;
         private bool _dispatchingLoad;
@@ -313,6 +315,7 @@ namespace Daro
             if (_disposed) return;
             bool suppressHiddenReloadEvent = _loaded && !_visibleIntent;
             _loaded = true;
+            _lastLoadedInfo = info;
             if (suppressHiddenReloadEvent)
             {
                 DaroLog.Verbose("Banner",
@@ -336,6 +339,7 @@ namespace Daro
         {
             if (_disposed) return;
             _loaded = false;
+            _lastLoadedInfo = null;
             _visibleIntent = false;
             _shownReported = false;
             _dispatchingLoad = false;
@@ -352,7 +356,8 @@ namespace Daro
             _hiddenReportable = true;
             DaroLog.Verbose("Banner", $"FireOnAdShown adUnit='{AdUnitId}'");
             SafeEventInvoker.Invoke(OnAdShown,
-                new DaroAdInfo(DaroAdFormat.Banner, AdUnitId, latency: null));
+                new DaroAdInfo(DaroAdFormat.Banner, AdUnitId, latency: null,
+                    _lastLoadedInfo?.MediationPlatform, _lastLoadedInfo?.AdNetwork));
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)

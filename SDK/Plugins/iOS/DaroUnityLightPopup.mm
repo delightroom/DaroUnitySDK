@@ -51,12 +51,15 @@
 // properties on DaroObjCLightPopupAdLoader and DaroObjCLightPopupAd are weak).
 // `destroyed` is atomic — read on main queue (delegate callbacks) vs. written
 // on s_adQueue (DestroyLightPopup) per sketch §"Dispose-Race Protection".
-@interface DaroUnityLightPopupEntry : NSObject
+@interface DaroUnityLightPopupEntry : NSObject <DaroUnityAdInfoHolder>
 @property (nonatomic, strong)            DaroObjCLightPopupAdLoader*       loader;
 @property (nonatomic, strong, nullable)  DaroObjCLightPopupAd*             ad;
 @property (nonatomic, strong)            DaroUnityLightPopupLoaderDelegate* loaderDelegate;
 @property (nonatomic, strong, nullable)  DaroUnityLightPopupAdDelegate*    adDelegate;
 @property (nonatomic, strong)            DaroObjCLightPopupConfiguration*  configuration;
+// 이 광고의 마지막 adInfo — 수익 콜백이 adInfo 를 받지 않아 이 자리가 대신 든다.
+// 로더 델리게이트와 광고 델리게이트가 둘 다 쓰므로 엔트리가 유일한 공통 자리다.
+@property (nonatomic, strong, nullable)  DaroObjCAdInfo*                   lastAdInfo;
 @property (atomic,    assign)            BOOL                              destroyed;
 @end
 
@@ -99,11 +102,15 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     e.adDelegate   = adDel;
     e.ad           = ad;
 
-    // ILRD: 통합 브리지는 onPaidEvent 를 광고에 둔다(로더에는 없다). 로드마다
-    // 새 광고 객체가 오므로 여기서 per-loaded-ad 로 건다.
-    DaroUnityWireRevenue(ad, self.adUnitId, 5);
+    e.lastAdInfo = adInfo;
 
-    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":5}";
+    // ILRD: 통합 브리지는 onPaidEvent 를 광고에 둔다(로더에는 없다). 로드마다
+    // 새 광고 객체가 오므로 여기서 per-loaded-ad 로 건다. 귀속은 엔트리가 댄다 —
+    // 수익 콜백이 받는 것은 DaroObjCAdRevenue 하나뿐이다.
+    DaroUnityWireRevenue(ad, e, self.adUnitId, 5);
+
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adLoaded\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -124,7 +131,9 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"loader.didClick adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":5}";
+    e.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -133,7 +142,9 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"loader.didRecordImpression adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":5}";
+    e.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adImpression\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -148,7 +159,9 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogD(@"LightPopup", @"ad.didShow adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed) return;
-    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":5}";
+    e.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adShown\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -159,7 +172,9 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     if (!e || e.destroyed) return;
     // Clear ad ref — dismissed ad is consumed (parallel to Android ad=null after dismiss).
     e.ad = nil;
-    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":5}";
+    e.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adDismissed\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 

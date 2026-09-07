@@ -541,13 +541,15 @@ namespace Daro.Internal
             // latencyMs sourced from Kotlin's adInfo.latency / err.latency (millis).
             // Forwarded as-is to C# DaroAdInfo.Latency to match Daro's
             // cross-platform millis contract.
-            private DaroAdInfo MakeInfo(string adUnitId, int latencyMs) =>
-                new DaroAdInfo(_format, adUnitId, latencyMs);
+            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(_format, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs)
+            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdLoaded?.Invoke(adUnitId, info));
             }
@@ -570,10 +572,10 @@ namespace Daro.Internal
                     _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs)
+            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdShown?.Invoke(adUnitId, info));
             }
@@ -592,26 +594,26 @@ namespace Daro.Internal
                     _platform._onAdFailedToShow?.Invoke(adUnitId, err));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs)
+            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdClicked?.Invoke(adUnitId, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs)
+            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdImpression?.Invoke(adUnitId, info));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs)
+            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdDismissed?.Invoke(adUnitId, info));
             }
@@ -619,10 +621,11 @@ namespace Daro.Internal
             // No latency on the revenue path — daro-m's paid event tuple is
             // (valueMicros, currencyCode, precisionType) only.
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = new DaroAdInfo(_format, adUnitId, latency: null);
+                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
@@ -646,13 +649,15 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            private DaroAdInfo MakeInfo(string adUnitId, int latencyMs) =>
-                new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latencyMs);
+            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs)
+            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdLoaded?.Invoke(adUnitId, info));
             }
@@ -668,10 +673,10 @@ namespace Daro.Internal
                     _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs)
+            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdShown?.Invoke(adUnitId, info));
             }
@@ -687,45 +692,47 @@ namespace Daro.Internal
                     _platform._onAdFailedToShow?.Invoke(adUnitId, err));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs)
+            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdClicked?.Invoke(adUnitId, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs)
+            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdImpression?.Invoke(adUnitId, info));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs)
+            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdDismissed?.Invoke(adUnitId, info));
             }
 
             public void onEarnedReward(
-                string adUnitId, string rewardType, int rewardAmount, int latencyMs)
+                string adUnitId, string rewardType, int rewardAmount, int latencyMs,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info   = MakeInfo(adUnitId, latencyMs);
+                var info   = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 var reward = new DaroRewardItem(rewardAmount, rewardType);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onEarnedReward?.Invoke(adUnitId, info, reward));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latency: null);
+                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
@@ -748,8 +755,12 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            private DaroAdInfo MakeInfo(string adUnitId, int latencyMs) =>
-                new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latencyMs);
+            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            // 배너의 generation 은 C# LoadBanner/destroy 만 올리고 네이티브 auto-refresh 는 안 올린다 —
+            // generation 별 보관도 결국 유닛 단위 필드와 같았다. 이벤트별 귀속이면 키가 필요 없다.
+            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
             private bool IsCurrent(string adUnitId, int generation) =>
                 _platform.IsCurrentBannerCallback(adUnitId, generation, this);
@@ -766,9 +777,9 @@ namespace Daro.Internal
                 });
             }
 
-            public void onAdLoaded(string adUnitId, int generation, int latencyMs)
+            public void onAdLoaded(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 EnqueueIfCurrent(adUnitId, generation,
                     () => _platform._onAdLoaded?.Invoke(adUnitId, info));
             }
@@ -783,31 +794,32 @@ namespace Daro.Internal
                     () => _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
             }
 
-            public void onAdImpression(string adUnitId, int generation, int latencyMs)
+            public void onAdImpression(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 EnqueueIfCurrent(adUnitId, generation,
                     () => _platform._onAdImpression?.Invoke(adUnitId, info));
             }
 
-            public void onAdClicked(string adUnitId, int generation, int latencyMs)
+            public void onAdClicked(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 EnqueueIfCurrent(adUnitId, generation,
                     () => _platform._onAdClicked?.Invoke(adUnitId, info));
             }
 
-            public void onAdHidden(string adUnitId, int generation)
+            public void onAdHidden(string adUnitId, int generation, string? mediationPlatform, string? adNetwork)
             {
-                var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
+                var info = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 EnqueueIfCurrent(adUnitId, generation,
                     () => _platform._onAdHidden?.Invoke(adUnitId, info));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, int generation, long valueMicros, string currencyCode, int precisionType)
+                string adUnitId, int generation, long valueMicros, string currencyCode, int precisionType,
+                string? mediationPlatform, string? adNetwork)
             {
-                var info    = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
+                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 EnqueueIfCurrent(adUnitId, generation,
                     () => _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
@@ -832,13 +844,15 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            private DaroAdInfo MakeInfo(string adUnitId, int latencyMs) =>
-                new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latencyMs);
+            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs)
+            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdLoaded?.Invoke(adUnitId, info));
             }
@@ -854,10 +868,10 @@ namespace Daro.Internal
                     _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs)
+            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdShown?.Invoke(adUnitId, info));
             }
@@ -876,35 +890,36 @@ namespace Daro.Internal
                     _platform._onAdFailedToShow?.Invoke(adUnitId, err));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs)
+            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdDismissed?.Invoke(adUnitId, info));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs)
+            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdClicked?.Invoke(adUnitId, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs)
+            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs);
+                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdImpression?.Invoke(adUnitId, info));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType)
+                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latency: null);
+                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
                     _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));

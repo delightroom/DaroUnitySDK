@@ -338,7 +338,8 @@ static const double kIconPollIntervalSec = 0.2;
     // success signal; `NotifyClicked` on iOS = overlay-miss diagnostic
     // (Unity Button received the touch instead).
     DaroLogW(@"Native", @"nativeViewDidClick callback h=%d", entry.handleId);
-    NSString* json = @"{\"event\":\"adClicked\"}";
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\"%@}", AdInfoFields(adInfo)];
     DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
 }
 
@@ -373,7 +374,8 @@ static const double kIconPollIntervalSec = 0.2;
              entry.loadedEmitted ? @"emitting directly" : @"queueing for flush");
 
     if (entry.loadedEmitted) {
-        NSString* json = @"{\"event\":\"adImpression\"}";
+        NSString* json = [NSString stringWithFormat:
+            @"{\"event\":\"adImpression\"%@}", AdInfoFields(adInfo)];
         DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
     } else {
         entry.pendingImpression = adInfo;
@@ -469,9 +471,10 @@ static const double kIconPollIntervalSec = 0.2;
     // Android/Editor sinks that don't emit this field).
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adLoaded\",\"title\":\"%@\",\"body\":\"%@\","
-        @"\"callToAction\":\"%@\",\"isCtaInteractive\":%@}",
+        @"\"callToAction\":\"%@\",\"isCtaInteractive\":%@%@}",
         EscapeJson(title), EscapeJson(body), EscapeJson(cta),
-        entry.ctaInteractive ? @"true" : @"false"];
+        entry.ctaInteractive ? @"true" : @"false",
+        AdInfoFields(info)];
 
     // png lifetime: scrapeAndDeliver is main-only, so the emit helper calls
     // synchronously here and C# Marshal.Copy's png.bytes to a managed byte[]
@@ -493,7 +496,8 @@ static const double kIconPollIntervalSec = 0.2;
     DaroObjCAdInfo* pending = entry.pendingImpression;
     entry.pendingImpression = nil;
     if (pending) {
-        NSString* impressionJson = @"{\"event\":\"adImpression\"}";
+        NSString* impressionJson = [NSString stringWithFormat:
+            @"{\"event\":\"adImpression\"%@}", AdInfoFields(pending)];
         DaroUnityNativeAdEmitCallback(entry.handleId, impressionJson, NULL, 0);
     }
 }
@@ -706,9 +710,16 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
                 // Revenue callbacks are the remaining path that can
                 // originate off-main, so they intentionally rely on
                 // DaroUnityNativeAdEmitCallback's main-queue marshal.
+                //
+                // 미디에이션 귀속은 싣지 않는다. onPaidEvent 는 DaroObjCAdRevenue
+                // 하나만 받는데(SDK 의 DaroAdRevenue 자체가 그렇다), 네이티브는
+                // didPayRevenue 가 renderAd 중에 동기로 터져 adInfo 를 나르는
+                // 콜백들보다 앞선다 — 위 nativeViewDidRecordImpression 주석에
+                // 실측으로 적혀 있다. 기억해 둔 값을 실으면 직전 사이클의
+                // 네트워크를 새 노출에 적게 된다.
                 NSString* json = [NSString stringWithFormat:
                     @"{\"event\":\"adRevenuePaid\"%@}",
-                    RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)];
+                    RevenueFields(revenue.valueMicros, revenue.currencyCode, revenue.precision)];
                 DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
             };
             nativeView.frame = host.bounds;

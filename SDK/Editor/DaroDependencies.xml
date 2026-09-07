@@ -8,7 +8,7 @@
         1:1 lock rule: one Daro version pins the full sub-network set.
 
         iOS: DaroObjCBridge — 통합 SDK 의 ObjC 표면 래퍼 xcframework.
-             CocoaPods trunk 정식 좌표 2.0.0-rc.5 (임시 `:http =>` /
+             CocoaPods trunk 정식 좌표 2.0.0-rc.6 (임시 `:http =>` /
              `:podspec =>` 배선 없음). Unity shim 이 ObjC++ 라 Swift-only 인
              DaroAds 가 아니라 이 브리지를 문다 — DaroAds 를 같이 선언하면
              중복 설치된다.
@@ -58,10 +58,10 @@
                  Consumer app minSdk 23.
     -->
     <iosPods>
-        <iosPod name="DaroObjCBridge" version="2.0.0-rc.5" />
+        <iosPod name="DaroObjCBridge" version="2.0.0-rc.6" />
     </iosPods>
     <androidPackages>
-        <androidPackage spec="so.daro:daro-sdk:2.0.0-rc.2">
+        <androidPackage spec="so.daro:daro-sdk:2.0.0-rc.3">
             <repositories>
                 <repository>https://artifacts.applovin.com/android</repository>
                 <repository>https://artifact.bytedance.com/repository/pangle</repository>

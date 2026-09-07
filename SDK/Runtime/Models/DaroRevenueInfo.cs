@@ -18,19 +18,17 @@ namespace Daro
 
     /// <summary>
     /// Per-impression revenue payload (ILRD) delivered with
-    /// <c>OnAdRevenuePaid</c>. The value is net revenue — the daro native
-    /// SDK applies the server-provided fee rate before the value crosses
-    /// the bridge; the Unity layer never re-adjusts it.
+    /// <c>OnAdRevenuePaid</c>. The amount comes from the native SDK and the
+    /// Unity layer passes it through unchanged.
     /// </summary>
     /// <remarks>
-    /// <see cref="Value"/> is <c>decimal</c> end-to-end: Android reports
-    /// integer micros (exact ÷ 1,000,000), iOS reports an
-    /// <c>NSDecimalNumber</c> serialized as a decimal string — neither
-    /// path routes the amount through binary floating point.
+    /// <see cref="Value"/> is <c>decimal</c> end-to-end. Both platforms report
+    /// integer micros and the wrapper divides by 1,000,000 — the amount never
+    /// routes through binary floating point.
     /// </remarks>
     public sealed class DaroRevenueInfo
     {
-        /// <summary>Net revenue for this impression, in <see cref="CurrencyCode"/> units.</summary>
+        /// <summary>Revenue for this impression, in <see cref="CurrencyCode"/> units.</summary>
         public decimal Value { get; }
 
         /// <summary>ISO 4217 currency code. MAX mediation always reports <c>"USD"</c>.</summary>
@@ -47,31 +45,12 @@ namespace Daro
         }
 
         /// <summary>
-        /// Build from Android's wire encoding: integer micros (1,000,000
+        /// Build from the native wire encoding: integer micros (1,000,000
         /// micros = 1 currency unit) + AdValue-style precision code.
         /// Unknown precision codes degrade to <see cref="DaroRevenuePrecision.Unknown"/>.
         /// </summary>
         internal static DaroRevenueInfo FromMicros(long valueMicros, string currencyCode, int precisionCode)
             => new DaroRevenueInfo(valueMicros / 1_000_000m, currencyCode, MapPrecision(precisionCode));
-
-        /// <summary>
-        /// Build from iOS's wire encoding: NSDecimalNumber rendered as an
-        /// invariant decimal string. Unparseable strings degrade to 0 —
-        /// a dropped payload must not turn into a dispatch-loop throw.
-        /// </summary>
-        internal static DaroRevenueInfo FromDecimalString(string? value, string currencyCode, int precisionCode)
-        {
-            decimal parsed = 0m;
-            if (value != null)
-            {
-                decimal.TryParse(
-                    value,
-                    System.Globalization.NumberStyles.Number,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out parsed);
-            }
-            return new DaroRevenueInfo(parsed, currencyCode, MapPrecision(precisionCode));
-        }
 
         private static DaroRevenuePrecision MapPrecision(int code)
             => code >= (int)DaroRevenuePrecision.Unknown && code <= (int)DaroRevenuePrecision.Exact

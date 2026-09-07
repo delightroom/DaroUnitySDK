@@ -351,15 +351,32 @@ namespace Daro
 ```csharp
 public sealed class DaroAdInfo
 {
-    public DaroAdFormat AdFormat  { get; }
-    public string       AdUnitId  { get; }
-    public double?      Latency   { get; }   // milliseconds, nullable
+    public DaroAdFormat AdFormat          { get; }
+    public string       AdUnitId          { get; }
+    public double?      Latency           { get; }   // milliseconds, nullable
+    public string?      MediationPlatform { get; }   // "daroa" | "darom" | null
+    public string?      AdNetwork         { get; }   // vendor name as reported, or null
 }
 ```
 
 `Latency` is **always `null` on iOS** — the iOS native layer does not report it,
 so treat any latency-dependent logic as Android-only. Android and the Editor mock
 both supply a value.
+
+`MediationPlatform` names the mediation that served the ad (`"daroa"` or
+`"darom"`, the SDK's public vocabulary, passed through unmapped) and `AdNetwork`
+is the winning network's vendor name as the mediation reported it (not
+normalized). Both are `null` when unknown. Every callback carries the values for
+*that* event's ad — they are not remembered from the load. **Two iOS callbacks
+are the exception and always report `null`**: `OnAdRevenuePaid` on banner and
+native. The iOS revenue callback carries no ad info of its own, and on those two
+formats revenue arrives inside the same load/refresh burst as the info-bearing
+callbacks, with no guaranteed order — reporting a remembered value there would
+attribute a fresh impression to the previous fill. Every other iOS callback,
+including `OnAdRevenuePaid` on interstitial, rewarded, app open and light popup,
+carries the values. **The Editor mock reports `null`** for both. On Android, an app-open ad served from the warm cache reports
+the cached ad's own attribution; it is `null` only if the cache filled before the
+shim could observe any load.
 
 ### DaroAdLoadError
 

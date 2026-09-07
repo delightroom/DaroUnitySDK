@@ -105,8 +105,8 @@ namespace Daro.Internal
         // platform impl 이 Hide 호출 직후 이 slot 에 직접 enqueue.
         Action<string, DaroAdInfo>?                 OnAdHidden       { set; }
 
-        // ILRD — per-impression net (fee-adjusted) revenue from the mediation
-        // layer. Registry-keyed formats only; native ad routes revenue through
+        // ILRD — per-impression revenue from the mediation layer.
+        // Registry-keyed formats only; native ad routes revenue through
         // its INativeAdEventSink instead.
         Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set; }
     }

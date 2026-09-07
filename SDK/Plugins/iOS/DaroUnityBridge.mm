@@ -63,16 +63,32 @@ NSString* EscapeJson(NSString* s) {
 }
 
 // External linkage — used by every shim file's didPayRevenue delegate method.
-// NSDecimalNumber description with nil locale always renders "." as the
-// decimal separator, so the payload stays invariant-culture parseable.
-NSString* RevenueFields(NSDecimalNumber* _Nullable value,
+// Micros cross as an integer, same as Android, so the C# side has one
+// conversion (`FromMicros`) instead of two.
+NSString* RevenueFields(int64_t valueMicros,
                         NSString* _Nullable currencyCode,
                         NSInteger precisionType) {
     return [NSString stringWithFormat:
-        @",\"value\":\"%@\",\"currencyCode\":\"%@\",\"precisionType\":%ld",
-        EscapeJson(value ? [value descriptionWithLocale:nil] : @"0"),
+        @",\"valueMicros\":%lld,\"currencyCode\":\"%@\",\"precisionType\":%ld",
+        (long long)valueMicros,
         EscapeJson(currencyCode.length > 0 ? currencyCode : @"USD"),
         (long)precisionType];
+}
+
+// External linkage — used by every event that carries a DaroObjCAdInfo.
+// Emits only the keys it has; the C# reader treats a missing key as null.
+// Values cross as the SDK produced them — no remapping here.
+NSString* AdInfoFields(DaroObjCAdInfo* _Nullable adInfo) {
+    if (adInfo == nil) return @"";
+    NSMutableString* out = [NSMutableString string];
+    if (adInfo.mediationPlatform.length > 0) {
+        [out appendFormat:@",\"mediationPlatform\":\"%@\"",
+                          EscapeJson(adInfo.mediationPlatform)];
+    }
+    if (adInfo.adNetwork.length > 0) {
+        [out appendFormat:@",\"adNetwork\":\"%@\"", EscapeJson(adInfo.adNetwork)];
+    }
+    return out;
 }
 
 #pragma mark - Ad instance container (sketch CD-4)
@@ -121,15 +137,18 @@ static void EnsureInitialized(void) {
 // Each delegate stores its own adUnitId so failure callbacks (which carry no
 // adInfo) still know which Unity instance to route to.
 
-@interface DaroUnityInterstitialDelegate : NSObject <DaroObjCInterstitialAdDelegate>
+@interface DaroUnityInterstitialDelegate : NSObject <DaroObjCInterstitialAdDelegate, DaroUnityAdInfoHolder>
 @property (nonatomic, copy) NSString* adUnitId;
+@property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
 @end
 
 @implementation DaroUnityInterstitialDelegate
 
 - (void)interstitialAdDidLoad:(DaroObjCInterstitialAd *)ad
                        adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":1}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adLoaded\",\"adFormat\":1%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -143,7 +162,9 @@ static void EnsureInitialized(void) {
 
 - (void)interstitialAdDidShow:(DaroObjCInterstitialAd *)ad
                        adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":1}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adShown\",\"adFormat\":1%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -158,33 +179,42 @@ static void EnsureInitialized(void) {
 
 - (void)interstitialAdDidClick:(DaroObjCInterstitialAd *)ad
                         adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":1}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\",\"adFormat\":1%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)interstitialAdDidRecordImpression:(DaroObjCInterstitialAd *)ad
                                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":1}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adImpression\",\"adFormat\":1%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)interstitialAdDidDismiss:(DaroObjCInterstitialAd *)ad
                           adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":1}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adDismissed\",\"adFormat\":1%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 @end
 
-@interface DaroUnityRewardedDelegate : NSObject <DaroObjCRewardedAdDelegate>
+@interface DaroUnityRewardedDelegate : NSObject <DaroObjCRewardedAdDelegate, DaroUnityAdInfoHolder>
 @property (nonatomic, copy) NSString* adUnitId;
+@property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
 @end
 
 @implementation DaroUnityRewardedDelegate
 
 - (void)rewardedAdDidLoad:(DaroObjCRewardedAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":2}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adLoaded\",\"adFormat\":2%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -198,7 +228,9 @@ static void EnsureInitialized(void) {
 
 - (void)rewardedAdDidShow:(DaroObjCRewardedAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":2}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adShown\",\"adFormat\":2%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -214,41 +246,51 @@ static void EnsureInitialized(void) {
 - (void)rewardedAdDidEarnReward:(DaroObjCRewardedAd *)ad
                          adInfo:(DaroObjCAdInfo * _Nullable)adInfo
                    rewardedItem:(DaroObjCRewardedItem *)item {
+    self.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
-        @"{\"event\":\"earnedReward\",\"adFormat\":2,\"rewardAmount\":%ld,\"rewardType\":\"%@\"}",
-        (long)item.amount, EscapeJson(item.rewardType)];
+        @"{\"event\":\"earnedReward\",\"adFormat\":2,\"rewardAmount\":%ld,\"rewardType\":\"%@\"%@}",
+        (long)item.amount, EscapeJson(item.rewardType), AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidClick:(DaroObjCRewardedAd *)ad
                     adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":2}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\",\"adFormat\":2%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidRecordImpression:(DaroObjCRewardedAd *)ad
                                adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":2}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adImpression\",\"adFormat\":2%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)rewardedAdDidDismiss:(DaroObjCRewardedAd *)ad
                       adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":2}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adDismissed\",\"adFormat\":2%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 @end
 
-@interface DaroUnityAppOpenDelegate : NSObject <DaroObjCAppOpenAdDelegate>
+@interface DaroUnityAppOpenDelegate : NSObject <DaroObjCAppOpenAdDelegate, DaroUnityAdInfoHolder>
 @property (nonatomic, copy) NSString* adUnitId;
+@property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
 @end
 
 @implementation DaroUnityAppOpenDelegate
 
 - (void)appOpenAdDidLoad:(DaroObjCAppOpenAd *)ad
                   adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adLoaded\",\"adFormat\":4}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adLoaded\",\"adFormat\":4%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -262,7 +304,9 @@ static void EnsureInitialized(void) {
 
 - (void)appOpenAdDidShow:(DaroObjCAppOpenAd *)ad
                   adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adShown\",\"adFormat\":4}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adShown\",\"adFormat\":4%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -277,19 +321,25 @@ static void EnsureInitialized(void) {
 
 - (void)appOpenAdDidClick:(DaroObjCAppOpenAd *)ad
                    adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adClicked\",\"adFormat\":4}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\",\"adFormat\":4%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)appOpenAdDidRecordImpression:(DaroObjCAppOpenAd *)ad
                               adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adImpression\",\"adFormat\":4}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adImpression\",\"adFormat\":4%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
 - (void)appOpenAdDidDismiss:(DaroObjCAppOpenAd *)ad
                      adInfo:(DaroObjCAdInfo * _Nullable)adInfo {
-    NSString* json = @"{\"event\":\"adDismissed\",\"adFormat\":4}";
+    self.lastAdInfo = adInfo;
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adDismissed\",\"adFormat\":4%@}", AdInfoFields(adInfo)];
     DaroDispatch(self.adUnitId, json);
 }
 
@@ -311,16 +361,24 @@ void DaroUnity_SetCallback(DaroUnityCallbackFn callback) {
 // shim files) to attach the per-instance revenue callback. Native is
 // handle-routed and attaches its own block (DaroUnityNativeAd.mm).
 //
-// 통합 SDK 는 광고를 만드는 시점에 스스로 훅을 걸고 소비자에겐 net 값만
-// 내린다 — 능력을 증명해 훅을 얻던 절차가 없어져 토큰 유도도 사라졌다.
-// 콜백이 받는 것은 DaroObjCAdRevenue 하나뿐이다.
-void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat) {
+// 통합 SDK 는 광고를 만드는 시점에 스스로 훅을 건다 — 능력을 증명해 훅을 얻던
+// 절차가 없어져 토큰 유도도 사라졌다. 콜백이 받는 것은 DaroObjCAdRevenue
+// 하나뿐이라 미디에이션 귀속은 `holder` 가 댄다.
+//
+// holder 는 약참조다. 광고가 블록을 들고 블록이 델리게이트를 들면, 델리게이트를
+// 붙잡고 있는 엔트리와 함께 순환이 된다.
+void DaroUnityWireRevenue(id ad,
+                          id<DaroUnityAdInfoHolder> holder,
+                          NSString* adUnitId,
+                          NSInteger adFormat) {
     if (!ad) return;
+    __weak id<DaroUnityAdInfoHolder> weakHolder = holder;
     [ad setOnPaidEvent:^(DaroObjCAdRevenue* revenue) {
         DaroDispatch(adUnitId, [NSString stringWithFormat:
-            @"{\"event\":\"adRevenuePaid\",\"adFormat\":%ld%@}",
+            @"{\"event\":\"adRevenuePaid\",\"adFormat\":%ld%@%@}",
             (long)adFormat,
-            RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)]);
+            RevenueFields(revenue.valueMicros, revenue.currencyCode, revenue.precision),
+            AdInfoFields(weakHolder.lastAdInfo)]);
     }];
 }
 
@@ -400,7 +458,7 @@ void DaroUnity_CreateInterstitial(const char* adUnitId) {
         delegate.adUnitId = unit;
         DaroObjCInterstitialAd* ad = [[DaroObjCInterstitialAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
-        DaroUnityWireRevenue(ad, unit, 1);
+        DaroUnityWireRevenue(ad, delegate, unit, 1);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;
@@ -463,7 +521,7 @@ void DaroUnity_CreateRewarded(const char* adUnitId) {
         delegate.adUnitId = unit;
         DaroObjCRewardedAd* ad = [[DaroObjCRewardedAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
-        DaroUnityWireRevenue(ad, unit, 2);
+        DaroUnityWireRevenue(ad, delegate, unit, 2);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;
@@ -536,7 +594,7 @@ void DaroUnity_CreateAppOpen(const char* adUnitId) {
         delegate.adUnitId = unit;
         DaroObjCAppOpenAd* ad = [[DaroObjCAppOpenAd alloc] initWithAdUnitId:unit];
         ad.delegate = delegate;
-        DaroUnityWireRevenue(ad, unit, 4);
+        DaroUnityWireRevenue(ad, delegate, unit, 4);
 
         DaroUnityAdEntry* entry = [DaroUnityAdEntry new];
         entry.ad = ad;

@@ -29,6 +29,10 @@
 #import "DaroUnityBridgeInternal.h"
 #import "DaroUnityLog.h"
 
+#pragma mark - Forward declarations
+
+@class DaroUnityBannerDelegate;
+
 #pragma mark - DaroUnityBannerEntry
 
 // Strong refs to keep the banner view + delegate alive (delegate is `weak` on
@@ -36,7 +40,7 @@
 // can recompute the frame without re-querying the view's instance state.
 @interface DaroUnityBannerEntry : NSObject
 @property (nonatomic, strong, nullable) DaroObjCBannerView* bannerView;
-@property (nonatomic, strong, nullable) id<DaroObjCBannerViewDelegate> delegate;
+@property (nonatomic, strong, nullable) DaroUnityBannerDelegate* delegate;
 @property (nonatomic, assign) int positionOrdinal;   // 0..5 = DaroBannerPosition
 @property (nonatomic, assign) int sizeOrdinal;       // 0=Standard, 1=Mrec
 @property (nonatomic, assign) BOOL visible;          // Load/Show requested + not yet Hidden — gates GetScreenRect
@@ -78,13 +82,18 @@ static void DaroUnityWireBannerRevenue(DaroObjCBannerView* view,
                                        NSString* unit) {
     if (!view || !unit) return;
 
+    // 수익 이벤트에는 미디에이션 귀속을 싣지 않는다. `onPaidEvent` 는
+    // DaroObjCAdRevenue 하나만 받고(SDK 의 DaroAdRevenue 자체가 그렇다), 배너 수익은
+    // 로드/리프레시 버스트 안에서 터져 그 안의 콜백 순서가 보장되지 않는다. 델리게이트가
+    // 기억해 둔 값을 대신 실으면 새 노출을 직전 낙찰 네트워크로 적을 수 있다.
+    // 나머지 배너 이벤트는 각자 받은 adInfo 를 그대로 싣는다.
     __weak DaroObjCBannerView* weakView = view;
     view.onPaidEvent = ^(DaroObjCAdRevenue* revenue) {
         DaroObjCBannerView* strongView = weakView;
         if (!strongView || !BannerIsCurrent(unit, strongView, YES)) return;
         DaroDispatch(unit, [NSString stringWithFormat:
             @"{\"event\":\"adRevenuePaid\",\"adFormat\":0%@}",
-            RevenueFields(revenue.value, revenue.currencyCode, revenue.precision)]);
+            RevenueFields(revenue.valueMicros, revenue.currencyCode, revenue.precision)]);
     };
 }
 
@@ -125,6 +134,9 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 // native detach completes and routed through DaroIOSPlatform.
 @interface DaroUnityBannerDelegate : NSObject <DaroObjCBannerViewDelegate>
 @property (nonatomic, copy) NSString* adUnitId;
+// 마지막으로 받은 adInfo. Hide 가 만드는 합성 adHidden 이벤트에는 딸려오는 adInfo 가
+// 없어서 이 자리 말고는 그 이벤트에 미디에이션 귀속을 실을 방법이 없다.
+@property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
 @end
 
 @implementation DaroUnityBannerDelegate
@@ -133,8 +145,9 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
                    adInfo:(DaroObjCAdInfo*)adInfo {
     if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
     DaroLogD(@"Banner", @"didLoad adUnit='%@'", self.adUnitId);
-    DaroDispatch(self.adUnitId,
-        @"{\"event\":\"adLoaded\",\"adFormat\":0}");
+    self.lastAdInfo = adInfo;
+    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+        @"{\"event\":\"adLoaded\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
 - (void)bannerView:(DaroObjCBannerView*)bannerView
@@ -164,16 +177,18 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
                     adInfo:(DaroObjCAdInfo*)adInfo {
     if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didClick adUnit='%@'", self.adUnitId);
-    DaroDispatch(self.adUnitId,
-        @"{\"event\":\"adClicked\",\"adFormat\":0}");
+    self.lastAdInfo = adInfo;
+    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+        @"{\"event\":\"adClicked\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
 - (void)bannerViewDidRecordImpression:(DaroObjCBannerView*)bannerView
                                adInfo:(DaroObjCAdInfo*)adInfo {
     if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
     DaroLogD(@"Banner", @"didRecordImpression adUnit='%@'", self.adUnitId);
-    DaroDispatch(self.adUnitId,
-        @"{\"event\":\"adImpression\",\"adFormat\":0}");
+    self.lastAdInfo = adInfo;
+    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+        @"{\"event\":\"adImpression\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
 @end
@@ -343,12 +358,16 @@ void DaroUnity_HideBanner(const char* adUnitId) {
             [view removeFromSuperview];
             DaroLogD(@"Banner", @"Hide.detached adUnit='%@'", unit);
             __block BOOL shouldDispatchHidden = NO;
+            __block DaroObjCAdInfo* hiddenAdInfo = nil;
             dispatch_sync(s_adQueue, ^{
                 DaroUnityBannerEntry* latest = s_banners[unit];
                 shouldDispatchHidden = (latest && latest.bannerView == view && !latest.visible);
+                if (shouldDispatchHidden) hiddenAdInfo = latest.delegate.lastAdInfo;
             });
             if (shouldDispatchHidden) {
-                DaroDispatch(unit, @"{\"event\":\"adHidden\",\"adFormat\":0}");
+                DaroDispatch(unit, [NSString stringWithFormat:
+                    @"{\"event\":\"adHidden\",\"adFormat\":0%@}",
+                    AdInfoFields(hiddenAdInfo)]);
             }
         });
     });

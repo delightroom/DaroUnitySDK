@@ -1,6 +1,6 @@
 {
   "name": "so.daro.unity",
-  "version": "0.5.0-rc.2",
+  "version": "0.5.0-rc.3",
   "displayName": "Daro Unity SDK",
   "description": "Daro ad mediation adapter for Unity (MAX variant). Supports Android and iOS.",
   "unity": "2021.3",

@@ -16,6 +16,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class DaroObjCAdInfo;
+
 // Serial queue gating all per-format ad dictionaries (s_interstitials,
 // s_rewarded, s_appOpen, and the banner-side s_banners). Defined in
 // DaroUnityBridge.mm; created inside its EnsureInitialized().
@@ -50,13 +52,30 @@ extern void DaroDispatch(NSString* _Nullable adUnitId, NSString* eventJson);
 // (",", "\\", "\n", "\t", "\r", control chars). Defined in DaroUnityBridge.mm.
 extern NSString* EscapeJson(NSString* _Nullable s);
 
-// `,"value":"<decimal>","currencyCode":"USD","precisionType":N` JSON fragment
-// for adRevenuePaid events (ILRD sprint). `value` crosses as a decimal string
-// (NSDecimalNumber → invariant "." description) so the C# side parses to
-// `decimal` without binary floating-point loss. Defined in DaroUnityBridge.mm.
-extern NSString* RevenueFields(NSDecimalNumber* _Nullable value,
+// `,"valueMicros":N,"currencyCode":"USD","precisionType":N` JSON fragment for
+// adRevenuePaid events. Micros cross as an integer — Android does the same, so
+// the C# side has one conversion (`FromMicros`) instead of two.
+// Defined in DaroUnityBridge.mm.
+extern NSString* RevenueFields(int64_t valueMicros,
                                NSString* _Nullable currencyCode,
                                NSInteger precisionType);
+
+// `,"mediationPlatform":"daroa","adNetwork":"AdMob Network"` JSON fragment.
+// Emits only the keys it has — the C# reader treats a missing key as null.
+// Defined in DaroUnityBridge.mm.
+extern NSString* AdInfoFields(DaroObjCAdInfo* _Nullable adInfo);
+
+// 마지막으로 받은 `DaroObjCAdInfo` 를 들고 있는 객체.
+//
+// 수익 콜백(`onPaidEvent`)은 `DaroObjCAdRevenue` 하나만 받는다 — 그 자리에 미디에이션
+// 귀속이 없다. 그래서 이벤트를 받는 델리게이트(또는 엔트리)가 대신 기억해 두고 수익
+// 배선이 그것을 읽는다. Android shim 도 같은 이유로 표시 시점 값을 들고 있다.
+//
+// 프로토콜이 property 를 선언해도 auto-synthesize 는 안 되므로, 채택하는 클래스가
+// 자기 @interface 에 같은 property 를 다시 적는다.
+@protocol DaroUnityAdInfoHolder <NSObject>
+@property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
+@end
 
 // Provided by Unity's UnityFramework at link time.
 extern UIViewController* UnityGetGLViewController(void);
@@ -84,9 +103,15 @@ extern "C" {
 #endif
 
 // Attaches the per-instance revenue callback on a unit-routed ad (interstitial /
-// rewarded / appOpen / banner / lightPopup); adFormat is the wire format code.
-// Native is handle-routed and attaches its own block. Defined in DaroUnityBridge.mm.
-void DaroUnityWireRevenue(id ad, NSString* adUnitId, NSInteger adFormat);
+// rewarded / appOpen / lightPopup); adFormat is the wire format code. `holder`
+// supplies the ad info the revenue callback itself does not carry, and is held
+// weakly. Banner and native attach their own blocks — both need a
+// current-instance guard this helper has no way to express.
+// Defined in DaroUnityBridge.mm.
+void DaroUnityWireRevenue(id ad,
+                          id<DaroUnityAdInfoHolder> _Nullable holder,
+                          NSString* adUnitId,
+                          NSInteger adFormat);
 
 void DaroUnityNativeAd_DestroyAll(void);
 void DaroUnityBanner_DestroyAll(void);

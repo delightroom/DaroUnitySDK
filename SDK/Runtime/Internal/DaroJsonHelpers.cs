@@ -73,6 +73,22 @@ namespace Daro.Internal
         }
 
         /// <summary>
+        /// Extract a 64-bit integer value. Returns <paramref name="defaultValue"/>
+        /// if the key is missing, the value is <c>null</c>, or the value is not
+        /// parseable as <see cref="long"/>. Revenue micros need the full range —
+        /// 1,000,000 micros to the currency unit puts a KRW payload past
+        /// <see cref="int"/> at a few thousand won.
+        /// </summary>
+        internal static long GetJsonLong(string json, string key, long defaultValue = 0)
+        {
+            var raw = ReadRawNumber(json, key);
+            if (raw == null) return defaultValue;
+            return long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+                ? v
+                : defaultValue;
+        }
+
+        /// <summary>
         /// Extract a nullable double value. Returns <c>null</c> if the key is
         /// missing, the value is the JSON <c>null</c> literal, or the value
         /// is not parseable as <see cref="double"/>.

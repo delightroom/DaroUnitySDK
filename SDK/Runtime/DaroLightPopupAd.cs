@@ -35,10 +35,9 @@ namespace Daro
         public event Action<DaroAdInfo>?         OnAdDismissed;
 
         /// <summary>
-        /// Fires once per paid impression with the net (fee-adjusted) revenue
-        /// reported by the mediation layer (ILRD). May lag
-        /// <see cref="OnAdImpression"/> by a beat; not every impression is
-        /// guaranteed a revenue report.
+        /// Fires once per paid impression with the revenue reported by the
+        /// mediation layer (ILRD). May lag <see cref="OnAdImpression"/> by a
+        /// beat; not every impression is guaranteed a revenue report.
         /// </summary>
         public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
 
