@@ -205,7 +205,7 @@ namespace Daro
         // --- properties ---
         public string            AdUnitId  { get; }
         public Vector2Int        IconSize  { get; set; }     // default (200, 200); set BEFORE Load
-        public DaroNativeAdInfo? Info      { get; }          // null until OnAdLoaded; cleared on failed reload + Dispose
+        public DaroNativeAdInfo? Info      { get; }          // set before OnNativeAdAssetLoaded; cleared on failed reload + Dispose
         public bool              IsReady   { get; }          // property (not method) — false after Dispose
 
         // --- methods ---
@@ -215,7 +215,7 @@ namespace Daro
         public void NotifyClicked();         // trigger SDK click chain; no-op after Dispose
         public void Dispose();               // idempotent; destroys Info.Icon / Info.MediaImage Texture2Ds
 
-        // --- events (4, all main-thread; no Show/Dismissed/FailedToShow/Expired) ---
+        public event Action<ISet<NativeAdAssetType>> OnNativeAdAssetLoaded;
         public event Action<DaroAdInfo>      OnAdLoaded;
         public event Action<DaroAdLoadError> OnAdFailedToLoad;
         public event Action<DaroAdInfo>      OnAdImpression;
@@ -226,13 +226,18 @@ namespace Daro
 
 > **Multi-instance**: same `adUnitId` on N instances yields N independent native ads. Natural fit for feed / list UIs.
 
+`OnNativeAdAssetLoaded` fires once on the Unity main thread before `OnAdLoaded`, after `Info` and `IsReady` are set. Its set reports native SDK receipt, independent of publisher slot registration. `Info.AssetTypes` reuses an immutable snapshot, so reading the property and calling `Contains` do not allocate. Mutating that snapshot throws `NotSupportedException`; use `new HashSet<NativeAdAssetType>(info.AssetTypes)` when an editable copy is needed. Every event subscriber receives a separate mutable set; changing it cannot affect other subscribers or the SDK. Duplicate types are removed and enumeration order is unspecified.
+
+`NativeAdAssetType` values: `Title`, `Body`, `Icon`, `Media`, `CallToAction`, `Advertiser`. `Advertiser` is reported by iOS only. `Media` does not imply `Info.MediaImage` is available: this Unity bridge does not transfer native media textures or video. An icon may likewise be received natively before its Unity texture is ready.
+
 ### DaroNativeAdInfo
 
-Asset payload. All fields nullable — not every ad has every asset. Texture2D fields are owned by the `DaroNativeAd` instance.
+Asset payload. Text and texture fields are nullable — not every ad has every asset. Texture2D fields are owned by the `DaroNativeAd` instance.
 
 ```csharp
 public sealed class DaroNativeAdInfo
 {
+    public ISet<NativeAdAssetType> AssetTypes { get; }
     public string?    Title        { get; }
     public string?    Body         { get; }
     public string?    CallToAction { get; }
@@ -489,5 +494,3 @@ public enum DaroAdDisplayErrorCode
 - **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
 - **Native textures are owned by the instance**: `Info.Icon` / `Info.MediaImage` are destroyed by `Dispose()`. Do not retain past disposal.
 - **LightPopup options are baked at construct time**: post-construct mutations of `DaroLightPopupAdOptions` are not propagated. Dispose + reconstruct to change colors.
-
-<!-- source: SDK/Runtime/DaroSdk.cs, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/DaroRewardedAd.cs, SDK/Runtime/DaroAppOpenAd.cs, SDK/Runtime/DaroBannerAd.cs, SDK/Runtime/DaroBannerSize.cs, SDK/Runtime/DaroBannerPosition.cs, SDK/Runtime/DaroNativeAd.cs, SDK/Runtime/DaroNativeAdView.cs, SDK/Runtime/DaroNativeAdInfo.cs, SDK/Runtime/DaroLightPopupAd.cs, SDK/Runtime/DaroLightPopupAdOptions.cs, SDK/Runtime/DaroAppStateNotifier.cs, SDK/Runtime/Models/{DaroAdInfo,DaroAdLoadError,DaroAdDisplayError,DaroAdLoadErrorCode,DaroAdDisplayErrorCode,DaroLogLevel,DaroAdFormat,DaroRewardItem}.cs, SDK/Runtime/AssemblyInfo.cs, docs/features/native-bridge.md -->

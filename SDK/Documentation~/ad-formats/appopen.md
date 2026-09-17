@@ -106,7 +106,7 @@ private IEnumerator PollReady()
 }
 ```
 
-See `Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs` `PollAppOpenReady` for a sample status-label poll. iOS is unaffected by the Android cache manager behavior.
+Poll `IsReady` periodically if your UI displays ad readiness. iOS is unaffected by the Android cache manager behavior.
 
 ## ⚠ Do not call `Load()` from `OnAdDismissed`
 
@@ -146,5 +146,3 @@ Response: check `err.Code == DaroAdDisplayErrorCode.FullscreenAdAlreadyShowing` 
 | Subscribing to `OnAppStateChanged` late (after Start) | first background→foreground missed |
 | Forgetting to unsubscribe in `OnDisable` | dangling subscription after scene reload |
 | Showing on cold-start | negative UX |
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (CreateAppOpen 528-579, OnAppStateChanged 383-403, PollAppOpenReady 493-511, OnShowFailed 587-593), SDK/Runtime/DaroAppOpenAd.cs, SDK/Runtime/DaroAppStateNotifier.cs, docs/features/native-bridge.md (AppOpen race follow-up tracker) -->

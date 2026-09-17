@@ -50,8 +50,8 @@ void DaroUnityLogSetLevel(int level);
 
 // 5→3 collapse: maps raw `Daro.DaroLogLevel` (0..4) to the daro iOS
 // internal `DaroObjCLogLevel` raw value (0=off / 1=error / 2=debug). The
-// daro iOS Bridge has no distinct warning level so Warn raises with errors;
-// Verbose has no distinct level so collapses to debug. Returns int (not
+// daro iOS Bridge has no distinct warning or info level, so Warn/Info allow
+// errors only; Verbose enables debug. Returns int (not
 // `DaroObjCLogLevel`) to avoid leaking the daro iOS type into this header.
 int DaroUnityCollapseToObjCLogLevel(int level);
 

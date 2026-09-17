@@ -66,7 +66,7 @@ namespace Daro.Editor
             Run(DaroSettingsLocator.FindOrNull(), path);
         }
 
-        // testable seam — see plan D10-H. Tests build a fake gradle tree under
+        // testable seam. Tests build a fake gradle tree under
         // a temp dir and invoke this directly.
         //
         // **Path semantics**: Unity passes the *unityLibrary* subdirectory to

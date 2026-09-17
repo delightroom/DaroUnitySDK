@@ -1,6 +1,6 @@
 # Daro Unity SDK — Integration Knowledge Base
 
-Read this first when integrating the Daro Unity SDK into a game project. Every code sample in this KB is distilled from the actual sample at `Samples/DaroExample/` — no invented signatures.
+Read this first when integrating the Daro Unity SDK into a game project. Use the API reference and format-specific examples below to integrate the SDK.
 
 ## Where to start
 
@@ -35,5 +35,3 @@ Read this first when integrating the Daro Unity SDK into a game project. Every c
 4. **`IDisposable`**: every ad instance (`DaroInterstitialAd` / `DaroRewardedAd` / `DaroAppOpenAd` / `DaroBannerAd` / `DaroNativeAd` / `DaroLightPopupAd`) implements `IDisposable`. Call `Dispose()` and null the field in `OnDisable` / `OnDestroy`.
 5. **Guard `Show()` with `IsReady()`** (or at minimum a null check on the instance). Showing before loading raises `InvalidOperationException` or surfaces `OnAdFailedToShow`.
 6. **AppOpen is the exception to manual `Show()`**: subscribe to `DaroAppStateNotifier.OnAppStateChanged` and `Show()` on the Foreground transition rather than wiring it to a user-facing button.
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (Interstitial 427-438, Rewarded 462-474, AppOpen 528-579, Banner 603-663, LightPopup 665-730), Samples/DaroExample/Assets/Scripts/Runtime/NativeAdTests/NativeAdManualTest.cs, SDK/Runtime/DaroSdk.cs, SDK/Runtime/Daro*Ad.cs, docs/features/native-bridge.md -->

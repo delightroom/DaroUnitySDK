@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// App Open ad instance. See docs/overview.md for the public API contract.
+    /// App Open ad instance.
     /// Identical event set to <see cref="DaroInterstitialAd"/>; no reward event.
     /// Typical use: show on foreground return via
     /// <see cref="DaroAppStateNotifier.OnAppStateChanged"/>.
@@ -61,7 +61,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Start loading an ad. §2.4 dedupe: no-op if already loading.
+        /// Start loading an ad. dedupe: no-op if already loading.
         /// </summary>
         /// <exception cref="ObjectDisposedException">
         /// Thrown when the instance has been disposed.
@@ -81,7 +81,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Query whether a previously loaded ad is ready. Never throws (§4.1).
+        /// Query whether a previously loaded ad is ready. Never throws.
         /// Returns <c>false</c> on a disposed instance.
         /// </summary>
         public bool IsReady()
@@ -97,7 +97,7 @@ namespace Daro
         /// Thrown when the instance has been disposed.
         /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when <see cref="IsReady"/> is <c>false</c> (§4.1).
+        /// Thrown when <see cref="IsReady"/> is <c>false</c>.
         /// </exception>
         public void Show()
         {
@@ -113,7 +113,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Idempotent dispose (§4.3). Never throws.
+        /// Idempotent dispose. Never throws.
         /// </summary>
         public void Dispose()
         {

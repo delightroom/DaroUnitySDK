@@ -9,21 +9,20 @@ namespace Daro.Internal
 {
     /// <summary>
     /// In-Editor mock implementation of <see cref="IDaroPlatform"/> backed by
-    /// <see cref="DaroEditorSettings"/>. See docs/features/native-bridge.md.
+    /// <see cref="DaroEditorSettings"/>.
     /// </summary>
     /// <remarks>
     /// <para>Simulates native callback latency via coroutines launched on the hidden
     /// <see cref="MainThreadDispatcher"/> GameObject. Events fire through
     /// <see cref="MainThreadDispatcher.Enqueue(Action)"/> — even though coroutines run
-    /// on the main thread — so reentrancy semantics match the native shim flow
-    /// (§6.6).</para>
+    /// on the main thread — so reentrancy semantics match the native shim flow.</para>
     ///
     /// <para>Error-code surfacing: <see cref="DaroEditorSettings.loadErrorCode"/> and
-    /// <c>showErrorCode</c> are raw <see cref="int"/> (§5 rationale) and pass through
+    /// <c>showErrorCode</c> are raw <see cref="int"/> and pass through
     /// <see cref="DaroAdErrorCodeMapper"/> exactly as native codes would, letting testers
     /// verify the <c>Unspecified</c> fallback end-to-end.</para>
     ///
-    /// <para>Dispose-race defense (§4.4): every coroutine step re-checks the per-unit
+    /// <para>Dispose-race defense: every coroutine step re-checks the per-unit
     /// <c>_destroyed</c> flag before enqueuing an event closure, and the enqueued closure
     /// re-checks once more at drain time. Destroy cancels any in-flight coroutine for the
     /// unit and drops it from the registry.</para>
@@ -53,7 +52,7 @@ namespace Daro.Internal
         /// <summary>
         /// Production constructor: resolves <see cref="DaroEditorSettings"/> from
         /// <c>Resources/DaroEditorSettings.asset</c>, falling back to an in-memory
-        /// instance with §5 defaults if no asset is present.
+        /// instance with defaults if no asset is present.
         /// </summary>
         internal DaroEditorPlatform()
             : this(LoadOrDefaultSettings())
@@ -79,7 +78,7 @@ namespace Daro.Internal
 
             DaroLog.Warn("Editor",
                 "No DaroEditorSettings asset found under Resources/DaroEditorSettings — " +
-                "Editor mock is using built-in defaults (§5). " +
+                "Editor mock is using built-in defaults. " +
                 "Create one via Assets > Create > Daro > Editor Settings to tune mock behavior.");
             return ScriptableObject.CreateInstance<DaroEditorSettings>();
         }
@@ -125,9 +124,13 @@ namespace Daro.Internal
             DaroLog.Verbose("Editor", $"Platform[Editor].SetUserId userId='{userId}' (mock no-op)");
         }
 
+        internal bool? LastSetAppMuted { get; private set; }
+        internal int SetAppMutedCallCount { get; private set; }
         public void SetAppMuted(bool muted)
         {
             DaroLog.Verbose("Editor", $"Platform[Editor].SetAppMuted muted={muted} (mock no-op)");
+            LastSetAppMuted = muted;
+            SetAppMutedCallCount++;
         }
 
         // SetLogLevel: no visible side effect (Editor Console is driven by the
@@ -262,7 +265,7 @@ namespace Daro.Internal
                 _settings.revenueCurrencyCode ?? "USD",
                 _settings.revenuePrecisionType);
 
-        // ── Banner mock impl (sketch §5.2) ──────────────────────────────────
+        // ── Banner mock impl ──────────────────────────────────
         // LoadBanner reuses LoadUnit's coroutine — same deterministic /
         // always-fail policy as fullscreen formats. On successful banner load,
         // the mock overlay is visible by default. ShowBanner / HideBanner are
@@ -419,7 +422,7 @@ namespace Daro.Internal
         // Pure coroutine simulation — no UI. Lifecycle accuracy over visual
         // approximation: Light Popup is fullscreen modal on device, Editor mock
         // just exercises Load/Show/Dismiss timing via _settings.adDurationSeconds.
-        // Color options silently ignored (sketch decision — visual fidelity not
+        // Color options silently ignored (visual fidelity not
         // worth IMGUI cost when format is fullscreen modal).
 
         public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
@@ -451,7 +454,7 @@ namespace Daro.Internal
         // ── Unit state ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Per-ad-unit mock state. <c>_destroyed</c> is the dispose-race guard (§4.4);
+        /// Per-ad-unit mock state. <c>_destroyed</c> is the dispose-race guard;
         /// every coroutine step checks it before enqueuing an event.
         /// </summary>
         private sealed class PerUnitState
@@ -462,7 +465,7 @@ namespace Daro.Internal
             public bool                 Showing;
             public volatile bool        Destroyed;
 
-            // Banner-only fields (sketch §5.1) — ignored for fullscreen formats.
+            // Banner-only fields — ignored for fullscreen formats.
             public bool                 Visible;
             public bool                 BannerDisplayed;
             public int                  LoadGeneration;
@@ -478,7 +481,7 @@ namespace Daro.Internal
 
         private void CreateUnit(string adUnitId, DaroAdFormat format)
         {
-            // Duplicate-construction-replaces rule (§2.4): destroy existing first.
+            // Duplicate-construction-replaces rule: destroy existing first.
             if (_units.TryGetValue(adUnitId, out var existing))
             {
                 existing.Destroyed = true;
@@ -528,7 +531,7 @@ namespace Daro.Internal
             {
                 state.Loaded = true;
 
-                // §5 latency semantics: -1 → null, positive → millis as-is
+                // latency semantics: -1 → null, positive → millis as-is
                 // (matching Daro cross-platform contract).
                 double? latency = latencyMs < 0 ? (double?)null : latencyMs;
                 var info = new DaroAdInfo(state.Format, state.AdUnitId, latency);
@@ -689,9 +692,9 @@ namespace Daro.Internal
 
         private static DaroAdInfo BuildShownInfo(PerUnitState state)
         {
-            // Post-load AdInfo has no fresh latency attached (§5: latency is a load-phase
-            // metric); surface null to stay aligned with native behavior which does not
-            // re-report latency on show/dismiss.
+            // Latency is a load-phase metric. Post-load AdInfo surfaces null
+            // to match native behavior, which does not re-report latency
+            // on show/dismiss.
             return new DaroAdInfo(state.Format, state.AdUnitId, latency: null);
         }
 
@@ -718,10 +721,10 @@ namespace Daro.Internal
             MainThreadDispatcher.RunCoroutine(coroutine);
         }
 
-        // ── Native ad (CD-8 instance-owned) ──────────────────────────────
+        // ── Native ad (instance-owned) ──────────────────────────────
         // Each DaroNativeAd gets its own DaroEditorNativeAdHandle (per-instance
         // coroutine + per-instance mock asset). Multi-instance: N handles with
-        // same adUnitId run independently. See sketch-native-ad-android.md §7.
+        // same adUnitId run independently.
         internal DaroEditorNativeAdHandle? LastNativeAdHandle { get; private set; }
 
         public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)

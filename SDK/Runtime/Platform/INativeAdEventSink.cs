@@ -17,7 +17,8 @@ namespace Daro.Internal
     internal interface INativeAdEventSink
     {
         void OnAdLoaded(DaroAdInfo adInfo, DaroNativeAdInfo nativeInfo);
-        void OnAdFailedToLoad(DaroAdLoadError error);
+        // Only platforms that retain the rendered ad after refresh failure opt in.
+        void OnAdFailedToLoad(DaroAdLoadError error, bool keepsCurrentAd = false);
         void OnAdImpression(DaroAdInfo adInfo);
         void OnAdClicked(DaroAdInfo adInfo);
 

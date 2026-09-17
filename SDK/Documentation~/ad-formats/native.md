@@ -8,6 +8,24 @@ Two integration paths:
 
 Native is the only format with **multi-instance** support: N independent `DaroNativeAd` instances sharing the same `adUnitId` is a normal pattern for list / feed UIs.
 
+## Asset availability
+
+Subscribe before `Load()` to receive the native SDK's available asset types. The callback runs before `OnAdLoaded`, with `Info` already available. On each refresh, set both the absent and present states so hidden slots can reappear.
+
+```csharp
+_ad.OnNativeAdAssetLoaded += assetTypes =>
+{
+    _view.TitleText.gameObject.SetActive(assetTypes.Contains(NativeAdAssetType.Title));
+    _view.BodyText.gameObject.SetActive(assetTypes.Contains(NativeAdAssetType.Body));
+    _view.IconImage.gameObject.SetActive(assetTypes.Contains(NativeAdAssetType.Icon));
+    _view.CtaButton.gameObject.SetActive(assetTypes.Contains(NativeAdAssetType.CallToAction));
+};
+```
+
+This example assumes those four slots are assigned. `Media` reports receipt in the native SDK; the Unity bridge currently leaves `MediaImage` null, so it cannot render the native media using this signal alone. `Advertiser` can be reported on iOS, but this bridge has no advertiser text slot. Use `Info.Icon` separately when a Unity texture is required. Missing assets do not trigger automatic ad retries.
+
+The Android wrapper and iOS ObjC bridge must be built with native SDKs containing the asset callback. Older pinned native artifacts do not provide this contract.
+
 ## Minimal integration (slot path)
 
 ### Scene setup
@@ -65,7 +83,7 @@ public sealed class NativeAdHost : MonoBehaviour
 The slot path takes care of three things automatically:
 - **Size hint propagation** — `LoadFor(ad)` reads the IconImage's RectTransform pixel size into `ad.IconSize` before calling `Load()`.
 - **Visibility notifications** — `Bind()` on an active `DaroNativeAdView` calls `ad.NotifyVisible()`; later `OnEnable` / `OnDisable` calls `ad.NotifyVisible()` / `ad.NotifyHidden()` for you.
-- **Click wiring** — `Bind(ad)` adds a listener to `CtaButton.onClick` that calls `ad.NotifyClicked()`.
+- **CTA wiring** — `Bind(ad)` tracks the CTA Button's screen rectangle and visibility. On iOS, the native overlay receives the real touch; Android and Editor use `CtaButton.onClick` → `ad.NotifyClicked()`.
 
 ## Raw path
 
@@ -85,7 +103,8 @@ _ctaText.text          = info.CallToAction ?? string.Empty;
 _iconWidget.SetTexture(info.Icon);
 // info.MediaImage is always null on Android v1.
 
-_ctaButton.onClick.AddListener(() => _ad.NotifyClicked());
+_ad.WireCtaButton(_ctaButton); // tracks geometry and hides the iOS overlay with the UI
+_ctaButton.onClick.AddListener(() => _ad.NotifyClicked()); // Android / Editor click path
 ```
 
 You also own the visibility lifecycle:
@@ -96,7 +115,9 @@ _ad.NotifyVisible();
 _ad.NotifyHidden();
 ```
 
-If you forget `NotifyVisible()`, the mediation layer will not count an impression. If you forget `NotifyClicked()`, the click chain breaks — the user taps your CTA button but nothing further happens.
+On iOS, `NotifyVisible()` requests native presentation after load success and valid CTA geometry. `NotifyHidden()` hides the native subtree and disables touch. `NotifyClicked()` forwards Unity button clicks on Android and Editor; the iOS native overlay receives touches directly.
+
+When removing or replacing the raw UI, call `UnwireCta()` and remove your `onClick` listener. If you manage geometry directly with `SetCtaScreenRect`, call `ClearCtaScreenRect()` on teardown and resend the rectangle when your layout or screen size changes. `touchEnabled: false` disables interaction; use `NotifyHidden()` or `ClearCtaScreenRect()` to hide native UI.
 
 Also set the icon size hint before `Load()`:
 ```csharp
@@ -161,7 +182,11 @@ Each `DaroNativeAd` instance attaches a 200×200 transparent host `FrameLayout` 
 
 ### iOS
 
-Each instance attaches a 1×1 transparent host to `UnityGetGLViewController().view`. The same scaffolding role as on Android. `OnAdImpression` fires at the mediation revenue moment, independent of actual viewability — treat it as a billing/accounting event, not a "user saw it" signal.
+Each instance attaches an initially hidden host to `UnityGetGLViewController().view`. The host becomes visible only when the ad is loaded, `NotifyVisible()` has been called, and a valid CTA screen rectangle intersects the screen. `Load()` alone leaves all native children hidden. Disabling CTA interaction keeps the native UI visible while closing its touch gate.
+
+The CTA helper clears geometry when the slot or CTA GameObject is inactive, its Canvas is disabled, or its inherited CanvasGroup visibility is fully transparent. It resends geometry when visible again. `Unbind()` / `UnwireCta()` hide the native subtree by clearing geometry; `Dispose()` removes it. Rebinding the same ad restores it with fresh geometry. The host stays attached while hidden, retaining the existing native refresh behavior.
+
+`OnAdImpression` fires at the mediation revenue moment, independent of actual viewability — treat it as a billing/accounting event, not a "user saw it" signal.
 
 In no-fill environments, iOS daro retries up to ~10 times with exponential backoff (~2-minute window), so you may see up to 11 `OnAdFailedToLoad` events from a single `Load()` call. This is a mediation-environment signal, not a wiring bug. Wait for the inventory to recover; do not add another retry loop on top.
 
@@ -204,5 +229,3 @@ The ad argument is null. You either passed the wrong field or the ad was dispose
 - **No `OnAdDismissed`.** Same reason.
 - **No `OnAdFailedToShow`.** No native show pathway.
 - **No `OnAdExpired`.** Mediation does not push an expiry signal — implement a publisher-side timer if you need one.
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/NativeAdTests/NativeAdManualTest.cs, SDK/Runtime/DaroNativeAd.cs, SDK/Runtime/DaroNativeAdView.cs, SDK/Runtime/DaroNativeAdInfo.cs, docs/features/native-bridge.md (Native ad) -->

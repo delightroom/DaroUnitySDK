@@ -13,14 +13,13 @@ namespace Daro.Internal
     /// (source lives under <c>SDK/Plugins/Android-src~</c>), which wraps native
     /// <c>so.daro:daro-m:1.3.12</c> (daro-core resolves transitively via the
     /// daro-m POM).
-    /// See sketch §1, §3.1.
     /// </summary>
     /// <remarks>
     /// <para>Threading: the Kotlin shim fires raw callbacks on whatever thread
     /// native delivers (load / show / lifecycle worker threads). Every proxy
     /// method here marshals into <see cref="MainThreadDispatcher"/> before
     /// invoking the C# event slot, so consumer handlers always run on the
-    /// Unity main thread. Sketch CD-3.</para>
+    /// Unity main thread.</para>
     ///
     /// <para>Stripping defense: <c>SDK/Runtime/link.xml</c> preserves the
     /// entire <c>Daro.Internal</c> namespace — both this class and its inner
@@ -36,9 +35,10 @@ namespace Daro.Internal
         // ── Context refs (captured once at InitializeAsync) ──────────────────
         // Stable across the process lifetime — Unity's UnityPlayerActivity
         // declares android:configChanges="...|orientation|screenSize|..." so
-        // the Activity is never recreated on rotation. Sketch §3.3.
+        // the Activity is never recreated on rotation.
         private AndroidJavaObject? _activity;
         private AndroidJavaObject? _application;
+        private DaroInitCallbackProxy? _initProxy;
 
         // ── Per-unit Kotlin ad instance refs ─────────────────────────────────
         // Owned for instance-method calls (load / show / isReady / destroy).
@@ -48,10 +48,10 @@ namespace Daro.Internal
         // ── Per-unit AndroidJavaProxy strong-refs (JNI GC anchor) ────────────
         // Must outlive every native callback. The Kotlin shim holds the Java
         // reference; this dictionary keeps the C# side alive for as long as
-        // the platform lives. Sketch §3.2 (Proxy Ownership Design).
+        // the platform lives.
         private readonly Dictionary<string, AndroidJavaProxy> _proxies = new();
 
-        // ── Event slots (set by DaroSdk.WirePlatformEvents, sketch CD-3) ─────
+        // ── Event slots (set by DaroSdk.WirePlatformEvents) ─────
         private Action<string, DaroAdInfo>?                 _onAdLoaded;
         private Action<string, DaroAdLoadError>?            _onAdFailedToLoad;
         private Action<string, DaroAdInfo>?                 _onAdShown;
@@ -67,7 +67,7 @@ namespace Daro.Internal
         // Distinct from the Kotlin Layer 1 (`@Volatile destroyed` per ad class).
         // Set in Dispose(); checked in every proxy method BEFORE Enqueue,
         // ensuring a callback that beat Layer 1 still drops before delivering
-        // a stale event to consumers. Sketch §4.2.
+        // a stale event to consumers.
         private volatile bool _disposed;
 
         // ── IDaroPlatform event setters ──────────────────────────────────────
@@ -163,7 +163,7 @@ namespace Daro.Internal
 
         // android.view.Gravity bitmask values are stable across Android versions;
         // listed inline rather than via AndroidJavaClass lookup to avoid extra
-        // JNI traffic on every SetPosition call. Sketch §6.2.
+        // JNI traffic on every SetPosition call.
         private static int BannerPositionToGravity(DaroBannerPosition position)
         {
             const int TOP    = 0x30;
@@ -193,6 +193,8 @@ namespace Daro.Internal
             _activity    = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
             _application = _activity.Call<AndroidJavaObject>("getApplication");
 
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _initProxy = new DaroInitCallbackProxy(tcs);
             _bridge.CallStatic("initialize",
                 _application,
                 DaroAndroidEncoding.NullableBoolToTristate(p.HasGdprConsent),
@@ -201,12 +203,26 @@ namespace Daro.Internal
                 p.CcpaConsentString ?? "",
                 DaroAndroidEncoding.NullableBoolToTristate(p.IsTaggedForChildDirectedTreatment),
                 DaroAndroidEncoding.LogLevelToDebugMode(p.LogLevel),
-                string.Join("\n", p.TestDeviceAdvertisingIdentifiers ?? Array.Empty<string>())
+                string.Join("\n", p.TestDeviceAdvertisingIdentifiers ?? Array.Empty<string>()),
+                _initProxy
             );
 
-            // Daro.init() is synchronous from the caller's perspective (sketch CD-4)
-            // — native defers via ProcessLifecycleOwner internally but returns Unit.
-            return Task.CompletedTask;
+            return tcs.Task;
+        }
+
+        private sealed class DaroInitCallbackProxy : AndroidJavaProxy
+        {
+            private readonly TaskCompletionSource<bool> _tcs;
+
+            public DaroInitCallbackProxy(TaskCompletionSource<bool> tcs)
+                : base("so.daro.unity.IDaroInitCallback") => _tcs = tcs;
+
+            // The facade dispatches Task completion and SDK events to Unity's main thread.
+            public void onInitialized() => _tcs.TrySetResult(true);
+
+            public void onInitializationFailed(string message) =>
+                _tcs.TrySetException(new DaroSdkInitException(
+                    message, (int)DaroAdLoadErrorCode.InitializationFailed));
         }
 
         // ── Runtime settings ─────────────────────────────────────────────────
@@ -226,11 +242,8 @@ namespace Daro.Internal
         // Native init still uses SDKConfig.setDebugMode (boolean Daro core SDK
         // signature). The Kotlin shim's own `daroLogLevel: Int` tracks our
         // shim's gate state separately and is updated here on every runtime
-        // LogLevel change so the two layers stay in lockstep — see
-        // sketch-log-module.md §A4 / §B3. Supersedes the legacy CD-13
-        // "silently ignored" post-init behavior.
-        // Requires SDK/Plugins/Android/DaroLog.kt + DaroUnityBridge.setLogLevel
-        // (see android-foundation task). Single-PR ship recommended.
+        // LogLevel change so the two layers stay in lockstep.
+        // DaroUnityBridge.setLogLevel propagates the value to the Kotlin gate.
         public void SetLogLevel(DaroLogLevel level)
         {
             DaroLog.Verbose("Sdk", $"Platform[Android].SetLogLevel level={level} (raw={(int)level})");
@@ -307,7 +320,7 @@ namespace Daro.Internal
             if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
             if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
             // AppOpen native API takes Application context for load (Builder
-            // requirement) and Activity for show. Sketch CD-5.
+            // requirement) and Activity for show.
             adObj.Call("load", _application, proxy);
         }
 
@@ -375,7 +388,7 @@ namespace Daro.Internal
         }
 
         /// <summary>
-        /// Native-first dispose ordering (sketch CD-9): Kotlin sets its
+        /// Native-first dispose ordering: Kotlin sets its
         /// <c>@Volatile destroyed</c> flag inside <c>destroy()</c> before
         /// calling <c>ad.destroy()</c>, so any further worker-thread listener
         /// invocation skips its callback before reaching the C# proxy. Only
@@ -438,13 +451,9 @@ namespace Daro.Internal
         /// via the <c>_disposed</c> gate inside <see cref="Dispose"/>.
         /// </summary>
         /// <remarks>
-        /// Plan deviation 2026-05-14: original plan §3 specified
-        /// <c>_bridge.CallStatic("destroyAll")</c> forward-defined for the
-        /// android-destroy-all task. Discovery during impl: <see cref="Dispose"/>
-        /// already exists with the per-instance iteration + dict clear pattern
-        /// the sketch §iOS-shim mirrored (originally orphan — never wired up).
-        /// Wrapping it here drops the forward-define coupling — no new Kotlin
-        /// method needed for csharp-runtime-hook to ship.
+        /// <see cref="Dispose"/> tears down tracked instances and clears their
+        /// dictionaries. Native ads use separate handles, so a second sweep
+        /// releases them through the Kotlin bridge.
         /// </remarks>
         public void DestroyAll()
         {
@@ -458,11 +467,10 @@ namespace Daro.Internal
                 DaroLog.Exception("Sdk", e);
             }
 
-            // Native ad per-instance handle pattern (sketch CD-8) bypasses
+            // Native ad per-instance handle pattern bypasses
             // _adObjects, so Dispose() above doesn't reach live native ads.
-            // android-destroy-all task adds Kotlin DaroUnityBridge.destroyAll
-            // which iterates a static registry of live DaroUnityNativeAd
-            // instances. Order: per-instance dispose (above) first, then
+            // Kotlin DaroUnityBridge.destroyAll iterates a static registry
+            // of live DaroUnityNativeAd instances. Order: per-instance dispose (above) first, then
             // native ad sweep — mirrors iOS helper-dispatcher pattern.
             //
             // Note: `_bridge` was disposed by Dispose() above. We create a
@@ -520,7 +528,7 @@ namespace Daro.Internal
         // Each implements the matching Kotlin callback interface via
         // AndroidJavaProxy. Method names MUST match the Kotlin interface
         // declarations — JNI resolves by string at runtime, mismatches fail
-        // silently (no compile-time error). See sketch §2.2, CD-7.
+        // silently (no compile-time error).
         // ─────────────────────────────────────────────────────────────────────
 
         private class DaroAdCallbackProxy : AndroidJavaProxy
@@ -541,8 +549,8 @@ namespace Daro.Internal
             // latencyMs sourced from Kotlin's adInfo.latency / err.latency (millis).
             // Forwarded as-is to C# DaroAdInfo.Latency to match Daro's
             // cross-platform millis contract.
-            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
-            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
                 new DaroAdInfo(_format, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
@@ -562,9 +570,8 @@ namespace Daro.Internal
                 // 를 보내므로 이것은 **Daro 코드**다 — `DaroAdLoadError.RawCode`
                 // 의 계약("DaroSDK DaroError.Code.rawValue")과 iOS 경로에 맞는다.
                 //
-                // DARO-1542 전에는 shim 이 deprecated 콜백을 물어 `MaxError.code`
-                // 를 그대로 보냈다. 그 시절엔 여기 주석이 "MaxError.code 를 보존한다"
-                // 였는데, 그게 계약이 아니라 Android 만의 이탈이었다.
+                // `MaxError.code` 를 그대로 전달하면 iOS 와 오류 코드 계약이
+                // 달라지므로 shim 이 제공하는 Daro 오류 코드를 사용한다.
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
                     errorMessage, adUnitId, errorCode);
@@ -582,7 +589,7 @@ namespace Daro.Internal
 
             // errorCode is always -1 from Kotlin (DaroAdDisplayFailError has
             // no int code). Stored as rawCode for diagnostic continuity even
-            // though it conveys no extra info on Android. Sketch §4.1.
+            // though it conveys no extra info on Android.
             public void onAdFailedToShow(
                 string adUnitId, int errorCode, string errorMessage, int latencyMs)
             {
@@ -636,7 +643,7 @@ namespace Daro.Internal
         // with IDaroRewardedCallback (all 8 methods). NOT subclassing
         // DaroAdCallbackProxy because AndroidJavaProxy stores exactly one
         // interface name at construction; subclassing would register the
-        // parent's name and lose `onEarnedReward` JNI dispatch. Sketch CD-7.
+        // parent's name and lose `onEarnedReward` JNI dispatch.
         private sealed class DaroRewardedCallbackProxy : AndroidJavaProxy
         {
             private readonly string              _adUnitId;
@@ -649,8 +656,8 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
-            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
                 new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
@@ -742,7 +749,7 @@ namespace Daro.Internal
         // Banner-specific proxy. Standalone (not subclassing
         // DaroAdCallbackProxy) because AndroidJavaProxy stores exactly one
         // interface name at construction; subclassing would register the
-        // parent's name and break JNI dispatch. Sketch §6.4 + CD-7 pattern.
+        // parent's name and break JNI dispatch.
         private sealed class DaroBannerCallbackProxy : AndroidJavaProxy
         {
             private readonly string              _adUnitId;
@@ -755,8 +762,8 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
-            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
             // 배너의 generation 은 C# LoadBanner/destroy 만 올리고 네이티브 auto-refresh 는 안 올린다 —
             // generation 별 보관도 결국 유닛 단위 필드와 같았다. 이벤트별 귀속이면 키가 필요 없다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
@@ -830,7 +837,7 @@ namespace Daro.Internal
         // DaroAdCallbackProxy) because AndroidJavaProxy stores exactly one
         // interface name at construction; subclassing would register the
         // parent's name and break JNI dispatch for IDaroLightPopupCallback
-        // methods. Same CD-7 reason as DaroRewardedCallbackProxy and
+        // methods. Same interface-registration reason as DaroRewardedCallbackProxy and
         // DaroBannerCallbackProxy.
         private sealed class DaroLightPopupCallbackProxy : AndroidJavaProxy
         {
@@ -844,8 +851,8 @@ namespace Daro.Internal
                 _platform = platform;
             }
 
-            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
-            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다(리뷰가 잡았다).
+            // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
+            // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
                 new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latencyMs, mediationPlatform, adNetwork);
 
@@ -930,11 +937,11 @@ namespace Daro.Internal
         // Cannot use the generic CreateAdObject helper — Kotlin ctor takes
         // 36 params beyond adUnitId (9×4 ARGB ints + closeButtonText),
         // and the proxy needs interface name IDaroLightPopupCallback rather than
-        // IDaroAdCallback. Sketch §Android Bridge / DaroAndroidPlatform additions.
+        // IDaroAdCallback.
         public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
         {
             DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitId}'");
-            // Native-first dispose ordering for any stale instance (CD-9).
+            // Native-first dispose ordering for any stale instance.
             DestroyAdObject(adUnitId);
 
             var proxy = new DaroLightPopupCallbackProxy(adUnitId, this);
@@ -991,11 +998,11 @@ namespace Daro.Internal
             DestroyAdObject(adUnitId);
         }
 
-        // ── Native ad (CD-8 instance-owned) ──────────────────────────────
+        // ── Native ad (instance-owned) ──────────────────────────────
         // Each DaroNativeAd gets its own DaroAndroidNativeAdHandle (per-instance
         // AndroidJavaObject + AndroidJavaProxy). Native ad does NOT use
         // _adObjects / _proxies dicts — multi-instance for the same adUnitId
-        // is supported (CD-8). See sketch-native-ad-android.md §5.6.
+        // is supported.
         public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
         {
             DaroLog.Verbose("Native", $"Platform[Android].CreateNativeAdHandle adUnit='{adUnitId}'");

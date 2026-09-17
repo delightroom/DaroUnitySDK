@@ -120,5 +120,3 @@ _ad.SetCustomData("...");
 _ad.Load();
 ```
 ✓ Order: `Load()` → wait for `OnAdLoaded` → `SetCustomData()` → `Show()`.
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs:462-474, SDK/Runtime/DaroRewardedAd.cs, SDK/Runtime/Models/DaroRewardItem.cs -->

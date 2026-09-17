@@ -16,9 +16,9 @@ namespace Daro.Internal
     /// when the hash changes.
     /// </summary>
     /// <remarks>
-    /// <para><b>Composite touchEnabled</b> = <c>ad.IsReady &amp;&amp; IsInteractable() &amp;&amp;
-    /// CanReceiveRaycasts(go) &amp;&amp; activeInHierarchy &amp;&amp;
-    /// isActiveAndEnabled &amp;&amp; ad.IsSlotViewActive</c>.
+    /// <para>Geometry is cleared while loading or while the Unity UI is hidden.
+    /// Visible geometry uses <b>touchEnabled</b> = <c>isActiveAndEnabled &amp;&amp;
+    /// IsInteractable() &amp;&amp; CanReceiveRaycasts(go)</c>.
     /// <see cref="Selectable.IsInteractable"/> walks ancestor CanvasGroup
     /// <c>interactable</c> chain but NOT <c>blocksRaycasts</c> —
     /// <see cref="CanReceiveRaycasts"/> covers the missing axis.</para>
@@ -30,16 +30,14 @@ namespace Daro.Internal
     ///   <c>[DisallowMultipleComponent]</c> guards against accidental
     ///   double-add.</item>
     ///   <item><see cref="LateUpdate"/> — sync tick.</item>
-    ///   <item><see cref="OnDisable"/> — driver GameObject or ancestor went
-    ///   inactive. Pushes DISABLE_HOST (last known rect + touchEnabled=false)
-    ///   so the overlay touch gate closes immediately; the frame is kept
-    ///   intact for viewability-frame stability across refresh cycles.</item>
+    ///   <item><see cref="OnDisable"/> — clear geometry when the driver or
+    ///   its ancestors become inactive, hiding native UI and disabling touch.</item>
     ///   <item><see cref="OnDestroy"/> — Button GameObject destroyed by
     ///   publisher. Calls <c>ClearCtaScreenRect</c> on a still-live ad
     ///   so the shim drops the overlay.</item>
     ///   <item><see cref="Detach"/> — explicit teardown from
     ///   <c>DaroNativeAd.UnwireCta</c> / <c>Dispose</c>. ClearCtaScreenRect
-    ///   on live ad + <c>Object.Destroy(this)</c>.</item>
+    ///   on live ad, then disable the reusable driver.</item>
     /// </list></para>
     ///
     /// <para>Internal only — never publish surface. Attribute set hides
@@ -56,7 +54,7 @@ namespace Daro.Internal
         private Camera?               _uiCamera;       // null = ScreenSpaceOverlay
         private int                   _lastHash;
         private bool                  _hasLastHash;
-        private Rect                  _lastRect;
+        private bool                  _hasVisibleRect;
 
         // Reused per-driver scratch (no per-frame alloc). GetWorldCorners
         // writes 4 elements; main-thread only, no contention.
@@ -87,27 +85,30 @@ namespace Daro.Internal
         /// </summary>
         internal static DaroNativeCtaDriver Attach(Daro.DaroNativeAd ad, Button button)
         {
-            // Unity fake-null check — `GetComponent` may return a
-            // destroy-pending driver from a recent Detach (deferred to
-            // end-of-frame). Treat fake-null as missing.
+            // Detach disables instead of scheduling destruction, so an
+            // immediate rebind can safely reuse this component.
             var driver = button.gameObject.GetComponent<DaroNativeCtaDriver>();
             if (driver == null)
             {
                 driver = button.gameObject.AddComponent<DaroNativeCtaDriver>();
                 driver.hideFlags = HideFlags.HideInInspector | HideFlags.DontSaveInEditor;
             }
+            // Transfer ownership before reusing a Button for another ad.
+            // Otherwise the previous ad's Dispose would detach this new binding.
+            if (driver._ad != null && driver._ad != ad) driver._ad.UnwireCta();
             driver._ad          = ad;
             driver._button      = button;
             driver._rootCanvas  = button.GetComponentInParent<Canvas>();
             driver._uiCamera    = ResolveUICamera(driver._rootCanvas);
             driver._hasLastHash = false;   // force initial sync next LateUpdate
+            driver.enabled = true;
             return driver;
         }
 
         /// <summary>
         /// Explicit teardown — call from <c>DaroNativeAd.UnwireCta</c> /
         /// <c>Dispose</c>. PInvokes <c>ClearCtaScreenRect</c> through the
-        /// still-live ad's handle THEN destroys this component. Idempotent.
+        /// still-live ad's handle, then disable and release references. Idempotent.
         /// </summary>
         internal void Detach()
         {
@@ -117,8 +118,11 @@ namespace Daro.Internal
             }
             _ad     = null;
             _button = null;
-            // Unity's Destroy is deferred to end-of-frame; safe to call mid-update.
-            if (this != null) UnityEngine.Object.Destroy(this);
+            _rootCanvas = null;
+            _uiCamera = null;
+            // Destroy is deferred, and a same-frame Bind would retrieve the
+            // doomed component via GetComponent. Keep an inert reusable driver.
+            enabled = false;
         }
 
         // ── per-frame sync ─────────────────────────────────────────────
@@ -127,53 +131,62 @@ namespace Daro.Internal
         {
             if (_ad == null || _button == null || _ad.IsDisposed)
             {
-                // Owning ad is gone — self-destruct. No PInvoke (handle gone).
-                UnityEngine.Object.Destroy(this);
+                // Release references and stop syncing until the next attachment.
+                Detach();
                 return;
             }
 
-            bool touchEnabled =
-                _ad.IsReady &&
-                _button.IsInteractable() &&
-                CanReceiveRaycasts(_button.gameObject) &&
-                _button.gameObject.activeInHierarchy &&
-                _button.isActiveAndEnabled &&
-                _ad.IsSlotViewActive;
+            _rootCanvas = _button.GetComponentInParent<Canvas>();
+            _uiCamera = ResolveUICamera(_rootCanvas);
+            bool visible = _ad.IsReady && _ad.IsSlotViewActive
+                && _button.gameObject.activeInHierarchy
+                && _rootCanvas != null && _rootCanvas.isActiveAndEnabled
+                && AreCanvasGroupsVisible(_button.gameObject);
+            if (!visible)
+            {
+                if (!_hasLastHash || _hasVisibleRect) _ad.ClearCtaScreenRect();
+                _hasLastHash = true;
+                _hasVisibleRect = false;
+                return;
+            }
+
+            bool touchEnabled = _button.isActiveAndEnabled && _button.IsInteractable()
+                && CanReceiveRaycasts(_button.gameObject);
 
             // uGUI invariant: Selectable subclasses require RectTransform.
             Rect rect = ComputeScreenRect((RectTransform)_button.transform, _uiCamera);
 
             int hash = ComputeHash(rect, touchEnabled);
-            if (_hasLastHash && hash == _lastHash) return;
+            // UIKit's Y conversion also depends on the current screen height.
+            hash = unchecked((hash * 397 ^ Screen.width) * 397 ^ Screen.height);
+            if (_hasLastHash && _hasVisibleRect && hash == _lastHash) return;
             _lastHash    = hash;
             _hasLastHash = true;
-            _lastRect    = rect;
+            _hasVisibleRect = true;
 
             _ad.SetCtaScreenRect(rect, touchEnabled);
         }
 
         private void OnDisable()
         {
-            // Driver GameObject (or an ancestor) went inactive. Push
-            // DISABLE_HOST using the last known rect so the overlay's touch
-            // gate closes immediately. The frame is kept intact to preserve
-            // MAX viewability-frame stability across refresh cycles. Force
-            // re-sync on next active LateUpdate by clearing the hash.
+            // No visible Unity anchor remains. Clear geometry rather than
+            // only disabling clicks, which would leave vendor UI visible.
             if (_ad != null && !_ad.IsDisposed)
             {
-                try { _ad.SetCtaScreenRect(_lastRect, touchEnabled: false); }
+                try { _ad.ClearCtaScreenRect(); }
                 catch (Exception e)
                 {
                     DaroLog.Warn("Native",
-                        $"DaroNativeCtaDriver.OnDisable: SetCtaScreenRect(false) threw: {e}");
+                        $"DaroNativeCtaDriver.OnDisable: ClearCtaScreenRect threw: {e}");
                 }
             }
             _hasLastHash = false;
+            _hasVisibleRect = false;
         }
 
         private void OnDestroy()
         {
-            // Button GameObject was destroyed (or Detach destroyed us). If
+            // Button GameObject was destroyed. If
             // the ad is still live, clear its overlay — accidental-click
             // guard.
             if (_ad != null && !_ad.IsDisposed)
@@ -187,6 +200,8 @@ namespace Daro.Internal
             }
             _ad     = null;
             _button = null;
+            _rootCanvas = null;
+            _uiCamera = null;
         }
 
         // ── helpers ────────────────────────────────────────────────────
@@ -216,6 +231,27 @@ namespace Daro.Internal
                     if (g.ignoreParentGroups) shouldBreak = true;
                 }
                 if (shouldBreak) break;
+                t = t.parent;
+            }
+            return true;
+        }
+
+        private static bool AreCanvasGroupsVisible(GameObject go)
+        {
+            // Match CanvasGroup inheritance without treating a transparent
+            // CTA Image (often used with visible child text) as a hidden ad.
+            var t = go.transform;
+            while (t != null)
+            {
+                t.GetComponents(s_canvasGroupScratch);
+                bool ignoreParents = false;
+                foreach (var group in s_canvasGroupScratch)
+                {
+                    if (!group.isActiveAndEnabled) continue;
+                    if (group.alpha <= 0f) return false;
+                    ignoreParents |= group.ignoreParentGroups;
+                }
+                if (ignoreParents) break;
                 t = t.parent;
             }
             return true;

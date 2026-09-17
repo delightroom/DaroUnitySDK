@@ -253,7 +253,7 @@ namespace Daro.Editor
                 }
             }
 
-            // ATT description Fail — empty value causes App Store rejection (D7-I).
+            // ATT description Fail — empty value causes App Store rejection.
             // Building the binary without this is a shipping defect, not a soft warning.
             if (string.IsNullOrWhiteSpace(settings.attPromptDescription))
             {

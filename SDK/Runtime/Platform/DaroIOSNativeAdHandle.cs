@@ -12,8 +12,8 @@ namespace Daro.Internal
 {
     /// <summary>
     /// iOS implementation of <see cref="INativeAdHandle"/>. One handle per
-    /// <see cref="Daro.DaroNativeAd"/> instance — multi-instance permitted
-    /// (CD-1, CD-8). Each handle owns:
+    /// <see cref="Daro.DaroNativeAd"/> instance — multi-instance permitted.
+    /// Each handle owns:
     /// <list type="bullet">
     ///   <item>a unique <see cref="_handleId"/> (monotonic int) routing key</item>
     ///   <item>a slot in the static <see cref="s_handles"/> dictionary for inbound callback dispatch</item>
@@ -27,7 +27,7 @@ namespace Daro.Internal
     /// explicit monotonic int id is allocated by C# and threaded through every
     /// extern call. Native shim mirrors with <c>NSDictionary&lt;NSNumber*, DaroUnityNativeAdEntry*&gt;</c>.</para>
     ///
-    /// <para>Threading layers (CD-9 — mirrors
+    /// <para>Threading layers (mirrors
     /// <see cref="DaroAndroidNativeAdHandle"/>'s pattern but inverted at
     /// Layer 2 since iOS doesn't need MainThreadDispatcher):
     /// <list type="bullet">
@@ -93,6 +93,22 @@ namespace Daro.Internal
             DaroUnity_NativeAd_Load(_handleId, iconWidth, iconHeight);
         }
 
+        public void ConfigureAdChoices(DaroAdChoicesPosition position)
+        {
+            if (!_disposed) DaroUnity_NativeAd_ConfigureAdChoices(_handleId, (int)position);
+        }
+
+        public void SetAdChoicesScreenRect(Rect rect, bool visible)
+        {
+            if (!_disposed) DaroUnity_NativeAd_SetAdChoicesScreenRect(_handleId,
+                rect.x, rect.y, rect.width, rect.height, visible, Screen.width, Screen.height);
+        }
+
+        public void ClearAdChoicesScreenRect()
+        {
+            if (!_disposed) DaroUnity_NativeAd_ClearAdChoicesScreenRect(_handleId);
+        }
+
         public void NotifyVisible()
         {
             DaroLog.Verbose("Native", $"Handle[iOS].NotifyVisible adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
@@ -137,7 +153,7 @@ namespace Daro.Internal
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true;   // Layer-2 armed FIRST (sketch §5.3 invariant)
+            _disposed = true;   // Layer-2 armed FIRST
             DaroLog.Verbose("Native", $"Handle[iOS].Dispose adUnit='{_adUnitId}/h{_handleId}'");
 
             try
@@ -156,7 +172,7 @@ namespace Daro.Internal
             lock (s_lock) { s_handles.Remove(_handleId); }
         }
 
-        // ── Static native-ad callback (CD-2 channel; CD-10 strip defense) ──
+        // ── Static native-ad callback (dedicated channel; stripping defense) ──
         private delegate void DaroNativeAdCallbackFn(
             int handleId, string eventJson, IntPtr iconPng, int iconLen);
 
@@ -203,8 +219,8 @@ namespace Daro.Internal
                     var title = DaroJsonHelpers.GetJsonString(eventJson, "title");
                     var body  = DaroJsonHelpers.GetJsonString(eventJson, "body");
                     var cta   = DaroJsonHelpers.GetJsonString(eventJson, "callToAction");
-                    // false signals unsupported CTA GR wiring; click chain
-                    // inactive for this fill. Default true preserves back-compat
+                    // false signals a detached native CTA for this fill.
+                    // Default true preserves back-compat
                     // for any emitter that drops the field.
                     var isCtaInteractive = DaroJsonHelpers.GetJsonBool(
                         eventJson, "isCtaInteractive", defaultValue: true);
@@ -215,6 +231,7 @@ namespace Daro.Internal
                         callToAction:     string.IsNullOrEmpty(cta)   ? null : cta,
                         icon:             icon,
                         mediaImage:       null,   // v1 image-only; video deferred
+                        assetTypes: NativeAdAssetTypes.Parse(DaroJsonHelpers.GetJsonString(eventJson, "assetTypes")),
                         isCtaInteractive: isCtaInteractive);
 
                     Safely(() => handle._sink.OnAdLoaded(adInfo, nativeInfo));
@@ -285,6 +302,12 @@ namespace Daro.Internal
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_SetCallback(
             DaroNativeAdCallbackFn callback);
+
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_ConfigureAdChoices(int handleId, int position);
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_SetAdChoicesScreenRect(
+            int handleId, float x, float y, float w, float h,
+            [MarshalAs(UnmanagedType.I1)] bool visible, int screenWidth, int screenHeight);
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_ClearAdChoicesScreenRect(int handleId);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Create(
             int handleId, string adUnitId);

@@ -39,7 +39,7 @@ namespace Daro.Editor
 
         // Environment-signal directories / files. Presence indicates the
         // consumer is using that tool; absence means we don't touch
-        // anything related to it (D8 spirit applied to own-file axis).
+        // anything related to it.
         internal const string ClaudeEnvDir       = ".claude";
         internal const string CursorEnvDir       = ".cursor";
         internal const string ClineEnvDirOrFile  = ".clinerules";  // may be file (legacy mode) or directory

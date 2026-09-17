@@ -184,7 +184,7 @@ namespace Daro.Editor
 
             // --- AI 통합 헬퍼 ---
             ["ai.toggleLabel"]            = "AI 통합 헬퍼 활성화",
-            ["ai.toggleHelp"]             = "AI 코딩 에이전트 (Claude Code / Codex / Cursor / Cline) 가 세션 시작 시 SDK 의 integration knowledge base 를 자동 참고하도록 가이드합니다. 3 layer, 모두 per-tool environment signal (프로젝트 루트의 `.claude/`, `.cursor/`, `.clinerules`, 기존 `AGENTS.md` 존재) 로 gate: (1) KB 복사 — `<project>/.daro/integration-kb/` 가 `<package>/Documentation~/` mirror; (2) `.claude/rules/`, `.cursor/rules/`, `.clinerules/` 에 vendor 소유 directive 파일 (사용자 작성 파일은 절대 안 건드림); (3) 루트 `AGENTS.md` 에 marker 블록 inject (Codex 만, 이미 존재하는 파일에만). 토글 off 시 모두 정리, 기존 sprint 의 루트 CLAUDE.md marker 도 자동 sweep.",
+            ["ai.toggleHelp"]             = "AI 코딩 에이전트 (Claude Code / Codex / Cursor / Cline) 가 세션 시작 시 SDK 의 integration knowledge base 를 자동 참고하도록 가이드합니다. 3 layer, 모두 per-tool environment signal (프로젝트 루트의 `.claude/`, `.cursor/`, `.clinerules`, 기존 `AGENTS.md` 존재) 로 gate: (1) KB 복사 — `<project>/.daro/integration-kb/` 가 `<package>/Documentation~/` mirror; (2) `.claude/rules/`, `.cursor/rules/`, `.clinerules/` 에 vendor 소유 directive 파일 (사용자 작성 파일은 절대 안 건드림); (3) 루트 `AGENTS.md` 에 marker 블록 inject (Codex 만, 이미 존재하는 파일에만). 토글 off 시 모두 정리, 이전 버전의 루트 CLAUDE.md marker 도 자동 sweep.",
             ["ai.noAgentEnv"]             = "프로젝트 루트에서 AI 에이전트 environment 감지 안 됨 (.claude/, .cursor/, .clinerules, AGENTS.md 모두 부재). reconcile 할 게 없습니다 — 이 프로젝트에서 위 도구 중 하나 사용하거나 AGENTS.md 를 생성 후 다시 토글하세요.",
             ["ai.clineFileMode"]          = "Cline `.clinerules` 가 프로젝트 루트에 *단일 파일* 로 존재 — directory mode 사용 불가능. Cline 통합이 skip 됩니다. directory mode 로 수동 마이그레이션하면 사용 가능.",
             ["ai.markerInjected"]         = "AI 에이전트 rule 경로에 directive 를 적용했습니다.",

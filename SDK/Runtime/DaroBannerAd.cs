@@ -9,17 +9,17 @@ namespace Daro
     /// <summary>
     /// Banner ad instance — native view overlay. v1 ships standard sizes
     /// (320×50, 300×250) at 6 gravity-anchored positions; mediation manages
-    /// auto-refresh internally. See sketch-banner-android.md §2-3.
+    /// auto-refresh internally.
     /// </summary>
     /// <remarks>
     /// <para>One instance per <c>adUnitId</c>; duplicate construction destroys +
-    /// replaces the prior instance (KU-1, mirrors v1 Interstitial replace rule).
+    /// replaces the prior instance (matching the Interstitial replace rule).
     /// The first instance becomes a stale C# object — caller must not retain it.</para>
     ///
     /// <para>Lifecycle: <c>Load → Hide → Show → Destroy</c> cycle is valid.
     /// <c>Load()</c> starts loading and, on success, displays the banner by
     /// default. <c>Show()</c> requires prior <c>Load()</c> and is primarily for
-    /// re-displaying after <c>Hide()</c>; it does NOT implicit-load (KU-4).
+    /// re-displaying after <c>Hide()</c>; it does NOT implicit-load.
     /// <c>Hide()</c> removes the view but keeps the ad loaded; subsequent
     /// <c>Show()</c> re-displays without a network round-trip.</para>
     ///
@@ -34,7 +34,7 @@ namespace Daro
     /// where the banner should disappear — typically the screen's back / unload
     /// handler.</para>
     ///
-    /// <para>Events: 6 (KU-5). <c>OnAdShown</c> fires once after a successful
+    /// <para>Events: 6. <c>OnAdShown</c> fires once after a successful
     /// <c>Load()</c> displays the banner, and once after each <c>Hide()</c> →
     /// <c>Show()</c> re-display. There is no native callback for view
     /// visibility, but the consumer needs an observable signal that the overlay
@@ -72,7 +72,7 @@ namespace Daro
         public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
 
         /// <summary>
-        /// Disposal flag. <c>volatile</c> mirrors the v1 §4.4 pre-enqueue +
+        /// Disposal flag. <c>volatile</c> mirrors the pre-enqueue +
         /// at-drain checks pattern.
         /// </summary>
         internal volatile bool _disposed;
@@ -84,7 +84,7 @@ namespace Daro
         // Main-thread only access — FireOnAdLoaded(set) / Show()(read) /
         // IsReady()(read) 모두 Unity main thread 에서 실행. volatile 불필요.
         private bool _loaded;
-        // DARO-1683 — 마지막 로드의 DaroAdInfo. OnAdShown 은 배너에서만 C# 이 합성하는데(Kotlin IDaroBannerCallback
+        // 마지막 로드의 DaroAdInfo. OnAdShown 은 배너에서만 C# 이 합성하는데(Kotlin IDaroBannerCallback
         // 에 onAdShown 이 없다) 3인자 생성자로 만들면 귀속이 비어 앞뒤 OnAdLoaded·OnAdImpression 과 어긋난다.
         private DaroAdInfo? _lastLoadedInfo;
         private bool _visibleIntent;
@@ -111,8 +111,8 @@ namespace Daro
             Size      = size;
             Position  = position;
 
-            // Platform handles native create + the "replace prior instance" rule
-            // (KU-1); registry serializes same-adUnit create/destroy.
+            // Platform handles native create + the "replace prior instance" rule;
+            // registry serializes same-adUnit create/destroy.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.Banner, AdUnitId, this,
                 () => DaroPlatform.Current.CreateBanner(AdUnitId));
@@ -123,7 +123,7 @@ namespace Daro
         /// Start loading and display the banner by default once loading
         /// succeeds. Size is passed because <c>DaroBannerAdView</c> bakes it
         /// into view construction at native side. Post-init failures fire
-        /// <see cref="OnAdFailedToLoad"/> rather than throwing (v1 §4.1).
+        /// <see cref="OnAdFailedToLoad"/> rather than throwing.
         /// </summary>
         /// <exception cref="ObjectDisposedException"/>
         public void Load()
@@ -154,8 +154,7 @@ namespace Daro
         /// </summary>
         /// <exception cref="ObjectDisposedException"/>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when <see cref="IsReady"/> is <c>false</c> — call-ordering bug
-        /// (v1 §4.1).
+        /// Thrown when <see cref="IsReady"/> is <c>false</c> — call-ordering bug.
         /// </exception>
         public void Show()
         {
@@ -244,8 +243,8 @@ namespace Daro
         // ── IDisposable ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Idempotent dispose (KU-8 — equivalent to <c>Destroy()</c>). Never throws
-        /// (IDisposable contract + v1 §4.1). Second and subsequent calls are no-ops.
+        /// Idempotent dispose (equivalent to <c>Destroy()</c>). Never throws
+        /// (IDisposable contract). Second and subsequent calls are no-ops.
         /// </summary>
         public void Dispose()
         {
@@ -254,7 +253,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Finalizer backstop (v1 §4.3): if the consumer drops the reference
+        /// Finalizer backstop: if the consumer drops the reference
         /// without calling <see cref="Dispose"/> we still release the native handle.
         /// </summary>
         ~DaroBannerAd()
@@ -308,7 +307,7 @@ namespace Daro
         //
         // All Fire* run on the Unity main thread — invoked from inside a
         // MainThreadDispatcher.Enqueue closure in the platform layer. Each
-        // re-checks _disposed at drain time per v1 §4.4's at-drain guard.
+        // re-checks _disposed at drain time.
 
         internal void FireOnAdLoaded(DaroAdInfo info)
         {

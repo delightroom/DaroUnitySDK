@@ -12,13 +12,12 @@ namespace Daro.Internal
     {
         /// <summary>
         /// C# nullable bool → C int sentinel for the native shim's
-        /// <c>DaroUnity_Initialize</c> entry. Sketch §CD-6, §"Init params decoding".
+        /// <c>DaroUnity_Initialize</c> entry.
         /// </summary>
         /// <returns><c>-1</c> if null, <c>1</c> if true, <c>0</c> if false.</returns>
         internal static int NullableBoolToInt(bool? v) => v == null ? -1 : (v.Value ? 1 : 0);
 
-        // log-module-ios sprint: `LogLevelToNative` (5→3 collapse for daro iOS
-        // internal `DaroObjCLogLevel`) moved into iOS shim
+        // The 5→3 collapse to daro iOS internal `DaroObjCLogLevel` happens in the iOS shim
         // (`DaroUnityCollapseToObjCLogLevel` in `DaroUnityLog.{h,mm}`). The C#
         // boundary now sends the raw `(int)DaroLogLevel` value (0..4) so the
         // shim can gate its own NSLog calls at full granularity AND derive

@@ -26,6 +26,6 @@ This project uses the **Daro Unity SDK** for mobile advertising. Before writing 
 - **Troubleshooting** (no-fill / invalid ad unit / consent / ATT / iOS signing / EDM4U): `.daro/integration-kb/troubleshooting.md`
 - **API reference**: `.daro/integration-kb/api-reference.md`
 
-The KB is the source of truth for SDK usage patterns — every code sample is distilled from `Samples/DaroExample/`, not invented. Do not guess method signatures, event names, or enum values; look them up in `api-reference.md`. Follow the lifecycle / event subscription / dispose discipline exactly as documented. View-based formats (Banner / Native / LightPopup) have different lifecycle shapes from fullscreen ones — pre-read the matching `ad-formats/<format>.md` before integrating. If you find yourself uncertain about Daro SDK behavior, re-read the relevant KB file before answering or editing code.";
+The KB is the source of truth for SDK usage patterns — use its API reference and format-specific examples. Do not guess method signatures, event names, or enum values; look them up in `api-reference.md`. Follow the lifecycle / event subscription / dispose discipline exactly as documented. View-based formats (Banner / Native / LightPopup) have different lifecycle shapes from fullscreen ones — pre-read the matching `ad-formats/<format>.md` before integrating. If you find yourself uncertain about Daro SDK behavior, re-read the relevant KB file before answering or editing code.";
     }
 }

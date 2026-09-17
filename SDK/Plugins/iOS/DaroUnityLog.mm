@@ -13,14 +13,12 @@ void DaroUnityLogSetLevel(int level) {
 
 int DaroUnityCollapseToObjCLogLevel(int level) {
     // daro iOS `DaroObjCLogLevel`: off=0 / error=1 / debug=2. C#
-    // `DaroLogLevel` 5-step folds to these three. Mirrors the table that
-    // used to live in C# `DaroIOSEncoding.LogLevelToNative` (removed in
-    // log-module-ios sprint).
+    // `DaroLogLevel` 5-step folds to these three.
     switch (level) {
         case DaroUnityLogLevelNone:    return 0;  // off
         case DaroUnityLogLevelError:   return 1;  // error
         case DaroUnityLogLevelWarn:    return 1;  // error  — Bridge has no warn
-        case DaroUnityLogLevelInfo:    return 2;  // debug  — Bridge's most verbose
+        case DaroUnityLogLevelInfo:    return 1;  // error  — Info must not enable native debug logs
         case DaroUnityLogLevelVerbose: return 2;  // debug
         default:                       return 0;  // unknown → quiet
     }

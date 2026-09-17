@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// Rewarded ad instance. See docs/overview.md for the public API contract.
+    /// Rewarded ad instance.
     /// Mirrors <see cref="DaroInterstitialAd"/> with an extra
     /// <see cref="OnEarnedReward"/> event and <see cref="SetCustomData"/> method.
     /// </summary>
@@ -32,7 +32,7 @@ namespace Daro
         public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
 
         /// <summary>
-        /// Disposal flag. <c>volatile</c> so the §4.4 pre-enqueue and at-drain
+        /// Disposal flag. <c>volatile</c> so the pre-enqueue and at-drain
         /// checks read the current value without a lock.
         /// </summary>
         internal volatile bool _disposed;
@@ -65,7 +65,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Start loading a rewarded ad. §2.4 note: no-op if already loading.
+        /// Start loading a rewarded ad. note: no-op if already loading.
         /// </summary>
         /// <exception cref="ObjectDisposedException">
         /// Thrown when the instance has been disposed.
@@ -85,7 +85,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Query whether a previously loaded ad is ready. Never throws (§4.1).
+        /// Query whether a previously loaded ad is ready. Never throws.
         /// Returns <c>false</c> on a disposed instance.
         /// </summary>
         public bool IsReady()
@@ -101,7 +101,7 @@ namespace Daro
         /// Thrown when the instance has been disposed.
         /// </exception>
         /// <exception cref="InvalidOperationException">
-        /// Thrown when <see cref="IsReady"/> is <c>false</c> (§4.1).
+        /// Thrown when <see cref="IsReady"/> is <c>false</c>.
         /// </exception>
         public void Show()
         {
@@ -132,7 +132,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Idempotent dispose (§4.3). Never throws.
+        /// Idempotent dispose. Never throws.
         /// </summary>
         public void Dispose()
         {

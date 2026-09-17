@@ -11,7 +11,7 @@ namespace Daro.Internal
     /// <remarks>
     /// Sink methods MAY throw — the dispatcher wraps every invocation in
     /// <c>try/catch</c> so a consumer-thrown handler never propagates back
-    /// into the native callback frame (sketch reviewer-content WARN advisory).
+    /// into the native callback frame.
     /// </remarks>
     internal interface IDaroIosEventSink
     {
@@ -31,7 +31,7 @@ namespace Daro.Internal
 
     /// <summary>
     /// Pure dispatch logic for the iOS native bridge's single JSON event
-    /// channel (sketch §"Event JSON Schema", §"OnNativeEvent dispatch logic").
+    /// channel.
     /// Lives outside <c>#if UNITY_IOS</c> so EditMode tests can drive it
     /// directly with synthetic JSON payloads — the iOS impl's
     /// <c>OnNativeEvent</c> static handler is a 1-line wrapper.
@@ -41,7 +41,7 @@ namespace Daro.Internal
     /// <list type="bullet">
     ///   <item>Unknown event names → silent drop (forward-compat with future shim additions).</item>
     ///   <item>Event for adUnitId that <see cref="DaroAdInstanceRegistry"/> does not have →
-    ///         silent drop (handles in-flight callbacks after <c>Destroy</c>; sketch §"In-flight callback after Destroy").</item>
+    ///         silent drop (handles in-flight callbacks after <c>Destroy</c>).</item>
     ///   <item><c>__sdk__</c> sentinel → <see cref="IDaroIosEventSink.SdkInitialized"/> /
     ///         <see cref="IDaroIosEventSink.SdkInitFailed"/>; never goes through registry check.</item>
     ///   <item>Sink throw → caught + logged; subsequent dispatches in the same tick still run.</item>
@@ -59,7 +59,7 @@ namespace Daro.Internal
         /// <summary>
         /// shim JSON 한 건에서 <see cref="DaroAdInfo"/> 를 만든다 — 이 디스패처 8곳과
         /// <c>DaroIOSNativeAdHandle</c> 4곳이 같은 키를 읽는다. 키가 늘거나 이름이 바뀌면 여기 한 곳이다.
-        /// <c>mediationPlatform</c> · <c>adNetwork</c> 는 없으면 null (DARO-1683).
+        /// <c>mediationPlatform</c> · <c>adNetwork</c> 는 없으면 null.
         /// </summary>
         internal static DaroAdInfo ReadAdInfo(string eventJson, DaroAdFormat format, string adUnitId) =>
             new DaroAdInfo(
@@ -96,8 +96,8 @@ namespace Daro.Internal
 
             // Per-instance event — adFormat decides routing + DaroAdInfo construction.
             //
-            // DARO-1683 — 모든 DaroAdInfo 가 `mediationPlatform` · `adNetwork` 키를 선택적으로 읽는다.
-            // 키가 없으면 null. shim 이 adInfo 를 나르는 이벤트마다 두 키를 싣는다(DARO-1697).
+            // 모든 DaroAdInfo 가 `mediationPlatform` · `adNetwork` 키를 선택적으로 읽는다.
+            // 키가 없으면 null. shim 이 adInfo 를 나르는 이벤트마다 두 키를 싣는다.
             // 이벤트마다 읽는 이유: iOS 는 Android 처럼 유닛별 프록시가 없어 로드 시점 값을 보관할
             // 자리가 없다 — 어느 이벤트에 싣는지는 shim 이 정한다.
             //
@@ -109,7 +109,7 @@ namespace Daro.Internal
             if (!Enum.IsDefined(typeof(DaroAdFormat), adFormatInt)) return; // malformed
             var adFormat = (DaroAdFormat)adFormatInt;
 
-            // Registry gate — dropped instances no-op (sketch §"In-flight callback after Destroy").
+            // Registry gate — dropped instances no-op.
             if (DaroAdInstanceRegistry.Find<object>(adFormat, adUnitId) == null) return;
 
             switch (evt)

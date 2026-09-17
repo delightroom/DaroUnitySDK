@@ -181,5 +181,3 @@ This is the iOS revenue-time impression pattern, shared with Banner and Native o
 - **Configurable auto-dismiss timing.** The 8s (Android) / 6s+3s (iOS) timers are owned by the native layer.
 - **Custom layouts.** Only colors and the close-button text are customizable. For full publisher rendering, use [Native](native.md).
 - **`OnAdRefreshed`.** Light Popup is a one-shot — no auto-refresh concept.
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (Light Popup section 665-730), SDK/Runtime/DaroLightPopupAd.cs, SDK/Runtime/DaroLightPopupAdOptions.cs, docs/features/native-bridge.md (Light Popup) -->

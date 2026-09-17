@@ -42,7 +42,7 @@ namespace Daro
         public event Action<DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid;
 
         /// <summary>
-        /// Disposal flag. <c>volatile</c> so the §4.4 pre-enqueue and at-drain
+        /// Disposal flag. <c>volatile</c> so the pre-enqueue and at-drain
         /// checks read the current value without a lock.
         /// </summary>
         internal volatile bool _disposed;
@@ -87,7 +87,7 @@ namespace Daro
 
         /// <summary>
         /// Start loading an ad. Post-init failures (e.g. <c>SdkNotReady</c>)
-        /// fire <see cref="OnAdFailedToLoad"/> rather than throwing (§4.1).
+        /// fire <see cref="OnAdFailedToLoad"/> rather than throwing.
         /// </summary>
         /// <exception cref="ObjectDisposedException">
         /// Thrown when the instance has been disposed.
@@ -109,7 +109,7 @@ namespace Daro
         /// <summary>
         /// Query whether a previously loaded ad is ready to show.
         /// Returns <c>false</c> if this instance has been disposed.
-        /// Never throws (§4.1).
+        /// Never throws.
         /// </summary>
         public bool IsReady()
         {
@@ -125,7 +125,7 @@ namespace Daro
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// Thrown when <see cref="IsReady"/> is <c>false</c> — show-before-ready
-        /// is a call-ordering bug, not a runtime ad-network failure (§4.1).
+        /// is a call-ordering bug, not a runtime ad-network failure.
         /// </exception>
         public void Show()
         {
@@ -141,8 +141,7 @@ namespace Daro
         }
 
         /// <summary>
-        /// Idempotent dispose (§4.3). Never throws (IDisposable contract +
-        /// §4.1). Second and subsequent calls are no-ops.
+        /// Idempotent dispose. Never throws (IDisposable contract). Second and subsequent calls are no-ops.
         /// </summary>
         public void Dispose()
         {
@@ -151,10 +150,10 @@ namespace Daro
         }
 
         /// <summary>
-        /// Finalizer backstop (§4.3): if the consumer drops the reference
+        /// Finalizer backstop: if the consumer drops the reference
         /// without calling <see cref="Dispose"/> we still release the native
         /// handle. Event-handler nulling is skipped on the finalizer thread
-        /// (unsafe per §4.3).
+        /// (unsafe in finalizers).
         /// </summary>
         ~DaroLightPopupAd()
         {
@@ -173,7 +172,7 @@ namespace Daro
                 // Null the event backing fields to release consumer delegate
                 // refs. Handlers that are already captured by an in-flight
                 // MainThreadDispatcher closure still run to completion — that's
-                // the §6.6 reentrancy contract.
+                // the reentrancy contract.
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
                 OnAdShown        = null;
@@ -205,7 +204,7 @@ namespace Daro
         //
         // These methods run on the Unity main thread — they're invoked from a
         // MainThreadDispatcher.Enqueue closure inside the platform layer.
-        // Each re-checks `_disposed` at drain time per §4.4's at-drain guard.
+        // Each re-checks `_disposed` at drain time.
 
         internal void FireOnAdLoaded(DaroAdInfo info)
         {

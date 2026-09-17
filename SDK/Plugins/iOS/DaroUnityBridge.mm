@@ -1,20 +1,19 @@
 //
 //  DaroUnityBridge.mm
-//  Unity ↔ DaroObjCBridge thin shim (sketch CD-1, CD-3, CD-4, CD-5, CD-6, CD-9, CD-13).
+//  Unity ↔ DaroObjCBridge thin shim.
 //
 //  Hosts 21 extern C entry points (init / runtime settings / Interstitial /
 //  Rewarded / AppOpen) called from DaroIOSPlatform.cs via
 //  [DllImport("__Internal")]. All event delivery happens through a single
-//  callback (DaroUnityCallbackFn) emitting flat JSON payloads — see sketch
-//  §"Event JSON Schema" for the exact key set.
+//  callback (DaroUnityCallbackFn) emitting flat JSON payloads.
 //
-//  Banner is in a peer file: DaroUnityBannerAd.mm (banner-ios sprint).
+//  Banner is in a peer file: DaroUnityBannerAd.mm.
 //  Shared symbols (s_adQueue, DaroDispatch, EscapeJson, RevenueFields,
 //  s_banners init) are exposed via DaroUnityBridgeInternal.h.
 //
 //  Threading: DaroObjCBridge wraps every delegate call in
 //  DispatchQueue.main.async, so DaroDispatch runs on the Unity main thread
-//  and the C# side does not need to enqueue (sketch CD-5).
+//  and the C# side does not need to enqueue.
 //
 
 #import <Foundation/Foundation.h>
@@ -91,7 +90,7 @@ NSString* AdInfoFields(DaroObjCAdInfo* _Nullable adInfo) {
     return out;
 }
 
-#pragma mark - Ad instance container (sketch CD-4)
+#pragma mark - Ad instance container
 
 // DaroObjCBridge does NOT retain ad instances, and ad.delegate is `weak` —
 // the shim must hold strong refs to both. Pairing them in one entry means a
@@ -117,15 +116,15 @@ static void EnsureInitialized(void) {
         s_interstitials = [NSMutableDictionary dictionary];
         s_rewarded      = [NSMutableDictionary dictionary];
         s_appOpen       = [NSMutableDictionary dictionary];
-        // banner-ios sprint: s_banners is defined in DaroUnityBannerAd.mm
+        // s_banners is defined in DaroUnityBannerAd.mm
         // (paired with the extern in DaroUnityBridgeInternal.h); init it here
         // so banner extern entry points can assume it exists.
         s_banners       = [NSMutableDictionary dictionary];
-        // native-ad-ios sprint: s_nativeAds is defined in DaroUnityNativeAd.mm
+        // s_nativeAds is defined in DaroUnityNativeAd.mm
         // (paired with the extern in DaroUnityBridgeInternal.h); init it here
-        // alongside s_banners. Keyed by NSNumber-boxed handleId (CD-1).
+        // alongside s_banners. Keyed by NSNumber-boxed handleId.
         s_nativeAds     = [NSMutableDictionary dictionary];
-        // light-popup-ios sprint: s_lightPopups is defined in DaroUnityLightPopup.mm
+        // s_lightPopups is defined in DaroUnityLightPopup.mm
         // (paired with the extern in DaroUnityBridgeInternal.h); init it here.
         // adUnitId-keyed (interstitial-style single-per-adUnitId).
         s_lightPopups   = [NSMutableDictionary dictionary];
@@ -398,9 +397,8 @@ void DaroUnity_Initialize(int hasGdprConsent,
     if (gdprConsentString)   ads.gdprConsentString = [NSString stringWithUTF8String:gdprConsentString];
     if (doNotSell      >= 0) ads.doNotSell         = @(doNotSell == 1);
     if (ccpaConsentString)   ads.ccpaString        = [NSString stringWithUTF8String:ccpaConsentString];
-    // 통합 SDK 는 `setCoppa:` 를 미디에이션 변종과 무관하게 노출한다 — 구
-    // DaroMObjCBridge 에서 이 심볼이 `#if DARO_ADDMOB` 안에만 있어 MAX 변종이
-    // 값을 버려야 했던 제약(CD-12)이 사라졌다. 이제 Android 와 같이 전달한다.
+    // 통합 SDK 는 `setCoppa:` 를 미디에이션 변종과 무관하게 노출하므로
+    // Android 와 동일하게 COPPA 값을 전달한다.
     //
     // DaroCoppaStatus 는 child / notChild 둘뿐이라 C# 의 tri-state 중 null 을
     // 표현할 값이 없다. null 이면 호출하지 않고 SDK 기본값에 맡긴다 — 아무 말도
@@ -451,7 +449,7 @@ void DaroUnity_CreateInterstitial(const char* adUnitId) {
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
 
     dispatch_async(s_adQueue, ^{
-        // Replace any existing entry — duplicate-construction-replaces (sketch §CD-4).
+        // Replace any existing entry — duplicate-construction-replaces.
         s_interstitials[unit] = nil;
 
         DaroUnityInterstitialDelegate* delegate = [DaroUnityInterstitialDelegate new];
@@ -645,7 +643,7 @@ void DaroUnity_DestroyAppOpen(const char* adUnitId) {
     });
 }
 
-// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called
+// Runtime teardown cleanup. Called
 // from C# `DaroIOSPlatform.DestroyAll` (csharp-runtime-hook task wires the
 // DllImport). Runs on app-quit / Unity-runtime-teardown after C# side has
 // already set `DaroAdInstanceRegistry._isShuttingDown=true` — so even
@@ -653,8 +651,8 @@ void DaroUnity_DestroyAppOpen(const char* adUnitId) {
 // function actively releases native resources (dict entries, attached views)
 // to limit grace-period background work + visual artifacts.
 //
-// Per goal §Best-effort: hygiene tier, not production-critical (mobile hard
-// kill is OS-reaped). Helper-dispatcher pattern (plan decision 2026-05-14):
+// Best-effort cleanup (mobile hard
+// kill is OS-reaped). Helper-dispatcher pattern:
 // fullscreen dicts cleared here directly; entry-aware formats delegate to
 // per-shim-file helpers declared in DaroUnityBridgeInternal.h.
 //
@@ -667,7 +665,7 @@ void DaroUnity_DestroyAll(void) {
                             // Initialize / ad request)
     DaroLogD(@"Bridge", @"DestroyAll start");
 
-    // Fullscreen formats: dict-nil only (D-iOS-fullscreen-skip in plan §2).
+    // Fullscreen formats: dict-nil only.
     // No entry-level destroyed flag — delegates hold adUnitId, not entry
     // state, so late callbacks are covered by C# DaroAdInstanceRegistry
     // Find gate (set by caller before this function runs).

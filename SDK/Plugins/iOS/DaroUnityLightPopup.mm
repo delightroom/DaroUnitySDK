@@ -3,9 +3,9 @@
 //  Light Popup ObjC++ shim — wraps DaroObjCLightPopupAdLoader + DaroObjCLightPopupAd
 //  + DaroObjCLightPopupConfiguration (DaroObjCBridge module) for Unity.
 //  Parallel to Android's DaroUnityLightPopupAd.kt; full design in
-//  See docs/features/native-bridge.md (Light Popup / iOS).
+
 //
-//  Lifecycle (sketch §"Sequence Diagrams — Load → Show → Dismiss"):
+//  Lifecycle:
 //
 //    CreateLightPopup    → entry slot + DaroObjCLightPopupAdLoader + delegates
 //                          + DaroObjCLightPopupConfiguration baked
@@ -14,7 +14,7 @@
 //    ShowLightPopup      → [ad showFrom:UnityGetGLViewController()] (main queue)
 //    DestroyLightPopup   → entry.destroyed = YES (dispatch_sync) + nil entry (ARC)
 //
-//  Configuration apply timing (sketch §"Configuration Apply Sequence"):
+//  Configuration apply timing:
 //    didLoad delegate → Layer-1 destroyed check → [ad setConfiguration:]
 //                     → entry.ad = ad + wire adDelegate → DaroDispatch(adLoaded)
 //    Order is critical — consumer may call Show() from OnAdLoaded handler,
@@ -22,10 +22,10 @@
 //
 //  Threading: dictionary mutations on s_adQueue (serial); show/dismiss
 //  dispatched to main queue. ViewController-driven callbacks fire on main
-//  thread naturally (banner-ios sprint precedent), so DaroDispatch from
+//  thread naturally (as with banner callbacks), so DaroDispatch from
 //  delegate methods needs no further marshaling.
 //
-//  3-Layer dispose-race protection (sketch §"Dispose-Race Protection"):
+//  3-Layer dispose-race protection:
 //    Layer 1 — atomic BOOL `destroyed` ivar, dispatch_sync written so the
 //              flag is visible to any in-flight delegate callback before
 //              the subsequent dispatch_async cleanup runs.
@@ -50,7 +50,7 @@
 // Strong refs to keep loader / ad / delegates / configuration alive (delegate
 // properties on DaroObjCLightPopupAdLoader and DaroObjCLightPopupAd are weak).
 // `destroyed` is atomic — read on main queue (delegate callbacks) vs. written
-// on s_adQueue (DestroyLightPopup) per sketch §"Dispose-Race Protection".
+// on s_adQueue (DestroyLightPopup) for dispose-race protection.
 @interface DaroUnityLightPopupEntry : NSObject <DaroUnityAdInfoHolder>
 @property (nonatomic, strong)            DaroObjCLightPopupAdLoader*       loader;
 @property (nonatomic, strong, nullable)  DaroObjCLightPopupAd*             ad;
@@ -347,16 +347,16 @@ void DaroUnity_DestroyLightPopup(const char* adUnitId) {
     });
 }
 
-// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by
+// Runtime teardown cleanup. Called by
 // DaroUnity_DestroyAll (DaroUnityBridge.mm). A2 invariant: set
 // entry.destroyed=YES for every live entry BEFORE clearing the dict.
 //
-// No view removal (D-iOS-lightpopup-modal in plan §2): modal presentation
+// No view removal: modal presentation
 // lives inside MAX SDK's own controller — force-dismiss during teardown is
 // risky w.r.t. MAX internals. Currently presented modal will stay until
 // natural dismiss / ARC release after the entry strong-refs (in MAX) drop.
 // Mobile hard kill OS-reaps the process; only iOS willTerminate ~5s grace
-// has the visual artifact risk (deferred — out of sprint scope).
+// has the visual artifact risk.
 //
 // Caller contract: must NOT be invoked from s_adQueue context — would deadlock.
 void DaroUnityLightPopup_DestroyAll(void) {

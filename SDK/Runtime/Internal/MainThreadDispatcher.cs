@@ -10,7 +10,7 @@ namespace Daro.Internal
 {
     /// <summary>
     /// Hidden <see cref="MonoBehaviour"/> that drains a thread-safe action queue
-    /// on the Unity main thread. See docs/features/event-handler.md.
+    /// on the Unity main thread.
     /// </summary>
     /// <remarks>
     /// Native callbacks arrive on unspecified background threads. They enqueue
@@ -19,12 +19,12 @@ namespace Daro.Internal
     /// safely touch Unity APIs.
     ///
     /// <para>Also hosts the Unity lifecycle hooks for
-    /// <see cref="DaroAppStateNotifier"/> (§2.6) — the same hidden GameObject
+    /// <see cref="DaroAppStateNotifier"/> — the same hidden GameObject
     /// doubles as the app-state source to avoid a second SDK-owned GameObject.</para>
     ///
     /// <para>Static state resets via <see cref="ResetStatics"/>, called from
     /// <see cref="DaroRuntimeBoot.Reset"/> on every play-mode enter / build startup
-    /// (§6.4) so stale references from a prior domain do not leak into a fresh run.</para>
+    /// so stale references from a prior domain do not leak into a fresh run.</para>
     /// </remarks>
     internal sealed class MainThreadDispatcher : MonoBehaviour
     {
@@ -35,14 +35,13 @@ namespace Daro.Internal
         private static int _mainThreadId;
 
         // MAX-pattern queue: lock + Queue<T> + volatile empty-flag + reusable
-        // drain buffer (study §2.1 + §4.7). Chosen over ConcurrentQueue<T> for:
+        // drain buffer. Chosen over ConcurrentQueue<T> for:
         //   1. predictable BCL behavior — no Unity Mono / IL2CPP surprises
         //      around segment-based ConcurrentQueue<T> internals
         //   2. snapshot-and-drain naturally bounds per-frame work to items
-        //      present at lock acquisition (resolves features/native-bridge.md
-        //      "알려진 제약 — Update() 드레인 unbounded")
+        //      present at lock acquisition
         //   3. exact mirror of MAX MaxEventExecutor pattern
-        // Race-safety + deadlock-impossibility analysis: study §4.7 — single
+        // Race and deadlock prevention: a single
         // lock, no nested locks inside critical section, publisher code runs
         // outside the lock.
         private readonly Queue<Action> _queue = new Queue<Action>(64);
@@ -96,7 +95,7 @@ namespace Daro.Internal
         /// <summary>
         /// Queue an action to run on the Unity main thread on the next Update tick.
         /// Thread-safe. Silently no-ops when the action is null, the dispatcher has
-        /// not been created yet, or the app is shutting down (§6.3) — the latter
+        /// not been created yet, or the app is shutting down — the latter
         /// prevents callback closures from firing against partially-torn-down state.
         /// </summary>
         internal static void Enqueue(Action action)
@@ -137,13 +136,13 @@ namespace Daro.Internal
         {
             // Volatile early-return — when the queue is empty (the common case
             // since ad events are infrequent), skip the lock entirely. Matches
-            // MAX MaxEventExecutor.Update fast-path (study §2.1.3 detail 1).
+            // MAX MaxEventExecutor.Update fast-path.
             if (_queueEmpty) return;
 
             // Snapshot under lock — drain queue into the reusable buffer, then
             // execute outside the lock. Two consequences:
             //   * publisher handlers (potentially long-running) don't block
-            //     worker-thread Enqueue (study §4.7.5)
+            //     worker-thread Enqueue
             //   * per-frame work is bounded to items present at lock acquisition
             //     — items enqueued during foreach go to next frame
             lock (_queueLock)
@@ -153,7 +152,7 @@ namespace Daro.Internal
                 _queueEmpty = true;
             }
 
-            // Outer drain guard — study §2.5 "3중 try/catch" layer 1.
+            // Outer drain guard — first layer of exception isolation.
             // SafeEventInvoker (innermost layer) catches publisher handler
             // throws inside Fire* methods, but anything unexpected escaping
             // upstream (routing bugs, raw worker-late-subscriber enqueue,
@@ -183,12 +182,10 @@ namespace Daro.Internal
             // landing work for an Update tick that may never run.
             _isShuttingDown = true;
 
-            // Sprint native-object-lifecycle-cleanup §Cross-platform managed
-            // contract: fan out to DaroSdk so the registry Find gate arms and
+            // Fan out to DaroSdk so the registry Find gate arms and
             // the current platform's native DestroyAll runs. Best-effort —
             // OnApplicationQuit may fire when subsystems are partially torn
-            // down, so isolate exceptions per the SDK-wide gate-outside
-            // convention (`.claude/rules/logging.md` §Gate-외 예외 경로).
+            // down, so log exceptions regardless of LogLevel and keep teardown running.
             try
             {
                 DaroSdk.MarkShuttingDown();
@@ -199,14 +196,14 @@ namespace Daro.Internal
             }
         }
 
-        // ── Unity lifecycle forwards for DaroAppStateNotifier (§2.6) ─────────
+        // ── Unity lifecycle forwards for DaroAppStateNotifier ─────────
         //
         // OnApplicationPause is the canonical Background signal across platforms.
         // OnApplicationFocus is platform-dependent: on Android, modal Dialog focus
         // loss (Light Popup) raises focus(false) without an Activity onPause —
         // mapping that to Background mis-represents the OS lifecycle. We therefore
         // ignore focus on Android and keep it as a Background source on other
-        // platforms (Editor + iOS, per appstate-meaning-narrowing sprint).
+        // platforms (Editor + iOS).
         //
         // Mapping helpers are exposed for EditMode regression tests.
 
@@ -237,7 +234,7 @@ namespace Daro.Internal
 
         /// <summary>
         /// Clears static references. Called from <see cref="DaroRuntimeBoot.Reset"/>
-        /// on play-mode enter / build startup (§6.4). Safe to invoke repeatedly.
+        /// on play-mode enter / build startup. Safe to invoke repeatedly.
         /// Does not destroy any existing GameObject — Unity itself tears scene
         /// objects down between play sessions; this method only wipes the C# references.
         /// </summary>

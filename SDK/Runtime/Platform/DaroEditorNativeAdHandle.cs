@@ -46,6 +46,20 @@ namespace Daro.Internal
             _settings = settings;
         }
 
+        internal DaroAdChoicesPosition? AdChoicesPosition { get; private set; }
+        internal Rect AdChoicesRect { get; private set; }
+        internal bool AdChoicesVisible { get; private set; }
+        internal int AdChoicesSyncCount { get; private set; }
+        public void ConfigureAdChoices(DaroAdChoicesPosition position) => AdChoicesPosition = position;
+        public void SetAdChoicesScreenRect(Rect rect, bool visible)
+        {
+            if (_disposed) return;
+            AdChoicesRect = rect;
+            AdChoicesVisible = visible;
+            AdChoicesSyncCount++;
+        }
+        public void ClearAdChoicesScreenRect() => AdChoicesVisible = false;
+
         public void Load(int iconWidth, int iconHeight)
         {
             // iconWidth/iconHeight ignored in mock — Editor doesn't run MAX/Glide
@@ -179,7 +193,8 @@ namespace Daro.Internal
                 body:         "This is an Editor mock native ad.",
                 callToAction: "Learn More",
                 icon:         icon,
-                mediaImage:   null);   // v1 image-only; video deferred
+                mediaImage:   null,
+                assetTypes: new[] { NativeAdAssetType.Title, NativeAdAssetType.Body, NativeAdAssetType.Icon, NativeAdAssetType.CallToAction });   // v1 image-only; video deferred
         }
 
         internal readonly struct CtaRectCall

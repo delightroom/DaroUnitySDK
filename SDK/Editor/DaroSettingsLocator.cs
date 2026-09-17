@@ -11,7 +11,7 @@ namespace Daro.Editor
     // and the Integration Manager window all funnel through here so the
     // lookup policy stays in one place.
     //
-    // Lookup policy (D7-A from sketch §3):
+    // Lookup policy:
     //   1. EditorBuildSettings.GetConfigObject<DaroSettings>(ConfigKey) — O(1) primary.
     //   2. AssetDatabase.FindAssets("t:DaroSettings") — scan fallback for first run
     //      before anything has registered. On a single hit we auto-register so the
@@ -19,10 +19,10 @@ namespace Daro.Editor
     //   3. No assets — return null with a diagnostic. Validator turns this into a
     //      build-blocking SETTINGS_MISSING result.
     //
-    // Multi-asset (D7-B): alphabetical first wins, diagnostic lists every path.
+    // Multi-asset: alphabetical first wins, diagnostic lists every path.
     // Validator surfaces the situation as SETTINGS_MULTI Warn.
     //
-    // Resources/ guard (D7-C): asmdef strip already keeps the type out of player
+    // Resources/ guard: asmdef strip already keeps the type out of player
     // builds, but a settings asset placed under Assets/.../Resources/ would still
     // get included in the player. WarnIfUnderResources logs on every lookup so
     // misplacement surfaces early.

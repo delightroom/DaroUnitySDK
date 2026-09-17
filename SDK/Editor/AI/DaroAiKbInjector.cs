@@ -13,8 +13,7 @@ namespace Daro.Editor
     // (Claude / Cursor / Cline) goes through DaroAiKbOwnFileWriter instead.
     //
     // Bootstrap also calls Clean on `DaroAiKbTargets.LegacyMarkerFileNames`
-    // (currently root `CLAUDE.md`) to sweep marker blocks left by the prior
-    // sprint design.
+    // (currently root `CLAUDE.md`) to remove legacy marker blocks during upgrades.
     //
     // Marker scheme (vendor-scoped, conflict-free if other SDKs adopt the
     // same pattern under their own prefix):
@@ -29,7 +28,7 @@ namespace Daro.Editor
     // - The marker block is the **only** region this class touches. Bytes
     //   outside the block (including blank lines, headings, the user's own
     //   notes) are preserved byte-for-byte.
-    // - `Apply` does not create the target file if missing — see D8. Surface
+    // - `Apply` does not create the target file if missing. Surface
     //   the missing-file state to the UI instead so the user opts into
     //   creating it themselves.
     // - Line endings are preserved (CRLF / LF detected from the first

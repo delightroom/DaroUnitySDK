@@ -11,11 +11,10 @@ namespace Daro.Internal
     /// <summary>
     /// iOS implementation of <see cref="IDaroPlatform"/>. Sits on top of
     /// <c>DaroUnityBridge.mm</c> (which wraps <c>DaroObjCBridge</c>).
-    /// See sketch CD-1, CD-3, CD-5, CD-6, CD-8.
     /// </summary>
     /// <remarks>
     /// <para>Threading: <see cref="DaroUnityBridge"/> guarantees main-queue
-    /// delivery for every callback (sketch §CD-5, source-verified) — this
+    /// delivery for every callback — this
     /// class therefore does NOT enqueue through <c>MainThreadDispatcher</c>
     /// before invoking event slots. <c>MainThreadDispatcher.EnsureCreated</c>
     /// is still called once on init for coroutine hosting and
@@ -26,7 +25,7 @@ namespace Daro.Internal
     /// additionally carries <see cref="PreserveAttribute"/> at the call site
     /// to defend against aggressive Unity 6 IL2CPP configurations that have
     /// been observed to strip <see cref="MonoPInvokeCallbackAttribute"/>
-    /// methods despite namespace coverage (sketch CD-8).</para>
+    /// methods despite namespace coverage.</para>
     /// </remarks>
     internal sealed class DaroIOSPlatform : IDaroPlatform, IDaroIosEventSink
     {
@@ -71,8 +70,7 @@ namespace Daro.Internal
                 DaroIOSEncoding.NullableBoolToInt(initParams.DoNotSell),
                 initParams.CcpaConsentString,
                 // 통합 SDK 는 변종과 무관하게 `setCoppa:` 를 노출하므로 실제
-                // 값을 넘긴다. CD-12 의 `-1` 하드코딩은 구 브리지에서 이 심볼이
-                // MAX 변종에 없던 시절의 제약이었다 — Android 와 어긋나 있었다.
+                // 값을 넘긴다. `-1` 로 고정하면 MAX 에서도 COPPA 설정이 버려진다.
                 DaroIOSEncoding.NullableBoolToInt(initParams.IsTaggedForChildDirectedTreatment),
                 (int)initParams.LogLevel);
 
@@ -224,11 +222,10 @@ namespace Daro.Internal
 
         // ── Banner (native-view-overlay-on-GL-surface) ───────────────────
         //
-        // See docs/features/native-bridge.md (Banner overlay / iOS).
+
         // - DaroBannerSize / DaroBannerPosition: ordinal pass-through —
         //   C# enum values match DaroObjCBannerSize and the native shim's
-        //   gravity ordinal contract directly (sketch §"Event Routing —
-        //   Zero Dispatcher Changes").
+        //   gravity ordinal contract directly.
 
         public void CreateBanner(string adUnitId)
         {
@@ -329,7 +326,7 @@ namespace Daro.Internal
             DaroIOSEventDispatcher.Dispatch(adUnitId, eventJson, inst);
         }
 
-        // ── extern C surface (sketch §"Interfaces — Extern C Surface") ───
+        // ── extern C surface ───
 
         private const string DLL = "__Internal";
 
@@ -344,7 +341,7 @@ namespace Daro.Internal
         [DllImport(DLL)] private static extern void DaroUnity_SetAppMuted(bool muted);
         [DllImport(DLL)] private static extern void DaroUnity_SetLogLevel(int level);
 
-        // Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path.
+        // Runtime teardown cleanup.
         // Native side shipped in prior turn — see SDK/Plugins/iOS/DaroUnityBridge.mm.
         [DllImport(DLL)] private static extern void DaroUnity_DestroyAll();
 
@@ -383,9 +380,7 @@ namespace Daro.Internal
 
         // ── Light Popup extern C surface ─────────────────────────────────
         // Defined in SDK/Plugins/iOS/DaroUnityLightPopup.mm.
-        // 36 float = 9 colors × 4 channels (RGBA, [0,1] pre-divided) — see
-        // sketch §"Configuration extern C signature" for the rejected
-        // alternatives (byte 4-arg, packed int).
+        // 36 float = 9 colors × 4 channels (RGBA, [0,1] pre-divided).
         [DllImport(DLL)] private static extern void DaroUnity_CreateLightPopup(
             string adUnitId,
             float bgR,        float bgG,        float bgB,        float bgA,
@@ -405,13 +400,13 @@ namespace Daro.Internal
 
         // ── Light Popup (modal popup + auto-dismiss preset) ──────────────
         //
-        // See docs/features/native-bridge.md (Light Popup / iOS).
+
         // - 9 Color32 → 36 float (RGBA per channel, pre-divided to [0,1] via
         //   B(byte) helper); shim builds DaroObjCLightPopupConfiguration with
         //   [UIColor colorWithRed:green:blue:alpha:] (no further conversion).
-        // - 9:9 UIColor mapping is true 1:1 (sketch §"Configuration Field
-        //   Mapping"); CloseButtonColor → closeButtonTextColor only because
-        //   iOS lacks a separate icon-color slot (CD-3).
+        // - 9:9 UIColor mapping is true 1:1; CloseButtonColor maps to
+        //   closeButtonTextColor because
+        //   iOS lacks a separate icon-color slot.
 
         public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions o)
         {
@@ -455,8 +450,8 @@ namespace Daro.Internal
         // [UIColor colorWithRed:...] without further conversion.
         private static float B(byte b) => b / 255f;
 
-        // ── Native ad (CD-8 instance-owned) ──────────────────────────────
-        // CD-1: Native uses a per-instance handle (vs adUnitId-keyed dict for
+        // ── Native ad (instance-owned) ──────────────────────────────
+        // Native uses a per-instance handle (vs adUnitId-keyed dict for
         // other formats); same adUnitId × N instances yields N independent
         // handles. Implementation: see DaroIOSNativeAdHandle (this directory)
         // + DaroUnityNativeAd.mm (peer to DaroUnityBannerAd.mm).

@@ -5,7 +5,7 @@ namespace Daro.Internal
 {
     /// <summary>
     /// Maps raw native <see cref="int"/> error codes (DaroSDK <c>DaroError.Code.rawValue</c>)
-    /// to typed Unity enums. See docs/features/native-bridge.md.
+    /// to typed Unity enums.
     /// </summary>
     /// <remarks>
     /// <para>The Editor mock (<c>DaroEditorPlatform</c>) and the iOS/Android

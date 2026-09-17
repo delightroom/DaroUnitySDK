@@ -118,7 +118,7 @@ The SDK's Xcode post-process step handles this automatically:
 
 If you still see a code-signing error:
 - Check the Unity Console for a `[Daro:Build]` log line confirming the post-process step ran.
-- Confirm `Samples/DaroExample/` (or your own integration) is on a recent SDK version that includes `DaroIosPostProcessor`.
+- Confirm your project is on a recent SDK version that includes `DaroIosPostProcessor`.
 - Make sure your Xcode developer certificate is valid and the project is set up to sign on copy.
 
 ### EDM4U / CocoaPods / Android Gradle resolve failures
@@ -187,5 +187,3 @@ When you escalate an issue, include the following so we don't have to ask:
 - **Smoke scenario id** (if applicable): if this is a regression of a known scenario, point to it.
 
 If the symptom is "no fill / no impression / wrong fill rate," include the **Daro / MAX Mediation Debugger** output (in-app debugger menu on the dashboard side) — that's the fastest way for us to disambiguate SDK vs dashboard.
-
-<!-- source: SDK/Editor/DaroDependencies.xml, docs/features/build-integration.md, docs/features/native-bridge.md, .claude/rules/native-deps.md -->

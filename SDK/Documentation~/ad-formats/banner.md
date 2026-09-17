@@ -164,5 +164,3 @@ You moved to a new scene but the banner is still there. `Dispose()` was never ca
 - **No `OnAdFailedToShow`.** The C# pre-check (`!IsReady()` → `InvalidOperationException`) is the only show-time failure surface. Banner has no native show-failure callback.
 - **No `OnAdDismissed`.** Banner has no "user dismissed" concept — it's always-on. Use `OnAdHidden` (your `Hide()` call) instead.
 - **No `OnAdRefreshed`.** Each refresh cycle reuses the existing `OnAdLoaded` / `OnAdImpression` events; there's no separate refresh signal.
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (Banner section 603-663, Back handler 172-178), SDK/Runtime/DaroBannerAd.cs, SDK/Runtime/DaroBannerSize.cs, SDK/Runtime/DaroBannerPosition.cs, docs/features/native-bridge.md (Banner overlay) -->

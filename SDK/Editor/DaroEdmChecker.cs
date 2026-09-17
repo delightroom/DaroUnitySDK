@@ -9,7 +9,7 @@ namespace Daro.Editor
     // `com.google.external-dependency-manager` still compiles cleanly, and the
     // Validator's EDM_MISSING check is the user-visible failure surface instead.
     //
-    // Three force-resolve entry points (sketch §7, patched):
+    // Three force-resolve entry points:
     //   - TryForceResolveAndroid   — IM window's Android button + build hook auto-trigger for Android target
     //   - TryForceResolveIos       — IM window's iOS button + build hook auto-trigger for iOS target
     //   - TryForceResolveFor(target) — dispatcher used by build hook so a single-platform build

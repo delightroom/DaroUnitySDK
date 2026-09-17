@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Daro.Internal;
 using UnityEngine;
 
@@ -38,6 +39,9 @@ namespace Daro
         // ── Identity ─────────────────────────────────────────────────────
         public string  AdUnitId  { get; }
 
+        /// <summary>Requested corner. Null preserves the platform's existing placement.</summary>
+        public DaroAdChoicesPosition? AdChoicesPosition { get; }
+
         /// <summary>
         /// Pixel dimensions hint the platform shim uses to size the off-screen
         /// host containing the ad's IconImage. MAX's internal Glide image loader
@@ -59,6 +63,7 @@ namespace Daro
         public bool IsReady => _loaded && !_disposed;
 
         // ── Events ───────────────────────────────────────────────────────
+        public event Action<ISet<NativeAdAssetType>>? OnNativeAdAssetLoaded;
         public event Action<DaroAdInfo>?      OnAdLoaded;
         public event Action<DaroAdLoadError>? OnAdFailedToLoad;
         public event Action<DaroAdInfo>?      OnAdImpression;
@@ -83,6 +88,7 @@ namespace Daro
         // UnwireCta / Dispose. Null on raw escape-hatch path. Actual
         // MonoBehaviour body lives in SDK/Runtime/Internal/DaroNativeCtaDriver.cs.
         private DaroNativeCtaDriver? _ctaDriver;
+        private DaroNativeAdChoicesDriver? _adChoicesDriver;
 
         /// <summary>
         /// Slot-view enabled signal — set by <see cref="DaroNativeAdView"/>'s
@@ -96,7 +102,16 @@ namespace Daro
         /// <exception cref="ArgumentException">
         /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroNativeAd(string adUnitId)
+        public DaroNativeAd(string adUnitId) : this(adUnitId, null) { }
+
+        /// <summary>
+        /// Creates an ad with AdChoices in the requested corner of its full ad area.
+        /// Bind a DaroNativeAdView or call WireAdChoices to provide that area.
+        /// </summary>
+        public DaroNativeAd(string adUnitId, DaroAdChoicesPosition adChoicesPosition)
+            : this(adUnitId, (DaroAdChoicesPosition?)adChoicesPosition) { }
+
+        private DaroNativeAd(string adUnitId, DaroAdChoicesPosition? adChoicesPosition)
         {
             if (string.IsNullOrWhiteSpace(adUnitId))
             {
@@ -106,11 +121,25 @@ namespace Daro
             }
 
             AdUnitId  = adUnitId;
+            if (adChoicesPosition.HasValue &&
+                !Enum.IsDefined(typeof(DaroAdChoicesPosition), adChoicesPosition.Value))
+                throw new ArgumentOutOfRangeException(nameof(adChoicesPosition));
+            AdChoicesPosition = adChoicesPosition;
 
             // Sink holds a direct reference to this instance — routing is
             // per-instance, no registry lookup needed.
             var sink = new InstanceSink(this);
             _handle  = DaroPlatform.Current.CreateNativeAdHandle(adUnitId, sink);
+            try
+            {
+                if (adChoicesPosition.HasValue) _handle.ConfigureAdChoices(adChoicesPosition.Value);
+            }
+            catch
+            {
+                _handle.Dispose();
+                _handle = null;
+                throw;
+            }
             DaroLog.Verbose("Native", $"ctor adUnit='{AdUnitId}'");
         }
 
@@ -135,11 +164,13 @@ namespace Daro
             DaroLog.Verbose("Native", $"Load adUnit='{AdUnitId}' iconSize={w}x{h}");
             _loaded = false;
             _ctaDriver?.InvalidateSync();
+            _adChoicesDriver?.InvalidateSync();
             _handle!.Load(w, h);
         }
 
         /// <summary>
-        /// Mark the ad as visible (impression signal). Slot path:
+        /// Mark the publisher UI as visible. On iOS the native overlay is
+        /// displayed only after load success and valid CTA geometry. Slot path:
         /// <see cref="DaroNativeAdView"/> calls this from <c>OnEnable</c>.
         /// Raw path: publisher calls this when their UI activates.
         /// No-op after <see cref="Dispose"/>.
@@ -184,7 +215,7 @@ namespace Daro
         // overlay is active. Publishers must use <see cref="OnAdClicked"/>
         // event for cross-platform click handling; attaching listeners to
         // the Unity Button.onClick to react to iOS ad clicks will silently
-        // miss. See <c>docs/study/ios-native-ad-overlay-click-attribution.md</c>.
+        // miss.
 
         /// <summary>
         /// Helper-bound CTA wiring (primary raw-path API). SDK takes ownership
@@ -249,14 +280,15 @@ namespace Daro
             if (_ctaDriver == null) return;
 
             DaroLog.Verbose("Native", $"UnwireCta adUnit='{AdUnitId}'");
-            _ctaDriver.Detach();   // → ClearCtaScreenRect on live handle → Destroy driver
+            _ctaDriver.Detach();   // → ClearCtaScreenRect on live handle → disable driver
             _ctaDriver = null;
         }
 
         /// <summary>
         /// Direct escape hatch (advanced raw-path API). Push a CTA overlay
         /// screen rect + touch-enabled state explicitly. Publisher takes full
-        /// ownership of every lifecycle transition: must re-call on layout /
+        /// ownership of every lifecycle transition: call <see cref="NotifyVisible"/>
+        /// and <see cref="NotifyHidden"/> with the UI's visibility, re-call on layout /
         /// interactability change, and <see cref="ClearCtaScreenRect"/> on
         /// teardown. Mis-use produces stale overlays that accept clicks against
         /// hidden / disabled publisher UI.
@@ -286,8 +318,9 @@ namespace Daro
         }
 
         /// <summary>
-        /// Direct escape-hatch counterpart — clear the overlay rect (frame
-        /// kept intact, touch off). Publisher must call on teardown when
+        /// Direct escape-hatch counterpart — invalidate overlay geometry.
+        /// On iOS this hides native UI and disables touch until new geometry
+        /// is supplied. Publisher must call on teardown when
         /// using <see cref="SetCtaScreenRect"/>. <see cref="WireCtaButton"/>
         /// users do not need to call this — the helper auto-clears on its
         /// own lifecycle.
@@ -297,6 +330,52 @@ namespace Daro
             if (_disposed) return;
             DaroLog.Verbose("Native", $"ClearCtaScreenRect adUnit='{AdUnitId}'");
             _handle?.ClearCtaScreenRect();
+        }
+
+        /// <summary>
+        /// Tracks the full ad area's screen bounds for AdChoices, independently of the CTA.
+        /// ScreenSpaceOverlay and ScreenSpaceCamera canvases are supported.
+        /// </summary>
+        public void WireAdChoices(RectTransform adArea)
+        {
+            if (adArea == null) throw new ArgumentNullException(nameof(adArea));
+            if (_disposed) return;
+            if (!AdChoicesPosition.HasValue)
+                throw new InvalidOperationException("Choose an AdChoices position when constructing the ad.");
+            var canvas = adArea.GetComponentInParent<Canvas>();
+            if (canvas == null || canvas.renderMode == RenderMode.WorldSpace)
+                throw new NotSupportedException("AdChoices requires a ScreenSpaceOverlay or ScreenSpaceCamera canvas.");
+            if (_adChoicesDriver != null && _adChoicesDriver.AdArea == adArea) return;
+            UnwireAdChoices();
+            _adChoicesDriver = DaroNativeAdChoicesDriver.Attach(this, adArea);
+        }
+
+        /// <summary>Stops tracking the ad area and removes its AdChoices overlay.</summary>
+        public void UnwireAdChoices()
+        {
+            if (_disposed) return;
+            _adChoicesDriver?.Detach();
+            _adChoicesDriver = null;
+        }
+
+        /// <summary>
+        /// Raw-path geometry in Unity pixels (bottom-left origin). Update after layout/rotation.
+        /// Visibility gates the native overlay; the CTA touch flag is configured separately.
+        /// </summary>
+        public void SetAdChoicesScreenRect(Rect adScreenRect, bool visible)
+        {
+            if (_disposed) return;
+            if (!AdChoicesPosition.HasValue)
+                throw new InvalidOperationException("Choose an AdChoices position when constructing the ad.");
+            if (!IsFiniteRect(adScreenRect))
+                throw new ArgumentException("Ad area must contain finite coordinates.", nameof(adScreenRect));
+            _handle?.SetAdChoicesScreenRect(adScreenRect, visible);
+        }
+
+        /// <summary>Hides the AdChoices overlay and clears its full ad area.</summary>
+        public void ClearAdChoicesScreenRect()
+        {
+            if (!_disposed) _handle?.ClearAdChoicesScreenRect();
         }
 
         private static bool IsFiniteRect(Rect r) =>
@@ -348,12 +427,20 @@ namespace Daro
                 _ctaDriver = null;
             }
 
+            if (disposing && _adChoicesDriver != null)
+            {
+                try { _adChoicesDriver.Detach(); }
+                catch (Exception e) { DaroLog.Warn("Native", $"AdChoices driver Detach threw: {e}"); }
+                _adChoicesDriver = null;
+            }
+
             _disposed = true;
 
             if (disposing)
             {
                 DaroLog.Verbose("Native", $"Dispose adUnit='{AdUnitId}'");
 
+                OnNativeAdAssetLoaded = null;
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
                 OnAdImpression   = null;
@@ -383,13 +470,11 @@ namespace Daro
         // ── Internal Fire* (called from sink on Unity main thread) ───────
         //
         // Native ad uses INativeAdEventSink direct routing instead of the
-        // (format, adUnitId) registry pattern other formats use — see
-        // CD-8 in native-ad-android-sprint sketch. That means the Find
-        // gate in DaroAdInstanceRegistry doesn't see native ad callbacks
-        // (the registry has no entry for them). To keep `goal.md §Best-effort #6`
-        // (in-flight native callbacks after teardown do not dispatch
-        // public C# events) honest, each Fire method must consult the
-        // shutdown gate directly via DaroAdInstanceRegistry.IsShuttingDown.
+        // (format, adUnitId) registry pattern other formats use. The Find
+        // gate in DaroAdInstanceRegistry does not see native ad callbacks
+        // because the registry has no entry for them. To prevent in-flight
+        // native callbacks after teardown from dispatching public C# events,
+        // each Fire method consults DaroAdInstanceRegistry.IsShuttingDown directly.
         // Without it there is a window between MarkShuttingDown and the
         // Kotlin `@Volatile destroyed` set (via bridge.destroyAll →
         // snapshotLiveNativeAds().forEach { it.destroy() }) where a native
@@ -407,20 +492,38 @@ namespace Daro
             _loaded = true;
             Info    = nativeInfo;
             _ctaDriver?.InvalidateSync();
+            _adChoicesDriver?.InvalidateSync();
             DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitId}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
-            SafeEventInvoker.Invoke(OnAdLoaded, adInfo);
+            var assetHandlers = OnNativeAdAssetLoaded?.GetInvocationList();
+            if (assetHandlers != null)
+            {
+                foreach (Action<ISet<NativeAdAssetType>> handler in assetHandlers)
+                {
+                    if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) break;
+                    SafeEventInvoker.Invoke<ISet<NativeAdAssetType>>(handler,
+                        nativeInfo.CopyAssetTypes());
+                }
+            }
+            if (!_disposed && ReferenceEquals(Info, nativeInfo) && _loaded)
+                SafeEventInvoker.Invoke(OnAdLoaded, adInfo);
             if (!ReferenceEquals(previousInfo, nativeInfo))
                 DestroyInfoTextures(previousInfo);
         }
 
-        internal void FireOnAdFailedToLoad(DaroAdLoadError error)
+        internal void FireOnAdFailedToLoad(DaroAdLoadError error, bool keepsCurrentAd = false)
         {
             if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
-            var previousInfo = Info;
-            _loaded = false;
-            // Clear stale Info from a prior successful load so a failed reload
-            // doesn't leave the publisher reading the previous ad's assets.
-            Info = null;
+            // Android retains its displayed ad on refresh failure; iOS AdMob may clear it.
+            // Explicit Load already resets _loaded when it replaces the native view.
+            bool retainDisplayedAd = keepsCurrentAd && _loaded;
+            var previousInfo = retainDisplayedAd ? null : Info;
+            if (!retainDisplayedAd)
+            {
+                _loaded = false;
+                Info = null;
+                _handle?.ClearAdChoicesScreenRect();
+                _adChoicesDriver?.InvalidateSync();
+            }
             DaroLog.Verbose("Native", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
             DestroyInfoTextures(previousInfo);
@@ -464,8 +567,8 @@ namespace Daro
             public void OnAdLoaded(DaroAdInfo adInfo, DaroNativeAdInfo nativeInfo) =>
                 _ad.FireOnAdLoaded(adInfo, nativeInfo);
 
-            public void OnAdFailedToLoad(DaroAdLoadError error) =>
-                _ad.FireOnAdFailedToLoad(error);
+            public void OnAdFailedToLoad(DaroAdLoadError error, bool keepsCurrentAd = false) =>
+                _ad.FireOnAdFailedToLoad(error, keepsCurrentAd);
 
             public void OnAdImpression(DaroAdInfo info) =>
                 _ad.FireOnAdImpression(info);

@@ -28,7 +28,7 @@ namespace Daro.Internal
     /// <para>
     /// The invoker is policy-agnostic about per-instance disposed state; each Fire*
     /// call site keeps its own <c>if (_disposed) return;</c> guard before calling here.
-    /// This matches sketch §D4: dual-layer disposed check, with the instance-level
+    /// This uses a dual-layer disposed check, with the instance-level
     /// guard explicit at the call site.
     /// </para>
     /// </remarks>

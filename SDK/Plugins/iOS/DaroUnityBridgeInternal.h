@@ -4,7 +4,7 @@
 //  DaroUnityBannerAd.mm. NOT a public API surface — never include outside
 //  these two files.
 //
-//  Sketch §"File Strategy" + §"DaroUnityBridgeInternal.h" — the shared
+//  The shared
 //  symbols (s_adQueue, DaroDispatch, EscapeJson, RevenueFields,
 //  UnityGetGLViewController) live in DaroUnityBridge.mm, banner code links
 //  to them via these extern declarations.
@@ -31,7 +31,7 @@ extern NSMutableDictionary<NSString*, DaroUnityBannerEntry*>* s_banners;
 // Native ad storage. Defined in DaroUnityNativeAd.mm; the native-ad extern
 // entries manage this dictionary while DaroUnityBridge.mm bootstraps it.
 // Keyed by C#-allocated monotonic int handleId (boxed via NSNumber) — the
-// adUnitId-keyed pattern doesn't fit native ad's CD-8 instance-owned model
+// adUnitId-keyed pattern doesn't fit native ad's instance-owned model
 // (multi-instance same adUnitId).
 @class DaroUnityNativeAdEntry;
 extern NSMutableDictionary<NSNumber*, DaroUnityNativeAdEntry*>* s_nativeAds;
@@ -96,8 +96,7 @@ extern UIViewController* UnityGetGLViewController(void);
 // plain `extern void foo()` is C++ — mismatched definition link-fails with
 // "Declaration ... has a different language linkage".
 //
-// See docs/dev/native-object-lifecycle-cleanup/tasks/ios-destroy-all.md
-// §DestroyAll path (hygiene) for the helper-dispatcher pattern rationale.
+
 #ifdef __cplusplus
 extern "C" {
 #endif

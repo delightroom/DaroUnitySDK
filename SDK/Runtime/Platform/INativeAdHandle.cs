@@ -27,6 +27,10 @@ namespace Daro.Internal
         /// </summary>
         void Load(int iconWidth, int iconHeight);
 
+        void ConfigureAdChoices(DaroAdChoicesPosition position);
+        void SetAdChoicesScreenRect(Rect rect, bool visible);
+        void ClearAdChoicesScreenRect();
+
         /// <summary>
         /// Slot path: called from <c>DaroNativeAdView.OnEnable</c>.
         /// Raw path: publisher invokes via <c>DaroNativeAd.NotifyVisible</c>.
@@ -57,8 +61,7 @@ namespace Daro.Internal
         /// </summary>
         /// <remarks>
         /// Android + Editor implement as verbose-log no-ops for interface
-        /// uniformity. See <c>docs/features/native-bridge.md</c> Native ad iOS
-        /// section for the click-overlay architecture.
+        /// uniformity.
         /// </remarks>
         void SetCtaScreenRect(Rect rect, bool touchEnabled);
 

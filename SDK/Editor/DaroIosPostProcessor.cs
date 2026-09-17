@@ -25,13 +25,13 @@ namespace Daro.Editor
     // *additive only* — existing non-empty consumer values survive untouched.
     // The SDK never injects an ATS (NSAppTransportSecurity) exception: MAX
     // requires none, and weakening app-wide transport security is the
-    // consumer's call (see docs/study/ios-ats-mediation.md).
+    // consumer's call.
     //
     // INTEGRATION KEY 는 여기서 다루지 않는다 — order 45 의
     // PrepareIntegrationKey 가 봉투를 심고 Podfile 에 훅을 건다.
     //
-    // 키파일을 Copy Bundle Resources 에 넣던 PBX 단계는 봉투 전환으로
-    // 사라졌다(DARO-1434) — 배달할 파일 자체가 없다.
+    // INTEGRATION KEY 봉투를 사용하므로 Copy Bundle Resources 로 배달할
+    // 별도 키파일은 없다.
     //
     // The plist branch is automatically tested via ApplyPlistChanges seam.
     public static class DaroIosPostProcessor
@@ -62,10 +62,10 @@ namespace Daro.Editor
         // pod install 이 둘 다 50 이라 상대 순서가 정의돼 있지 않다. 45 에 심으면
         // 어느 쪽이 먼저 돌든 훅이 읽을 값이 있다.
         //
-        // **왜 Xcode 빌드 페이즈가 아닌가** — 그 설계는 폐기됐다(DARO-1120).
+        // 키 주입은 Xcode 빌드 페이즈 대신 내보내기 시점에 처리한다.
         // 산출물 plist 를 매 빌드 고치면 코드 서명이 깨진다 — Info.plist 의
         // SHA-256 이 CodeDirectory 특별 슬롯 -1 에 박히는데 페이즈는 매 빌드
-        // 돌고 CodeSign 은 건너뛰어, 기기 설치가 거부된다(DARO-1112 실측).
+        // 돌고 CodeSign 은 건너뛰어, 기기 설치가 거부된다.
         [PostProcessBuild(45)]
         public static void PrepareIntegrationKey(BuildTarget target, string pathToBuiltProject)
         {
@@ -253,17 +253,14 @@ namespace Daro.Editor
             var unityFrameworkGuid = pbx.GetUnityFrameworkTargetGuid();
             pbx.SetBuildProperty(unityFrameworkGuid, "GCC_ENABLE_OBJC_EXCEPTIONS", "YES");
 
-            // SWIFT_VERSION 은 남긴다. 원래는 Plugins/iOS 의 Swift 헬퍼
-            // (DaroUnityRevenueToken.swift — CryptoKit 토큰 유도)를 컴파일하려고
-            // 걸었는데 DARO-1434 가 그 파일을 지워 **shim 에 Swift 소스가 0개**다.
+            // shim 에 Swift 소스가 없어도 SWIFT_VERSION 은 유지한다.
             //
             // 그래도 지우지 않는 이유: 통합 pod(DaroObjCBridge)이 Swift 를 품은
             // static framework 라, 호스트 타깃의 Swift 설정이 링크에 관여할 수
             // 있다. 안 쓰이면 무해하고 필요했는데 지우면 앱 기동 시점에 터진다 —
             // 비용이 비대칭이라 남기는 쪽을 골랐다.
             //
-            // 판정은 샘플 iOS 실빌드가 한다(DARO-1434 완료 조건). 거기서 불필요가
-            // 확인되면 이 줄과 이 주석을 함께 지운다.
+            // 이 설정을 제거하려면 iOS 실빌드에서 Swift 링크가 유지되는지 확인한다.
             pbx.SetBuildProperty(unityFrameworkGuid, "SWIFT_VERSION", "5.0");
 
             pbx.WriteToFile(pbxPath);

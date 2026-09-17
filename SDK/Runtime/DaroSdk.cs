@@ -8,8 +8,7 @@ using Daro.Internal;
 namespace Daro
 {
     /// <summary>
-    /// Static facade for the Daro Unity SDK. See docs/overview.md for the
-    /// public API contract and docs/features/native-bridge.md for platform behavior.
+    /// Static facade for initialization, privacy settings, and SDK-wide events.
     /// Privacy / log settings should be configured before <see cref="InitializeAsync"/>.
     /// </summary>
     public static class DaroSdk
@@ -28,18 +27,19 @@ namespace Daro
         /// <see cref="ResetStatics"/> so a second play session starts clean.
         /// </summary>
         private static TaskCompletionSource<bool>? _initTcs;
+        private static bool? _pendingAppMuted;
 
         /// <summary>
         /// Backing delegate for <see cref="OnSdkInitialized"/>. Custom add/remove
         /// accessors on the event implement the "late subscriber fires immediately"
-        /// contract per §2.3, which the stock <c>event</c> keyword can't express.
+        /// contract, which the stock <c>event</c> keyword can't express.
         /// </summary>
         private static Action? _onSdkInitialized;
 
         /// <summary>
         /// Fires once on successful SDK initialization.
         /// <para>
-        /// <b>Late-subscriber contract</b> (§2.3): if the SDK is already
+        /// <b>Late-subscriber contract</b>: if the SDK is already
         /// initialized at the time a handler subscribes, the new handler is
         /// invoked synchronously on the subscribing thread — zero frame delay,
         /// no queuing. Consumers writing <c>Start()</c> methods that subscribe
@@ -144,12 +144,12 @@ namespace Daro
         // Volatile backing field — DaroLogLevel's underlying type is int, so
         // volatile read/write is atomic on every supported runtime. The
         // finalizer-safe inline gate at consumer call sites reads this value
-        // directly (no lock — locks deadlock in finalizers). See sketch §A4.
+        // directly (no lock — locks deadlock in finalizers).
         private static volatile DaroLogLevel _logLevel = DaroLogLevel.Info;
 
         /// <summary>
         /// Verbosity for SDK-emitted logs. Setter immediately propagates the
-        /// new level to the platform shim (init-time + runtime, see sketch §A4)
+        /// new level to the platform shim (init-time + runtime)
         /// so the C# Console gate and the Android Kotlin shim's
         /// <c>daroLogLevel</c> stay in lockstep. Pre-init assignment is safe —
         /// <see cref="DaroPlatform.Current"/> lazily provides the Editor stub.
@@ -168,7 +168,7 @@ namespace Daro
         // ── Initialization ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Initialize the Daro SDK. Idempotent (§2.3): duplicate calls return
+        /// Initialize the Daro SDK. Idempotent: duplicate calls return
         /// the same <see cref="Task"/> — an in-flight one while init is running,
         /// a completed one once init has finished.
         /// </summary>
@@ -176,14 +176,14 @@ namespace Daro
         /// Must be called on the Unity main thread; internally constructs the
         /// hidden <c>MainThreadDispatcher</c> GameObject. Calling off the main
         /// thread throws <c>UnityException</c> from <c>new GameObject(...)</c>
-        /// per §6.3 — not SDK-enforced, a documented consumer contract.
+        /// — not SDK-enforced, a documented consumer contract.
         /// </remarks>
         /// <exception cref="DaroSdkInitException">
         /// Surfaced via a faulted Task when the native init fails.
         /// </exception>
         public static Task InitializeAsync()
         {
-            // Idempotency per §2.3: any second call — in-flight or completed —
+            // Idempotency: any second call — in-flight or completed —
             // returns the same Task. We latch the TCS on the first call;
             // subsequent callers simply observe its state.
             if (_initTcs != null)
@@ -199,7 +199,7 @@ namespace Daro
             // concurrent second caller sees the in-flight state. This isn't
             // strictly thread-safe — two simultaneous first-callers could both
             // race past the null check — but InitializeAsync is a
-            // main-thread-only API (see §6.3) so there's only one caller here
+            // main-thread-only API so there's only one caller here
             // in practice. RunContinuationsAsynchronously avoids consumer
             // continuations running inline inside this method.
             var tcs = new TaskCompletionSource<bool>(
@@ -208,18 +208,18 @@ namespace Daro
 
             // EnsureCreated is the main-thread-only call. If we're off the main
             // thread the UnityException will propagate out of InitializeAsync
-            // synchronously — documented behavior per §4.1 / §6.3. We deliberately
+            // synchronously — documented behavior. We deliberately
             // don't catch it: a consumer calling off the main thread should see
             // a synchronous throw, not a faulted Task (the latter would be
             // indistinguishable from a native init failure).
             MainThreadDispatcher.EnsureCreated();
 
-            // Wire platform → consumer event plumbing (§2.4). The IDaroPlatform
+            // Wire platform → consumer event plumbing. The IDaroPlatform
             // event setters are set-once by contract, so doing it here — inside
             // the first InitializeAsync call — is exactly the right moment. The
             // closures route by (format, adUnitId) → instance via the registry;
             // each firing method on the instance re-checks `_disposed` at drain
-            // time per §4.4.
+            // time.
             WirePlatformEvents();
 
             var initParams = new DaroSdkInitParams
@@ -240,7 +240,7 @@ namespace Daro
             //
             // The continuation marshals completion onto the main thread via
             // MainThreadDispatcher so OnSdkInitialized fires on the main
-            // thread (consistent with all other Daro events per §3.3). The
+            // thread (consistent with all other Daro events). The
             // Task itself completes on whatever thread the dispatcher drains
             // on — again, the main thread.
             Task platformInit;
@@ -266,6 +266,10 @@ namespace Daro
                 // every other SDK callback.
                 MainThreadDispatcher.Enqueue(() =>
                 {
+                    // A completion from an earlier Editor session must not
+                    // initialize the new session or apply its pending settings.
+                    if (!ReferenceEquals(_initTcs, tcs)) return;
+
                     if (t.IsFaulted)
                     {
                         // Flatten AggregateException down to its first inner;
@@ -279,6 +283,18 @@ namespace Daro
                     if (t.IsCanceled)
                     {
                         tcs.TrySetCanceled();
+                        return;
+                    }
+
+                    try
+                    {
+                        if (_pendingAppMuted.HasValue)
+                            DaroPlatform.Current.SetAppMuted(_pendingAppMuted.Value);
+                        _pendingAppMuted = null;
+                    }
+                    catch (Exception e)
+                    {
+                        tcs.TrySetException(e);
                         return;
                     }
 
@@ -300,7 +316,7 @@ namespace Daro
         // ── Runtime settings ─────────────────────────────────────────────────
 
         /// <summary>
-        /// Set an opaque user id on DaroSDK. Safe to call pre-init (§2.3):
+        /// Set an opaque user id on DaroSDK. Safe to call pre-init:
         /// platform stores-and-forwards as needed.
         /// </summary>
         public static void SetUserId(string userId)
@@ -311,19 +327,23 @@ namespace Daro
         }
 
         /// <summary>
-        /// Mute or unmute all Daro ad audio. Safe to call pre-init (§2.3):
-        /// platform stores-and-forwards as needed.
+        /// Mute or unmute all Daro ad audio. Before initialization completes,
+        /// the last requested value is applied after native initialization
+        /// succeeds and before the completion event and Task. If never set,
+        /// the native default is preserved. Call on the Unity main thread.
         /// </summary>
         public static void SetAppMuted(bool muted)
         {
             DaroLog.Verbose("Sdk", $"SetAppMuted muted={muted}");
-            DaroPlatform.Current.SetAppMuted(muted);
+            if (IsInitialized)
+                DaroPlatform.Current.SetAppMuted(muted);
+            else
+                _pendingAppMuted = muted;
         }
 
         // ── Internal ─────────────────────────────────────────────────────────
 
-        // Sprint native-object-lifecycle-cleanup §Cross-platform managed
-        // contract: idempotency guard for MarkShuttingDown. Set on first
+        // Idempotency guard for MarkShuttingDown. Set on first
         // call, reset by ResetStatics on next play-mode enter / build startup.
         private static volatile bool _isShuttingDown;
 
@@ -338,9 +358,8 @@ namespace Daro
         /// </summary>
         /// <remarks>
         /// Idempotent — first call sets the gate and runs DestroyAll;
-        /// subsequent calls early-out via <c>_isShuttingDown</c>. Per
-        /// teardown-contract.md §Cross-platform managed contract §2
-        /// (D-reset-statics-b), <see cref="ResetStatics"/> does NOT call
+        /// subsequent calls early-out via <c>_isShuttingDown</c>.
+        /// <see cref="ResetStatics"/> does NOT call
         /// this method — managed test isolation is preserved by keeping
         /// the native teardown path separate.
         /// </remarks>
@@ -371,13 +390,14 @@ namespace Daro
 
         /// <summary>
         /// Reset all static state. Called by <c>DaroRuntimeBoot.Reset</c> on
-        /// play-mode enter / build startup (§6.4). After this runs, the SDK
+        /// play-mode enter / build startup. After this runs, the SDK
         /// behaves as if no prior session had existed.
         /// </summary>
         internal static void ResetStatics()
         {
             IsInitialized                     = false;
             _initTcs                          = null;
+            _pendingAppMuted                  = null;
             _onSdkInitialized                 = null;
             HasGdprConsent                    = null;
             GdprConsentString                 = null;
@@ -400,13 +420,13 @@ namespace Daro
         /// <summary>
         /// Install the eight platform-level event setters. Each handler
         /// resolves the consumer-facing ad instance via the registry, does
-        /// the §4.4 pre-enqueue disposed check, and delegates to the
+        /// the pre-enqueue disposed check, and delegates to the
         /// instance's internal <c>Fire*</c> method.
         /// </summary>
         /// <remarks>
         /// Called exactly once per process, from the first
         /// <see cref="InitializeAsync"/>. The <c>IDaroPlatform</c> setters
-        /// are set-once by contract (§2.5), so re-entering this method
+        /// are set-once by contract, so re-entering this method
         /// would be incorrect — but idempotency in <see cref="InitializeAsync"/>
         /// already prevents that.
         /// </remarks>

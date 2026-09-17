@@ -11,9 +11,8 @@ namespace Daro.Internal
     /// Editor-only via <c>#if UNITY_EDITOR</c> guard so player builds don't
     /// pull in this MonoBehaviour or its IMGUI dependency.
     ///
-    /// No <c>UnityEngine.UI</c> dependency — IMGUI only (per sketch §1 KU-9
-    /// boundary: "must provide Editor visual feedback without introducing UI
-    /// package dependency").
+    /// IMGUI provides Editor visual feedback without adding a
+    /// <c>UnityEngine.UI</c> package dependency.
     /// </summary>
     internal sealed class DaroEditorBannerView : MonoBehaviour
     {

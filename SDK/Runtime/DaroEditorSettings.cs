@@ -6,7 +6,7 @@ namespace Daro
     /// <summary>
     /// Inspector-tunable knobs for the in-Editor mock platform.
     /// Consumed at runtime (in Editor only) by <c>DaroEditorPlatform</c>.
-    /// Per native-bridge §5: raw <c>int</c> error-code fields are intentional
+    /// Raw <c>int</c> error-code fields are intentional
     /// so testers can feed unmapped codes through the same
     /// <c>DaroAdErrorCodeMapper</c> path the device platforms use and
     /// verify the <c>Unspecified</c> fallback end-to-end.

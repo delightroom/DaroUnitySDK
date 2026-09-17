@@ -23,7 +23,7 @@ namespace Daro.Internal
         // on app-quit / Unity-runtime-teardown. Clears all live native ad
         // objects + attached views (per platform's own DestroyAll semantics);
         // best-effort — must not throw. Idempotent — safe to call twice.
-        // See docs/dev/native-object-lifecycle-cleanup/tasks/teardown-contract.md.
+
         void DestroyAll();
 
         // ── Runtime settings ──────────────────────────────────────────────
@@ -80,14 +80,14 @@ namespace Daro.Internal
         void ShowLightPopup(string adUnitId);
         void DestroyLightPopup(string adUnitId);
 
-        // ── Native ad (instance-owned, CD-8) ──────────────────────────────
+        // ── Native ad (instance-owned) ──────────────────────────────
         // Native ad uses a *per-instance handle* instead of the adUnitId-keyed
         // dict pattern of Interstitial / Rewarded / AppOpen / Banner. This
         // permits multi-instance for the same adUnitId (list UI use case).
         // Each handle owns its own native loader + callback proxy; routing
         // is per-instance via the supplied INativeAdEventSink. No platform
         // event slots required for native — the sink replaces them.
-        // See sketch-native-ad-android.md §4.
+
         INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink);
 
         // ── Event callbacks (set once by DaroSdk; fire on main thread) ────

@@ -13,7 +13,7 @@ namespace Daro.Internal
     {
         /// <summary>
         /// C# nullable bool → JNI int sentinel for the Kotlin shim's
-        /// <c>DaroUnityBridge.initialize</c> entry. Sketch CD-6.
+        /// <c>DaroUnityBridge.initialize</c> entry.
         /// </summary>
         /// <returns><c>-1</c> if null, <c>1</c> if true, <c>0</c> if false.</returns>
         /// <remarks>
@@ -26,7 +26,7 @@ namespace Daro.Internal
 
         /// <summary>
         /// C# <see cref="DaroLogLevel"/> → Daro Android SDK <c>SDKConfig.setDebugMode</c>
-        /// boolean. Sketch CD-13.
+        /// boolean.
         /// </summary>
         /// <remarks>
         /// <para>The Daro Android SDK exposes only a binary debug toggle —

@@ -83,6 +83,26 @@ namespace Daro.Internal
             _adObject.Call("load", _activity, _proxy, iconWidth, iconHeight);
         }
 
+        public void ConfigureAdChoices(DaroAdChoicesPosition position)
+        {
+            if (_disposed || _adObject == null) return;
+            if (!_adObject.Call<bool>("supportsAdChoicesPlacement"))
+                throw new NotSupportedException("Native AdChoices position requires a compatible Android Daro SDK. Update the native dependency before using this overload.");
+            _adObject.Call("configureAdChoices", (int)position);
+        }
+
+        public void SetAdChoicesScreenRect(Rect rect, bool visible)
+        {
+            if (_disposed || _adObject == null) return;
+            _adObject.Call("setAdChoicesScreenRect", rect.x, rect.y, rect.width, rect.height,
+                visible, Screen.width, Screen.height);
+        }
+
+        public void ClearAdChoicesScreenRect()
+        {
+            if (!_disposed) _adObject?.Call("clearAdChoicesScreenRect");
+        }
+
         public void NotifyVisible()
         {
             DaroLog.Verbose("Native", $"Handle[Android].NotifyVisible adUnit='{_adUnitId}' disposed={_disposed}");
@@ -166,7 +186,7 @@ namespace Daro.Internal
                 _parent = parent;
             }
 
-            // DARO-1683 — 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 네이티브는 onAdLoaded 가
+            // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 네이티브는 onAdLoaded 가
             // 아이콘 폴링 뒤에 와서 impression 이 먼저 도착할 수 있고, 그때 기억한 값은 없거나 이전 광고 것이다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
                 new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs, mediationPlatform, adNetwork);
@@ -175,6 +195,7 @@ namespace Daro.Internal
                 string adUnitId,
                 string title, string body, string callToAction,
                 byte[] iconPngBytes,
+                string assetTypes,
                 int latencyMs,
                 string? mediationPlatform, string? adNetwork)
             {
@@ -196,7 +217,8 @@ namespace Daro.Internal
                         body:         string.IsNullOrEmpty(body)         ? null : body,
                         callToAction: string.IsNullOrEmpty(callToAction) ? null : callToAction,
                         icon:         icon,
-                        mediaImage:   null);   // v1 image-only; video deferred
+                        mediaImage:   null,
+                        assetTypes: NativeAdAssetTypes.Parse(assetTypes));   // v1 image-only; video deferred
 
                     _parent._sink.OnAdLoaded(adInfo, nativeInfo);
                 });
@@ -212,7 +234,7 @@ namespace Daro.Internal
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
-                    _parent._sink.OnAdFailedToLoad(err);
+                    _parent._sink.OnAdFailedToLoad(err, keepsCurrentAd: true);
                 });
             }
 

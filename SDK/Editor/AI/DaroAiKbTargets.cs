@@ -5,14 +5,10 @@ namespace Daro.Editor
 {
     // Two-axis target registry for the AI Integration Helper.
     //
-    // Background: cold-start auto-load mechanisms differ across AI coding
-    // tools. The original `integration-knowledge-base` sprint treated all
-    // targets uniformly (marker-block inject into the user's main instruction
-    // file). A later mechanism fact-check (see
-    // `docs/dev/ai-kb-wrapper-expansion/goal.md`) revealed 3 of 4 tools
-    // support sub-path *own-file* discovery — letting us deposit a
-    // vendor-namespaced file without touching the user's main instruction
-    // file. Cleaner trust boundary; we pivot to a hybrid model.
+    // Auto-load mechanisms differ across AI coding tools. Where supported,
+    // a vendor-namespaced file supplies the SDK instructions without modifying
+    // the user's main instruction file. Other tools receive a managed marker
+    // block in their existing instruction file.
     //
     // Axis A — Own-file (preferred where supported):
     //   - Claude Code  → `.claude/rules/daro-integration-kb.md`     (directory auto-load)
@@ -22,13 +18,13 @@ namespace Daro.Editor
     // Axis B — Marker inject (only where own-file isn't an option):
     //   - Codex CLI    → `<project>/AGENTS.md`                       (root single-file auto-load; no sub-path / directory mechanism)
     //
-    // Legacy clean: the prior sprint's root `<project>/CLAUDE.md` marker
+    // Upgrade cleanup: the legacy root `<project>/CLAUDE.md` marker
     // inject is deprecated. Bootstrap's reconcile sweep removes the marker
     // block from any pre-existing `CLAUDE.md` so users who upgrade get clean
     // state automatically.
     //
     // Discovery / creation policy:
-    //   - MarkerTargets are inject-into-existing-file only (D8: never
+    //   - MarkerTargets are inject-into-existing-file only (never
     //     auto-create the user's main instruction file).
     //   - OwnFileTargets are vendor-namespaced paths the SDK owns; both the
     //     parent directory and the file itself are auto-created. Clean only
@@ -98,7 +94,7 @@ namespace Daro.Editor
             // Returns true if the consumer is using this tool — i.e. the
             // tool's parent indicator (e.g. `.claude/` directory) is present.
             // Apply is gated on this; absent signal means we do nothing for
-            // this target (D8 spirit applied to own-file axis: don't write
+            // this target (don't write
             // into an environment the consumer isn't using).
             internal System.Func<string, bool> EnvSignal { get; }
             // When non-null, returns a skip reason if a conflict prevents

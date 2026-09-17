@@ -1,10 +1,10 @@
 //
 //  DaroUnityBannerAd.mm
 //  Banner ObjC++ shim — wraps DaroObjCBannerView (DaroObjCBridge module)
-//  for Unity. Parallel to Android's DaroUnityBannerAd.kt; full design in
-//  See docs/features/native-bridge.md (Banner overlay / iOS).
+//  for Unity. Parallel to Android's DaroUnityBannerAd.kt.
+
 //
-//  Lifecycle (sketch §"Overlay Lifecycle State Machine"):
+//  Lifecycle:
 //
 //    CreateBanner        → entry slot only, no view yet
 //    LoadBanner(size)    → construct DaroObjCBannerView + addSubview visible + loadAd
@@ -14,7 +14,7 @@
 //
 //  Threading: dictionary mutations on s_adQueue (serial); UIView ops dispatched
 //  to dispatch_get_main_queue. DaroObjCBridge guarantees delegate callbacks
-//  on the main queue (sketch CD-7), so DaroDispatch from delegate methods
+//  on the main queue, so DaroDispatch from delegate methods
 //  needs no further marshaling.
 //
 //  Auto-refresh: native CommonAdBannerView's AdRefreshCoordinator is driven
@@ -104,7 +104,7 @@ static CGSize BannerSizeForOrdinal(int sizeOrdinal) {
     return (sizeOrdinal == 1) ? CGSizeMake(300, 250) : CGSizeMake(320, 50);
 }
 
-// 6-anchor frame computation, safe-area-aware (sketch CD-2).
+// 6-anchor frame computation, safe-area-aware.
 //   posOrdinal:  0=TopLeft 1=TopCenter 2=TopRight
 //                3=BottomLeft 4=BottomCenter 5=BottomRight
 // parentView is UnityGetGLViewController().view; coords are in its bounds space.
@@ -154,7 +154,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
   didFailWithError:(NSError*)error {
     // NSError code is fixed at -1 by DaroObjCBannerView (domain
     // com.daro.objcbridge.banner). C# DaroAdErrorCodeMapper.ToLoadErrorCode(-1)
-    // resolves to DaroAdLoadErrorCode.Unspecified (sketch CD-8).
+    // resolves to DaroAdLoadErrorCode.Unspecified.
     if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
     DaroLogW(@"Banner", @"Load failed adUnit='%@' code=%ld msg='%@'",
         self.adUnitId, (long)error.code, error.localizedDescription);
@@ -198,8 +198,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 extern "C" {
 
 // Reserve the dictionary slot for adUnitId. The view is constructed lazily
-// at LoadBanner because DaroObjCBannerView requires bannerSize at init time
-// (sketch §"Option A design" — Create/Load split).
+// at LoadBanner because DaroObjCBannerView requires bannerSize at init time (Create/Load split).
 void DaroUnity_CreateBanner(const char* adUnitId) {
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
@@ -328,7 +327,7 @@ void DaroUnity_ShowBanner(const char* adUnitId) {
             }
             UIView* parentView = vc.view;
             // Compute frame at attach time so safeAreaInsets reflects current
-            // device orientation (CD-3: initial orientation only, but Show may
+            // device orientation (initial orientation only, but Show may
             // happen after device has rotated since Load — safest to recompute).
             view.frame = BannerFrameForPosition(
                 latestPosOrd, BannerSizeForOrdinal(latestSizeOrd), parentView);
@@ -422,7 +421,7 @@ void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
     });
 }
 
-// Banner footprint query (banner-footprint sprint). Returns 1 + the banner's
+// Banner footprint query. Returns 1 + the banner's
 // on-screen rect in Unity screen px (bottom-left origin, Screen.safeArea
 // convention); 0 if the banner is not attached / unknown. The view.frame is
 // already safe-area-correct (BannerFrameForPosition computes it from
@@ -486,9 +485,9 @@ int DaroUnity_GetBannerScreenRect(const char* adUnitId,
     return 1;
 }
 
-// Sprint native-object-lifecycle-cleanup §DestroyAll hygiene path. Called by
+// Runtime teardown cleanup. Called by
 // DaroUnity_DestroyAll (DaroUnityBridge.mm). Banner has no entry-level
-// `destroyed` flag (D-iOS-banner-conditional in plan §2): banner delegates
+// `destroyed` flag: banner delegates
 // don't read entry state in a way that would race during teardown — view
 // removal + dict ref release on s_adQueue is sufficient. If a future
 // banner-delegate change introduces entry-level callback state that needs

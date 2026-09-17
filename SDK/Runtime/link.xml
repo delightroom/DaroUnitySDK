@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    IL2CPP stripping defense (sketch CD-8). Preserves the entire Daro.Internal
+    IL2CPP stripping defense. Preserves the entire Daro.Internal
     namespace so [DllImport("__Internal")] / [MonoPInvokeCallback] methods
     in DaroIOSPlatform are not stripped from release builds. UPM autodiscovers
     link.xml from the Runtime/ folder.

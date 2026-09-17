@@ -27,7 +27,7 @@ public sealed class GameBootstrap : MonoBehaviour
 
         // Late subscriber: even if init already completed, this fires once
         // on the main thread on the next tick.
-        DaroSdk.OnSdkInitialized += () => Debug.Log("Daro SDK ready");
+        DaroSdk.OnSdkInitialized += => Debug.Log("Daro SDK ready");
     }
 }
 ```
@@ -37,6 +37,7 @@ Key points:
 - `DaroSdk.InitializeAsync()` returns a `Task`. Repeated calls return the same Task — safe to `await` from anywhere.
 - Privacy settings (`HasGdprConsent` / `GdprConsentString` / `DoNotSell` / `CcpaConsentString` / `IsTaggedForChildDirectedTreatment`) are safe to set before *and* after init. The SDK does NOT own the consent UX — your app must display GDPR dialogs / ATT prompts / UMP flows and then assign the resulting values here.
 - `DaroSdk.SetUserId(string)` / `SetAppMuted(bool)` / `LogLevel` setters are also pre-init safe.
+- Call `SetAppMuted(bool)` on the Unity main thread. Before or during initialization, only the last requested value is kept. It is applied after native initialization succeeds, before `OnSdkInitialized` fires and the initialization Task completes. If you never call it, the native audio default is preserved. Calls from the completion event or after `await InitializeAsync()` apply immediately.
 - `DaroSdk.SetTestDeviceAdvertisingIdentifiers(...)` should be called before init. It maps to Android `SDKConfig.Builder.setTestDeviceAdvertisingIds`; iOS test mode is configured through MAX Mediation Debugger / dashboard-side setup.
 - `OnSdkInitialized` has a *late-subscriber* contract — subscribing after init still fires the handler once on the main thread. No polling required.
 
@@ -94,7 +95,7 @@ Fullscreen order: **Construct → `+=` events → `Load()` → (wait) → `Show(
 - Rewarded adds one more: `OnEarnedReward` (eight total).
 - All events use the standard C# `event Action<...>` pattern — `+=` to register, `-=` to remove.
 - **Register handlers before calling `Load()`**. Registration after `Load()` technically works but can race with a fast `OnAdLoaded` and drop the first event.
-- If you reuse the same instance across `OnEnable` cycles (`+=` every time without `-=`), you will accumulate duplicate subscribers. The safer pattern: construct a fresh instance in `OnEnable`, `Dispose()` + null in `OnDisable` (matches the snippet above and the `Samples/DaroExample` controller).
+- If you reuse the same instance across `OnEnable` cycles (`+=` every time without `-=`), you will accumulate duplicate subscribers. The safer pattern: construct a fresh instance in `OnEnable`, `Dispose()` + null in `OnDisable` (as shown in the snippet above).
 
 ## 4. Main-thread guarantee
 
@@ -182,5 +183,3 @@ The view-based formats (Banner / Native / LightPopup) follow different lifecycle
 - **LightPopup uses Interstitial-style lifecycle** (Load / Show / 7 events) but is rendered by the native layer with options baked at construction. See [light-popup.md](ad-formats/light-popup.md).
 
 When ads fail in production — no-fill, invalid ad unit, consent / ATT issues, EDM4U / iOS signing — start at [troubleshooting.md](troubleshooting.md).
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs (whole controller), SDK/Runtime/DaroSdk.cs, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/Internal/SafeEventInvoker.cs, SDK/Runtime/Internal/MainThreadDispatcher.cs, docs/features/event-handler.md -->

@@ -4,8 +4,8 @@ using System.Globalization;
 namespace Daro.Internal
 {
     /// <summary>
-    /// Minimal JSON value extractor for the iOS bridge's flat event payload
-    /// (sketch §"Event JSON Schema"). The payload is a single-level object
+    /// Minimal JSON value extractor for the iOS bridge's flat event payload.
+    /// The payload is a single-level object
     /// emitted by <c>DaroUnityBridge.mm</c> — no nesting, no arrays, keys are
     /// fixed and known at compile time. Handcrafted because pulling in a
     /// general JSON library for this single shape would be over-spec.

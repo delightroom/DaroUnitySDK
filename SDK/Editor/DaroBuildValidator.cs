@@ -33,7 +33,7 @@ namespace Daro.Editor
             Run(DaroSettingsLocator.FindOrNull(), report.summary.platform);
         }
 
-        // testable seam — see plan D7-O.
+        // testable seam.
         internal static void Run(DaroSettings settings, BuildTarget target)
         {
             var results = DaroSettingsValidator.Validate(settings, target);

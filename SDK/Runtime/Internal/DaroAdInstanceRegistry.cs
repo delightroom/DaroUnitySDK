@@ -10,7 +10,7 @@ namespace Daro.Internal
     /// Thread-safe map from <c>(format, adUnitId)</c> to the live
     /// ad instance, used by the platform event plumbing in
     /// <c>DaroSdk.InitializeAsync</c> to route native callbacks to
-    /// the correct ad object. See docs/overview.md and docs/features/native-bridge.md.
+    /// the correct ad object.
     /// </summary>
     /// <remarks>
     /// <para>Instances are stored as <see cref="WeakReference"/> so a
@@ -25,7 +25,7 @@ namespace Daro.Internal
     /// and the event-routing side can't rely on "one adUnitId = one
     /// instance across all formats".</para>
     ///
-    /// <para><b>Instance replacement</b> (§2.4 rule): constructing a
+    /// <para><b>Instance replacement</b>: constructing a
     /// second instance with the same <c>(format, adUnitId)</c>
     /// replaces the prior registration. The registry serializes create /
     /// destroy ownership per key so a stale finalizer cannot destroy a
@@ -53,8 +53,6 @@ namespace Daro.Internal
         // teardown. Extends the existing "Find returns null → silent no-op"
         // contract — a callback arriving after MarkShuttingDown sees a null
         // ad and the public event never fires. See
-        // docs/dev/native-object-lifecycle-cleanup/tasks/teardown-contract.md
-        // §Cross-platform managed contract §1 (D-gate-c).
         //
         // volatile so a write on the main thread (OnApplicationQuit) is
         // immediately visible to Find calls on any thread. Reset to false
@@ -86,7 +84,7 @@ namespace Daro.Internal
 
         /// <summary>
         /// Register a constructed instance under a reserved generation. Last
-        /// writer wins — matches §2.4's duplicate-construction-replaces rule.
+        /// writer wins — duplicate-construction-replaces rule.
         /// </summary>
         internal static void Register(DaroAdFormat format, string adUnitId, object instance, long generation)
         {
@@ -195,7 +193,7 @@ namespace Daro.Internal
         /// <summary>
         /// Read the teardown gate. Exposed for callback paths that bypass
         /// <see cref="Find{T}"/> — currently <see cref="DaroNativeAd"/>'s
-        /// sink-routed Fire methods (CD-8 per-instance handle pattern does
+        /// sink-routed Fire methods (the per-instance handle pattern does
         /// not register with this dict, so the Find gate cannot see those
         /// callbacks). Other format Fire paths come through the platform
         /// forwarder which already gates via <see cref="Find{T}"/>; they
@@ -291,7 +289,6 @@ namespace Daro.Internal
         /// <summary>
         /// Clear all registrations. Called by
         /// <c>DaroRuntimeBoot.Reset</c> on play-mode enter / build startup
-        /// (§6.4).
         /// </summary>
         internal static void ResetStatics()
         {

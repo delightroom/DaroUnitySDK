@@ -20,12 +20,11 @@ namespace Daro.Editor
     // English so build reports remain grep-friendly.
     //
     // Window-class rendering / SerializedObject binding / VisualElement tree
-    // wiring sit poorly under EditMode tests — verification is sprint-exit
-    // smoke. The only EditMode-tested seam in this file is the row-factory
+    // wiring require Editor smoke verification. The only EditMode-tested seam in this file is the row-factory
     // (separate class).
     public sealed class DaroIntegrationManagerWindow : EditorWindow
     {
-        // Fixed-path asset creation — sketch decision (avoids SaveFilePanel
+        // Fixed-path asset creation (avoids SaveFilePanel
         // for first-time setup; consumer can move/rename later).
         private const string CreatePath = "Assets/Daro/DaroSettings.asset";
         private const string CreateDir  = "Assets/Daro";

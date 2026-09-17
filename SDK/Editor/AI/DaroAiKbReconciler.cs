@@ -8,11 +8,11 @@ namespace Daro.Editor
     //
     // Sequence (in order):
     //   1. Legacy CLAUDE.md marker sweep — unconditional. Deprecates the
-    //      prior sprint's root-CLAUDE.md inject regardless of toggle state.
+    //      legacy root-CLAUDE.md inject regardless of toggle state.
     //   2. If toggle is OFF or no AI agent env signal is present →
     //      CleanAll (3 layers cleared; vendor-ownership marker / sentinel
     //      preserve user-authored files at the same paths).
-    //   3. Else: KB copy Apply → AGENTS.md marker Apply (D8: exists-only)
+    //   3. Else: KB copy Apply → AGENTS.md marker Apply (exists-only)
     //      → env-signaled own-file Apply, non-signaled own-file defensive
     //      Clean (covers tools the user has since removed).
     internal static class DaroAiKbReconciler

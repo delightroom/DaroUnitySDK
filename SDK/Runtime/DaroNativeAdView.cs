@@ -118,6 +118,12 @@ namespace Daro
                 ad.IsSlotViewActive = isActiveAndEnabled;
             }
 
+            ad.IsSlotViewActive = isActiveAndEnabled;
+            if (ad.AdChoicesPosition.HasValue)
+            {
+                try { ad.WireAdChoices((RectTransform)transform); }
+                catch { ad.UnwireCta(); throw; }
+            }
             _boundAd = ad;
 
             ApplyInfo(ad.Info!);
@@ -149,6 +155,7 @@ namespace Daro
             // Driver Detach → ClearCtaScreenRect through still-live handle.
             // Must run before _boundAd is nulled below.
             _boundAd.UnwireCta();
+            _boundAd.UnwireAdChoices();
 
             if (TitleText      != null) TitleText.text         = string.Empty;
             if (BodyText       != null) BodyText.text          = string.Empty;
@@ -195,7 +202,7 @@ namespace Daro
 
         private void OnBoundAdFailedToLoad(DaroAdLoadError _)
         {
-            ClearSlots();
+            if (_boundAd?.IsReady != true) ClearSlots();
         }
 
         private void ApplyInfo(DaroNativeAdInfo info)

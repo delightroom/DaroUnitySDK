@@ -8,11 +8,10 @@ namespace Daro.Internal
     /// Platform resolver. Selects the <see cref="IDaroPlatform"/> implementation for the
     /// current runtime: <see cref="DaroEditorPlatform"/> under <c>UNITY_EDITOR</c>, and
     /// <c>DaroIOSPlatform</c> / <c>DaroAndroidPlatform</c> on device builds.
-    /// See docs/overview.md and docs/features/native-bridge.md.
     /// </summary>
     /// <remarks>
     /// Static cache is cleared via <see cref="ResetStatics"/>, invoked by
-    /// <see cref="DaroRuntimeBoot.Reset"/> on play-mode enter / build startup (§6.4).
+    /// <see cref="DaroRuntimeBoot.Reset"/> on play-mode enter / build startup.
     /// </remarks>
     internal static class DaroPlatform
     {
@@ -56,7 +55,7 @@ namespace Daro.Internal
 
         /// <summary>
         /// Clears the cached platform instance. Called from
-        /// <see cref="DaroRuntimeBoot.Reset"/> on play-mode enter / build startup (§6.4).
+        /// <see cref="DaroRuntimeBoot.Reset"/> on play-mode enter / build startup.
         /// Safe to invoke repeatedly.
         /// </summary>
         internal static void ResetStatics() => _current = null;

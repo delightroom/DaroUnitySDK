@@ -31,8 +31,7 @@ namespace Daro.Editor
         //
         // Kotlin Gradle Plugin is no longer injected — the shim is now shipped
         // as a prebuilt AAR (SDK/Plugins/Android/daro-android-wrapper.aar),
-        // so the consumer's build never compiles our Kotlin source. Removed
-        // 2026-05-11 (release-pipeline sprint, editor-hook-cleanup task).
+        // so the consumer's build never compiles our Kotlin source.
         internal const string DaroPluginCoords = "so.daro:daro-plugin:1.1.0-beta04";
         internal const string AppLovinQualityServiceClasspath =
             "com.applovin.quality:AppLovinQualityServiceGradlePlugin:5.5.2";

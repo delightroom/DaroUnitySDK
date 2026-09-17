@@ -11,7 +11,7 @@ namespace Daro
     /// platform-native consumer.
     /// </summary>
     /// <remarks>
-    /// <para>Class (not struct) + field initializers — sketch decision §3.
+    /// <para>Class (not struct) + field initializers.
     /// Struct zero-init would yield <c>(0,0,0,0)</c> on every field, i.e. fully
     /// transparent black, silently overriding the daro-m default palette. The
     /// <c>class</c> + field initializer combination guarantees daro-m defaults

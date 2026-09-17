@@ -18,11 +18,10 @@ namespace Daro.Internal
     /// </list>
     /// Plus two gate-outside helpers (<see cref="Exception"/>,
     /// <see cref="WarnFinalizerSafe"/>) that bypass the LogLevel gate by design.
-    /// See sketch-log-module.md §A1 for the full rationale.
     /// </summary>
     /// <remarks>
     /// Messages carry a <c>[Daro:&lt;area&gt;]</c> prefix so consumers can filter
-    /// the Unity Console / logcat output by SDK area (sketch §A3). Areas are
+    /// the Unity Console / logcat output by SDK area. Areas are
     /// PascalCase string constants chosen by the caller — see
     /// <c>.claude/rules/logging.md</c> for the canonical area list.
     /// </remarks>
@@ -66,7 +65,7 @@ namespace Daro.Internal
         // ── Gate-outside helpers (LogLevel-independent) ──────────────────────
         // SDK-internal exception paths must always be visible — muting them
         // when the consumer sets LogLevel.None would let SDK breakage go
-        // silent during integration debugging. Confirmed Decision (sketch §3).
+        // silent during integration debugging.
 
         /// <summary>
         /// Logs an unhandled exception from a SafeEventInvoker / dispatcher

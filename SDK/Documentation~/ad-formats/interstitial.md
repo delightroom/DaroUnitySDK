@@ -99,5 +99,3 @@ Full enum lives in [`../api-reference.md`](../api-reference.md) under `DaroAdLoa
 | `NetworkError` (-1000) / `NoNetwork` (-1009) | connectivity problem | user-facing message + retry |
 | `FullscreenAdAlreadyLoading` (-26) | concurrent `Load()` calls | guard against duplicate invocations |
 | `FullscreenAdAlreadyShowing` (-23, display) | another fullscreen is on screen | reschedule |
-
-<!-- source: Samples/DaroExample/Assets/Scripts/Runtime/UI/DaroExampleController.cs:427-438, SDK/Runtime/DaroInterstitialAd.cs, SDK/Runtime/Models/DaroAdLoadErrorCode.cs, SDK/Runtime/Models/DaroAdDisplayErrorCode.cs -->
