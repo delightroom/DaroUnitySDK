@@ -50,6 +50,23 @@ namespace Daro.Internal
         internal Rect AdChoicesRect { get; private set; }
         internal bool AdChoicesVisible { get; private set; }
         internal int AdChoicesSyncCount { get; private set; }
+        public bool SupportsNativeMedia { get; internal set; }
+        internal Rect MediaRect { get; private set; }
+        internal bool MediaVisible { get; private set; }
+        internal bool MediaTouchEnabled { get; private set; }
+        public void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled)
+        {
+            if (_disposed) return;
+            MediaRect = rect;
+            MediaVisible = visible;
+            MediaTouchEnabled = visible && touchEnabled;
+        }
+        public void ClearMediaScreenRect()
+        {
+            MediaRect = default;
+            MediaVisible = MediaTouchEnabled = false;
+        }
+
         public void ConfigureAdChoices(DaroAdChoicesPosition position) => AdChoicesPosition = position;
         public void SetAdChoicesScreenRect(Rect rect, bool visible)
         {

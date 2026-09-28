@@ -93,6 +93,22 @@ namespace Daro.Internal
             DaroUnity_NativeAd_Load(_handleId, iconWidth, iconHeight);
         }
 
+        public bool SupportsNativeMedia => true;
+        public void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled)
+        {
+            if (!_disposed) DaroUnity_NativeAd_SetMediaScreenRect(_handleId,
+                rect.x, rect.y, rect.width, rect.height, visible, touchEnabled, Screen.width, Screen.height);
+        }
+        public void ClearMediaScreenRect()
+        {
+            if (!_disposed) DaroUnity_NativeAd_ClearMediaScreenRect(_handleId);
+        }
+
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_SetMediaScreenRect(
+            int handleId, float x, float y, float width, float height,
+            bool visible, bool touchEnabled, int screenWidth, int screenHeight);
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_ClearMediaScreenRect(int handleId);
+
         public void ConfigureAdChoices(DaroAdChoicesPosition position)
         {
             if (!_disposed) DaroUnity_NativeAd_ConfigureAdChoices(_handleId, (int)position);

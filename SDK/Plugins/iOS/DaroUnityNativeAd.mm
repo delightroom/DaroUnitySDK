@@ -124,6 +124,11 @@ static void DaroUnityNativeAdEmitCallback(int handleId,
 // Keep Unity pixels so re-show/reload converts against the current orientation.
 @property (nonatomic, assign) BOOL visibleRequested;
 @property (nonatomic, assign) BOOL readyForPresentation;
+@property (nonatomic, assign) BOOL hasMediaRect;
+@property (nonatomic, assign) CGRect mediaRectPixels;
+@property (nonatomic, assign) CGSize mediaScreen;
+@property (nonatomic, assign) BOOL mediaVisible;
+@property (nonatomic, assign) BOOL mediaTouchEnabled;
 @property (nonatomic, assign) BOOL hasCtaRect;
 @property (nonatomic, assign) CGRect ctaRectPixels;
 @property (nonatomic, assign) BOOL ctaTouchEnabled;
@@ -136,7 +141,7 @@ static void DaroUnityNativeAdEmitCallback(int handleId,
 @implementation DaroUnityNativeAdEntry
 @end
 
-static void DaroUnityNativeAdApplyAdChoicesGeometry(DaroUnityNativeAdEntry* entry);
+static void DaroUnityNativeAdUpdatePresentation(DaroUnityNativeAdEntry* entry);
 
 static BOOL DaroUnityNativeAdRedispatchToMainIfNeeded(DaroUnityNativeAdEntry* entry,
                                                       DaroObjCNativeView* view,
@@ -161,6 +166,8 @@ static BOOL DaroUnityNativeAdRedispatchToMainIfNeeded(DaroUnityNativeAdEntry* en
 }
 @property (nonatomic, assign) BOOL adChoicesEnabled;
 @property (nonatomic, weak) UIButton* ctaButton;
+@property (nonatomic, weak) UIView* mediaView;
+@property (nonatomic, assign) BOOL mediaTouchEnabled;
 - (void)setOverlayTouchEnabled:(BOOL)enabled;
 @end
 
@@ -220,13 +227,14 @@ static UIView* DaroUnityHitGoogleAuxiliaryView(UIView* view, CGPoint point, UIEv
         self.hidden                 = YES;
         self.backgroundColor        = [UIColor clearColor];
         self.opaque                 = NO;
+        self.clipsToBounds          = YES;
     }
     return self;
 }
 
 - (void)setOverlayTouchEnabled:(BOOL)enabled {
     _touchEnabled              = enabled;
-    self.userInteractionEnabled = enabled || self.adChoicesEnabled;
+    self.userInteractionEnabled = enabled || self.adChoicesEnabled || self.mediaTouchEnabled;
 }
 
 - (UIView*)hitTest:(CGPoint)point withEvent:(UIEvent*)event {
@@ -239,15 +247,16 @@ static UIView* DaroUnityHitGoogleAuxiliaryView(UIView* view, CGPoint point, UIEv
         }
         UIView* googleDisclosure = DaroUnityHitGoogleAuxiliaryView(self, point, event);
         if (googleDisclosure) return googleDisclosure;
-        if (!_touchEnabled || !self.ctaButton) return nil;
-        CGPoint ctaPoint = [self.ctaButton convertPoint:point fromView:self];
-        if (![self.ctaButton pointInside:ctaPoint withEvent:event]) return nil;
-        // AdMob disables interaction on the asset button and handles the
-        // real touch on its enclosing native ad view. Keep the CTA-only
-        // gate, but let UIKit select the current vendor's touch receiver.
+    }
+    if (self.mediaTouchEnabled && self.mediaView && !self.mediaView.hidden &&
+        [self.mediaView pointInside:[self.mediaView convertPoint:point fromView:self] withEvent:event]) {
         return [super hitTest:point withEvent:event];
     }
-    if (!_touchEnabled) return nil;
+    if (!_touchEnabled || !self.ctaButton) return nil;
+    CGPoint ctaPoint = [self.ctaButton convertPoint:point fromView:self];
+    if (![self.ctaButton pointInside:ctaPoint withEvent:event]) return nil;
+    // Preserve vendor gesture dispatch; the larger host must not capture
+    // unrelated Unity controls between the CTA and the media slot.
     return [super hitTest:point withEvent:event];
 }
 
@@ -337,8 +346,6 @@ NSMutableDictionary<NSNumber*, DaroUnityNativeAdEntry*>* s_nativeAds = nil;
 // (degraded but non-blocking).
 static const int    kIconPollMaxAttempts = 5;
 static const double kIconPollIntervalSec = 0.2;
-
-static void DaroUnityNativeAdUpdatePresentation(DaroUnityNativeAdEntry* entry);
 
 #pragma mark - Delegate adopter implementation
 
@@ -553,7 +560,7 @@ static void DaroUnityNativeAdUpdatePresentation(DaroUnityNativeAdEntry* entry);
 
 @end
 
-#pragma mark - AdChoices geometry
+#pragma mark - Presentation geometry
 
 static CGRect DaroUnityProjectNativeRect(CGRect pixels, CGSize source, UIView* root) {
     CGFloat sx = root.bounds.size.width / MAX(source.width, 1);
@@ -563,57 +570,59 @@ static CGRect DaroUnityProjectNativeRect(CGRect pixels, CGSize source, UIView* r
         pixels.size.width * sx, pixels.size.height * sy);
 }
 
-static void DaroUnityNativeAdApplyAdChoicesGeometry(DaroUnityNativeAdEntry* entry) {
-    if (!entry.adChoicesPosition || !entry.host) return;
-    UIView* root = UnityGetGLViewController().view;
-    BOOL visible = !entry.destroyed && entry.readyForPresentation && entry.hasAdArea &&
-        entry.adAreaVisible && entry.visibleRequested && root.window != nil;
-    CGRect rect = DaroUnityProjectNativeRect(entry.adAreaPixels, entry.adAreaScreen, root);
-    visible = visible && rect.size.width > 0 && rect.size.height > 0 &&
-        CGRectIntersectsRect(root.bounds, rect);
-    entry.host.hidden = !visible;
-    if (!visible) { [entry.host setOverlayTouchEnabled:NO]; return; }
-    entry.host.frame = rect;
-    entry.nativeView.frame = entry.host.bounds;
-    // Native layout uses leading/trailing. Opt-in Unity corners are physical.
-    entry.nativeView.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
-    BOOL touch = entry.hasCtaRect && entry.ctaTouchEnabled && entry.ctaInteractive;
-    CGRect cta = DaroUnityProjectNativeRect(entry.ctaRectPixels, entry.adAreaScreen, root);
-    cta.origin.x -= rect.origin.x;
-    cta.origin.y -= rect.origin.y;
-    entry.callToActionButton.frame = cta;
-    [entry.host setOverlayTouchEnabled:touch];
-    [entry.nativeView layoutIfNeeded];
-}
-
-#pragma mark - CTA overlay apply helpers
-
-// Apply presentation as a whole; no geometry update may reopen a hidden ad.
-// Retaining the attached tree preserves the existing native refresh policy.
+// Layout the real network media in the publisher's reserved slot. The host
+// encloses the visible assets, while hit testing is limited to their own areas.
 static void DaroUnityNativeAdUpdatePresentation(DaroUnityNativeAdEntry* entry) {
-    if (entry.adChoicesPosition) {
-        DaroUnityNativeAdApplyAdChoicesGeometry(entry);
-        return;
-    }
     DaroUnityNativeAdHost* host = entry.host;
     if (!host) return;
-
-    UIViewController* vc = UnityGetGLViewController();
-    BOOL visible = !entry.destroyed && entry.visibleRequested
-        && entry.readyForPresentation && entry.hasCtaRect && vc.view.window != nil;
-    if (visible) {
-        CGFloat scale = vc.view.window.screen.scale;
-        CGRect pixels = entry.ctaRectPixels;
-        CGRect rect = CGRectMake(pixels.origin.x / scale,
-            vc.view.bounds.size.height - CGRectGetMaxY(pixels) / scale,
-            pixels.size.width / scale, pixels.size.height / scale);
-        visible = CGRectIntersectsRect(vc.view.bounds, rect);
-        host.frame = rect;
-        entry.nativeView.frame = host.bounds;
-        entry.callToActionButton.frame = host.bounds;
+    UIView* root = UnityGetGLViewController().view;
+    CGFloat scale = root.window.screen.scale ?: UIScreen.mainScreen.scale;
+    CGSize ctaScreen = CGSizeMake(root.bounds.size.width * scale, root.bounds.size.height * scale);
+    if (entry.adChoicesPosition && entry.hasAdArea) ctaScreen = entry.adAreaScreen;
+    else if (entry.hasMediaRect) ctaScreen = entry.mediaScreen;
+    CGRect cta = DaroUnityProjectNativeRect(entry.ctaRectPixels, ctaScreen, root);
+    CGRect media = DaroUnityProjectNativeRect(entry.mediaRectPixels, entry.mediaScreen, root);
+    BOOL hasMediaAsset = [[[entry.assetTypes lowercaseString] componentsSeparatedByString:@","]
+        containsObject:@"media"];
+    BOOL showMedia = entry.hasMediaRect && entry.mediaVisible && hasMediaAsset;
+    BOOL visible = !entry.destroyed && entry.visibleRequested &&
+        entry.readyForPresentation && root.window != nil;
+    CGRect rect = CGRectZero;
+    if (entry.adChoicesPosition) {
+        visible = visible && entry.hasAdArea && entry.adAreaVisible;
+        rect = DaroUnityProjectNativeRect(entry.adAreaPixels, entry.adAreaScreen, root);
+        entry.nativeView.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
+    } else {
+        visible = visible && (entry.hasCtaRect || showMedia);
+        rect = entry.hasCtaRect ? cta : media;
+        if (entry.hasCtaRect && showMedia) rect = CGRectUnion(cta, media);
     }
+    visible = visible && rect.size.width > 0 && rect.size.height > 0 &&
+        CGRectIntersectsRect(root.bounds, rect);
     host.hidden = !visible;
-    [host setOverlayTouchEnabled:visible && entry.ctaTouchEnabled && entry.ctaInteractive];
+    host.mediaTouchEnabled = visible && showMedia && entry.mediaTouchEnabled;
+    [host setOverlayTouchEnabled:visible && entry.hasCtaRect && entry.ctaTouchEnabled && entry.ctaInteractive];
+    entry.mediaContentView.hidden = !visible || !showMedia;
+    if (!visible) return;
+    // Auto Layout rounds the nested vendor container to physical pixels.
+    // Enclose fractional asset edges so that rounding cannot put media outside
+    // the ad view. Child offsets below preserve their Unity screen positions.
+    CGFloat minX = floor(CGRectGetMinX(rect) * scale) / scale;
+    CGFloat minY = floor(CGRectGetMinY(rect) * scale) / scale;
+    rect = CGRectMake(minX, minY,
+        ceil(CGRectGetMaxX(rect) * scale) / scale - minX,
+        ceil(CGRectGetMaxY(rect) * scale) / scale - minY);
+    host.frame = rect;
+    entry.nativeView.frame = host.bounds;
+    entry.callToActionButton.frame = entry.hasCtaRect
+        ? CGRectOffset(cta, -rect.origin.x, -rect.origin.y) : CGRectZero;
+    // AdMob's media wrapper disables this on the supplied container. Unity
+    // owns its frame; keep that frame constrained while the vendor lays out
+    // its image/video children with Auto Layout.
+    entry.mediaContentView.translatesAutoresizingMaskIntoConstraints = YES;
+    entry.mediaContentView.frame = showMedia
+        ? CGRectOffset(media, -rect.origin.x, -rect.origin.y) : CGRectZero;
+    [entry.nativeView layoutIfNeeded];
 }
 
 #if DARO_DEV || DEBUG
@@ -770,11 +779,11 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             entry.callToActionButton = [[DaroUnityInvisibleCTAButton alloc] initWithFrame:CGRectZero];
             entry.mediaContentView   = [UIView new];
             host.ctaButton = entry.callToActionButton;
+            host.mediaView = entry.mediaContentView;
             if (host.adChoicesEnabled) {
                 entry.titleLabel.alpha = 0;
                 entry.bodyLabel.alpha = 0;
                 entry.iconImageView.alpha = 0;
-                entry.mediaContentView.alpha = 0;
             }
 
             // autoLoad=NO. Without this, addSubview(host) below would
@@ -868,6 +877,37 @@ void DaroUnity_NativeAd_ConfigureAdChoices(int handleId, int position) {
     });
 }
 
+void DaroUnity_NativeAd_SetMediaScreenRect(int handleId, float x, float y,
+    float w, float h, bool visible, bool touchEnabled, int screenWidth, int screenHeight) {
+    dispatch_async(s_adQueue, ^{
+        DaroUnityNativeAdEntry* entry = s_nativeAds[@(handleId)];
+        if (!entry || entry.destroyed) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (entry.destroyed) return;
+            entry.hasMediaRect = isfinite(x) && isfinite(y) && isfinite(w) && isfinite(h) &&
+                isfinite(x + w) && isfinite(y + h) && w > 0 && h > 0 && screenWidth > 0 && screenHeight > 0;
+            entry.mediaRectPixels = CGRectMake(x, y, w, h);
+            entry.mediaScreen = CGSizeMake(screenWidth, screenHeight);
+            entry.mediaVisible = visible;
+            entry.mediaTouchEnabled = touchEnabled;
+            DaroUnityNativeAdUpdatePresentation(entry);
+        });
+    });
+}
+
+void DaroUnity_NativeAd_ClearMediaScreenRect(int handleId) {
+    dispatch_async(s_adQueue, ^{
+        DaroUnityNativeAdEntry* entry = s_nativeAds[@(handleId)];
+        if (!entry || entry.destroyed) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (entry.destroyed) return;
+            entry.hasMediaRect = NO;
+            entry.mediaVisible = NO;
+            DaroUnityNativeAdUpdatePresentation(entry);
+        });
+    });
+}
+
 void DaroUnity_NativeAd_SetAdChoicesScreenRect(int handleId, float x, float y,
     float w, float h, bool visible, int screenWidth, int screenHeight) {
     dispatch_async(s_adQueue, ^{
@@ -879,7 +919,7 @@ void DaroUnity_NativeAd_SetAdChoicesScreenRect(int handleId, float x, float y,
             entry.adAreaScreen = CGSizeMake(screenWidth, screenHeight);
             entry.hasAdArea = w > 0 && h > 0 && screenWidth > 0 && screenHeight > 0;
             entry.adAreaVisible = visible;
-            DaroUnityNativeAdApplyAdChoicesGeometry(entry);
+            DaroUnityNativeAdUpdatePresentation(entry);
         });
     });
 }
@@ -890,7 +930,7 @@ void DaroUnity_NativeAd_ClearAdChoicesScreenRect(int handleId) {
         if (!entry || entry.destroyed) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             entry.hasAdArea = NO;
-            DaroUnityNativeAdApplyAdChoicesGeometry(entry);
+            DaroUnityNativeAdUpdatePresentation(entry);
         });
     });
 }
@@ -974,7 +1014,7 @@ void DaroUnity_NativeAd_SetCtaScreenRect(int   handleId,
     });
 }
 
-// Invalidate binding geometry and hide the subtree. Keep the visibility
+// Invalidate CTA geometry; separately wired media stays visible. Keep the visibility
 // request: binding the same ad again supplies new geometry without OnEnable.
 void DaroUnity_NativeAd_ClearCtaScreenRect(int handleId) {
     NSNumber* key = @(handleId);

@@ -213,6 +213,10 @@ namespace Daro
         public void NotifyVisible();         // impression signal; no-op after Dispose
         public void NotifyHidden();          // no-op after Dispose
         public void NotifyClicked();         // trigger SDK click chain; no-op after Dispose
+        public void WireMedia(RectTransform mediaArea); // iOS native image/video in an existing screen-space slot
+        public void UnwireMedia();
+        public void SetMediaScreenRect(Rect mediaScreenRect, bool visible, bool touchEnabled = true);
+        public void ClearMediaScreenRect();
         public void Dispose();               // idempotent; destroys Info.Icon / Info.MediaImage Texture2Ds
 
         public event Action<ISet<NativeAdAssetType>> OnNativeAdAssetLoaded;
@@ -228,7 +232,7 @@ namespace Daro
 
 `OnNativeAdAssetLoaded` fires once on the Unity main thread before `OnAdLoaded`, after `Info` and `IsReady` are set. Its set reports native SDK receipt, independent of publisher slot registration. `Info.AssetTypes` reuses an immutable snapshot, so reading the property and calling `Contains` do not allocate. Mutating that snapshot throws `NotSupportedException`; use `new HashSet<NativeAdAssetType>(info.AssetTypes)` when an editable copy is needed. Every event subscriber receives a separate mutable set; changing it cannot affect other subscribers or the SDK. Duplicate types are removed and enumeration order is unspecified.
 
-`NativeAdAssetType` values: `Title`, `Body`, `Icon`, `Media`, `CallToAction`, `Advertiser`. `Advertiser` is reported by iOS only. `Media` does not imply `Info.MediaImage` is available: this Unity bridge does not transfer native media textures or video. An icon may likewise be received natively before its Unity texture is ready.
+`NativeAdAssetType` values: `Title`, `Body`, `Icon`, `Media`, `CallToAction`, `Advertiser`. `Advertiser` is reported by iOS only. `Media` does not imply `Info.MediaImage` is available: iOS displays the network-owned media view in `MediaContainer` (or `WireMedia` / `SetMediaScreenRect`) without transferring a texture. Android media presentation remains unsupported. An icon may likewise be received natively before its Unity texture is ready.
 
 ### DaroNativeAdInfo
 

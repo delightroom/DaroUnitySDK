@@ -6,9 +6,8 @@ namespace Daro
     /// <summary>
     /// Color + label customization for <see cref="DaroLightPopupAd"/>. Mirrors
     /// daro-m's <c>droom.daro.core.model.DaroLightPopupAdOptions</c> data class
-    /// — defaults are byte-for-byte identical to daro-m's hex defaults so a
-    /// consumer who supplies <c>null</c> options sees the same modal as a
-    /// platform-native consumer.
+    /// — explicit options retain the legacy palette for compatibility.
+    /// Supply <c>null</c> options to use the platform-native default appearance.
     /// </summary>
     /// <remarks>
     /// <para>Class (not struct) + field initializers.

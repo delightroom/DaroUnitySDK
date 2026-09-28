@@ -236,7 +236,7 @@ namespace Daro.Internal
             return true;
         }
 
-        private static bool AreCanvasGroupsVisible(GameObject go)
+        internal static bool AreCanvasGroupsVisible(GameObject go)
         {
             // Match CanvasGroup inheritance without treating a transparent
             // CTA Image (often used with visible child text) as a hidden ad.

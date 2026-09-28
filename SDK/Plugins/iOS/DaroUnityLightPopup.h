@@ -23,7 +23,7 @@ void DaroUnity_CreateLightPopup(
     float bodyR,      float bodyG,      float bodyB,      float bodyA,
     float ctaBgR,     float ctaBgG,     float ctaBgB,     float ctaBgA,
     float ctaTextR,   float ctaTextG,   float ctaTextB,   float ctaTextA,
-    const char* closeButtonText);
+    const char* closeButtonText, int useNativeDefaults);
 
 void DaroUnity_LoadLightPopup(const char* adUnitId);
 bool DaroUnity_IsLightPopupReady(const char* adUnitId);

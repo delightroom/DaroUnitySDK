@@ -7,9 +7,8 @@ using UnityEngine;
 namespace Daro
 {
     /// <summary>
-    /// Light Popup ad instance. daro-m wraps the format in a modal Dialog with
-    /// an 8-second auto-dismiss timer; from the consumer's perspective the
-    /// shape is a fullscreen ad — Load → Show → Dismiss with 7 lifecycle
+    /// Light Popup ad instance rendered and managed by the native SDK.
+    /// From the consumer's perspective the shape is a fullscreen ad — Load → Show → Dismiss with 7 lifecycle
     /// events, mirroring <see cref="DaroInterstitialAd"/>.
     /// </summary>
     /// <remarks>
@@ -74,14 +73,13 @@ namespace Daro
 
             AdUnitId  = adUnitId;
 
-            // Null options → daro-m defaults via field initializers. Platform
-            // impls always receive non-null.
+            // Keep null so native SDKs retain their current default appearance.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.LightPopup,
                 AdUnitId,
                 this,
                 () => DaroPlatform.Current.CreateLightPopup(
-                    AdUnitId, options ?? new DaroLightPopupAdOptions()));
+                    AdUnitId, options));
             DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitId}' optionsProvided={options != null}");
         }
 

@@ -425,7 +425,7 @@ namespace Daro.Internal
         // Color options silently ignored (visual fidelity not
         // worth IMGUI cost when format is fullscreen modal).
 
-        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options)
         {
             DaroLog.Verbose("LightPopup", $"Platform[Editor].CreateLightPopup adUnit='{adUnitId}'");
             CreateUnit(adUnitId, DaroAdFormat.LightPopup);

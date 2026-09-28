@@ -17,7 +17,7 @@ public sealed class LightPopupHost : MonoBehaviour
 
     private void OnEnable()
     {
-        // null options → daro defaults (semi-transparent dimmer, red CTA, "Close" label).
+        // null options → current platform-native appearance.
         _ad = new DaroLightPopupAd(_adUnitId, options: null);
 
         _ad.OnAdLoaded       += info => Debug.Log($"light popup loaded latency={info.Latency}ms");
@@ -47,7 +47,7 @@ public sealed class LightPopupHost : MonoBehaviour
 
 ## Customizing colors and the close label
 
-`DaroLightPopupAdOptions` controls 9 colors plus the close-button text. Use C# object-initializer syntax to override only the fields you care about — the rest stay at the daro defaults.
+`DaroLightPopupAdOptions` controls 9 colors plus the close-button text. Pass `null` to use the native SDK appearance. When supplying an options object, C# object-initializer syntax overrides selected fields; untouched fields retain the legacy palette below for compatibility.
 
 ```csharp
 var options = new DaroLightPopupAdOptions
@@ -61,7 +61,7 @@ _ad = new DaroLightPopupAd(_adUnitId, options);
 _ad.Load();
 ```
 
-Default values (daro hex mirror):
+Default values for an explicit `DaroLightPopupAdOptions` object:
 
 | Field | Default |
 |---|---|
@@ -114,18 +114,9 @@ if (_ad != null && _ad.IsReady())
 
 `Show()` failures land in `OnAdFailedToShow` (e.g. another fullscreen is already on screen).
 
-## Auto-dismiss
+## Native presentation lifecycle
 
-The native layer dismisses the popup automatically:
-
-| Platform | Auto-dismiss timing |
-|---|---|
-| Android | 8 seconds |
-| iOS | 6 seconds + 3-second fade-out |
-
-The user can also tap the Close button or tap the CTA at any time. Either way, `OnAdDismissed` fires once the popup is fully gone.
-
-The auto-dismiss duration is not configurable from the consumer API.
+The native SDK owns popup presentation and dismissal. Keep the loaded instance when the device rotates; do not call `Load()` again solely because the screen size changed. Subscribe to `OnAdDismissed` to track when presentation ends, and call `Dispose()` when the host no longer owns the ad.
 
 ## Reload policy
 
@@ -137,11 +128,11 @@ To change options, follow the Dispose-then-construct path above (re-subscribing 
 
 ### Android
 
-Renders as a `Dialog(activity)` on top of the host Activity. The 8-second auto-dismiss is a daro-side timer.
+Renders as a `Dialog(activity)` on top of the host Activity.
 
 ### iOS
 
-Renders via `present(_:animated:)`. The 6s + 3s fade is a daro-side timer that differs slightly from Android — same C# API surface, different visual cadence.
+Renders via `present(_:animated:)`. Disposal dismisses only the popup controller owned by this ad instance.
 
 **iOS fill behavior follows the Native ad mediation chain.** daro iOS builds Light Popup on top of `MANativeAdLoader`, so the no-fill / retry / ATT-impact patterns documented in [`native.md`](native.md) apply here too. In a no-fill environment you can see repeated `OnAdFailedToLoad` events from a single `Load()` while the mediation layer retries internally. This is environmental, not a wiring bug.
 

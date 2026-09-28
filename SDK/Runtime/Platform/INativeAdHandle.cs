@@ -27,6 +27,10 @@ namespace Daro.Internal
         /// </summary>
         void Load(int iconWidth, int iconHeight);
 
+        bool SupportsNativeMedia { get; }
+        void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled);
+        void ClearMediaScreenRect();
+
         void ConfigureAdChoices(DaroAdChoicesPosition position);
         void SetAdChoicesScreenRect(Rect rect, bool visible);
         void ClearAdChoicesScreenRect();

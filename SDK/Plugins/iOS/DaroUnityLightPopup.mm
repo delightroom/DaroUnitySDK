@@ -9,10 +9,10 @@
 //
 //    CreateLightPopup    → entry slot + DaroObjCLightPopupAdLoader + delegates
 //                          + DaroObjCLightPopupConfiguration baked
-//    LoadLightPopup      → clear prior ad/adDelegate + [loader loadAd]
+//    LoadLightPopup      → release prior presentation + create a fresh loader
 //    IsLightPopupReady   → entry.ad != nil && !entry.destroyed (sync read)
 //    ShowLightPopup      → [ad showFrom:UnityGetGLViewController()] (main queue)
-//    DestroyLightPopup   → entry.destroyed = YES (dispatch_sync) + nil entry (ARC)
+//    DestroyLightPopup   → mark destroyed, dismiss owned controller, release entry
 //
 //  Configuration apply timing:
 //    didLoad delegate → Layer-1 destroyed check → [ad setConfiguration:]
@@ -56,17 +56,47 @@
 @property (nonatomic, strong, nullable)  DaroObjCLightPopupAd*             ad;
 @property (nonatomic, strong)            DaroUnityLightPopupLoaderDelegate* loaderDelegate;
 @property (nonatomic, strong, nullable)  DaroUnityLightPopupAdDelegate*    adDelegate;
-@property (nonatomic, strong)            DaroObjCLightPopupConfiguration*  configuration;
+@property (nonatomic, strong, nullable)  DaroObjCLightPopupConfiguration*  configuration;
 // 이 광고의 마지막 adInfo — 수익 콜백이 adInfo 를 받지 않아 이 자리가 대신 든다.
 // 로더 델리게이트와 광고 델리게이트가 둘 다 쓰므로 엔트리가 유일한 공통 자리다.
 @property (nonatomic, strong, nullable)  DaroObjCAdInfo*                   lastAdInfo;
 @property (atomic,    assign)            BOOL                              destroyed;
+@property (atomic,    assign)            BOOL                              showing;
+// Read and written only on the main queue.
+@property (nonatomic, weak, nullable) UIViewController* presentedController;
 @end
 
 @implementation DaroUnityLightPopupEntry
 @end
 
 NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
+
+static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
+    DaroObjCLightPopupAd* ad = entry.ad;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController* controller = entry.presentedController;
+        entry.presentedController = nil;
+        entry.showing = NO;
+        ad.delegate = nil;
+        ad.onPaidEvent = nil;
+        if (!controller) return;
+        UIViewController* presenter = controller.presentingViewController;
+        void (^dismiss)(void) = ^{
+            if (presenter.presentedViewController == controller && !controller.isBeingDismissed) {
+                // Dismiss the owned popup together with any ad-click child modal.
+                [presenter dismissViewControllerAnimated:NO completion:nil];
+            }
+        };
+        id<UIViewControllerTransitionCoordinator> transition = controller.transitionCoordinator;
+        if (controller.isBeingPresented && transition) {
+            if (![transition animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+                dismiss();
+            }]) dismiss();
+        } else {
+            dismiss();
+        }
+    });
+}
 
 #pragma mark - Delegate @interfaces (paired — LoaderDelegate's didLoad creates AdDelegate)
 
@@ -89,11 +119,11 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
                            adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogD(@"LightPopup", @"loader.didLoad adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.loader != loader) return;
 
     // Apply configuration BEFORE dispatching adLoaded — consumer may call Show()
     // immediately from the OnAdLoaded handler, and show(from:) reads config internally.
-    [ad setConfiguration:e.configuration];
+    if (e.configuration) [ad setConfiguration:e.configuration];
 
     DaroUnityLightPopupAdDelegate* adDel = [DaroUnityLightPopupAdDelegate new];
     adDel.adUnitId = self.adUnitId;
@@ -119,7 +149,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogW(@"LightPopup", @"loader.didFailWithError adUnit='%@' code=%ld msg='%@'",
              self.adUnitId, (long)error.code, error.localizedDescription);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.loader != loader) return;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToLoad\",\"adFormat\":5,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
@@ -130,7 +160,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
                             adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogD(@"LightPopup", @"loader.didClick adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.loader != loader) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adClicked\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
@@ -141,7 +171,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
                                        adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogD(@"LightPopup", @"loader.didRecordImpression adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.loader != loader) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adImpression\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
@@ -158,7 +188,7 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
                      adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogD(@"LightPopup", @"ad.didShow adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.ad != ad) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adShown\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
@@ -169,9 +199,11 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
                         adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogD(@"LightPopup", @"ad.didDismiss adUnit='%@'", self.adUnitId);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.ad != ad) return;
     // Clear ad ref — dismissed ad is consumed (parallel to Android ad=null after dismiss).
     e.ad = nil;
+    e.showing = NO;
+    e.presentedController = nil;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adDismissed\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
@@ -184,7 +216,9 @@ NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
     DaroLogW(@"LightPopup", @"ad.didFailToShow adUnit='%@' code=%ld msg='%@'",
              self.adUnitId, (long)error.code, error.localizedDescription);
     DaroUnityLightPopupEntry* e = self.entry;
-    if (!e || e.destroyed) return;
+    if (!e || e.destroyed || e.ad != ad) return;
+    e.showing = NO;
+    e.presentedController = nil;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToShow\",\"adFormat\":5,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
@@ -238,7 +272,7 @@ void DaroUnity_CreateLightPopup(
     float bodyR,      float bodyG,      float bodyB,      float bodyA,
     float ctaBgR,     float ctaBgG,     float ctaBgB,     float ctaBgA,
     float ctaTextR,   float ctaTextG,   float ctaTextB,   float ctaTextA,
-    const char* closeButtonText)
+    const char* closeButtonText, int useNativeDefaults)
 {
     if (!adUnitId) return;
     NSString* unit = [NSString stringWithUTF8String:adUnitId];
@@ -250,7 +284,7 @@ void DaroUnity_CreateLightPopup(
 
     // Build configuration on caller frame — UIColor synthesis is cheap and avoids
     // capturing 37 args into the dispatch_async block.
-    DaroObjCLightPopupConfiguration* config = BuildConfig(
+    DaroObjCLightPopupConfiguration* config = useNativeDefaults ? nil : BuildConfig(
         bgR, bgG, bgB, bgA,
         containerR, containerG, containerB, containerA,
         adMarkTextR, adMarkTextG, adMarkTextB, adMarkTextA,
@@ -265,6 +299,9 @@ void DaroUnity_CreateLightPopup(
     dispatch_async(s_adQueue, ^{
         // Release any prior entry — duplicate-construction-replaces (parallel to
         // interstitial pattern in DaroUnityBridge.mm).
+        DaroUnityLightPopupEntry* previous = s_lightPopups[unit];
+        previous.destroyed = YES;
+        if (previous) ReleasePresentation(previous);
         s_lightPopups[unit] = nil;
 
         DaroObjCLightPopupAdLoader* loader =
@@ -294,13 +331,23 @@ void DaroUnity_LoadLightPopup(const char* adUnitId) {
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
         if (!entry || entry.destroyed) return;
 
-        // Re-load: clear prior ad + ad delegate. The same loader instance is reused;
-        // calling loadAd() again on the same loader is supported by daro iOS internal
-        // (DaroLightPopupAdLoader generates a new cacheKey per call).
+        // Give every explicit load its own delegate identity so an old result
+        // cannot replace the new request or resurrect a disposed popup.
+        ReleasePresentation(entry);
         entry.ad         = nil;
         entry.adDelegate = nil;
 
-        [entry.loader loadAd];
+        entry.loader.delegate = nil;
+        DaroObjCLightPopupAdLoader* loader = [[DaroObjCLightPopupAdLoader alloc] initWithUnitId:unit];
+        DaroUnityLightPopupLoaderDelegate* delegate = [DaroUnityLightPopupLoaderDelegate new];
+        delegate.adUnitId = unit;
+        delegate.entry = entry;
+        entry.loader = loader;
+        entry.loaderDelegate = delegate;
+        loader.delegate = delegate;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!entry.destroyed && entry.loader == loader) [loader loadAd];
+        });
     });
 }
 
@@ -310,7 +357,7 @@ bool DaroUnity_IsLightPopupReady(const char* adUnitId) {
     __block BOOL ready = NO;
     dispatch_sync(s_adQueue, ^{
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
-        ready = (entry && !entry.destroyed && entry.ad != nil);
+        ready = (entry && !entry.destroyed && !entry.showing && entry.ad != nil);
     });
     return (bool)ready;
 }
@@ -325,7 +372,16 @@ void DaroUnity_ShowLightPopup(const char* adUnitId) {
         DaroObjCLightPopupAd* ad = entry.ad;
         // show(from:) calls UIViewController.present(...) — main queue required.
         dispatch_async(dispatch_get_main_queue(), ^{
-            [ad showFrom:UnityGetGLViewController()];
+            if (entry.destroyed || entry.ad != ad || entry.showing) return;
+            UIViewController* presenter = UnityGetGLViewController();
+            UIViewController* previous = presenter.presentedViewController;
+            entry.showing = YES;
+            [ad showFrom:presenter];
+            if (!previous && presenter.presentedViewController && entry.showing) {
+                entry.presentedController = presenter.presentedViewController;
+            } else {
+                entry.showing = NO;
+            }
         });
     });
 }
@@ -340,7 +396,10 @@ void DaroUnity_DestroyLightPopup(const char* adUnitId) {
     // set synchronously before mainHandler.post.
     dispatch_sync(s_adQueue, ^{
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
-        if (entry) entry.destroyed = YES;
+        if (entry) {
+            entry.destroyed = YES;
+            ReleasePresentation(entry);
+        }
     });
     dispatch_async(s_adQueue, ^{
         s_lightPopups[unit] = nil;   // ARC releases loader + ad + delegates + config
@@ -351,12 +410,8 @@ void DaroUnity_DestroyLightPopup(const char* adUnitId) {
 // DaroUnity_DestroyAll (DaroUnityBridge.mm). A2 invariant: set
 // entry.destroyed=YES for every live entry BEFORE clearing the dict.
 //
-// No view removal: modal presentation
-// lives inside MAX SDK's own controller — force-dismiss during teardown is
-// risky w.r.t. MAX internals. Currently presented modal will stay until
-// natural dismiss / ARC release after the entry strong-refs (in MAX) drop.
-// Mobile hard kill OS-reaps the process; only iOS willTerminate ~5s grace
-// has the visual artifact risk.
+// Dismiss only the controller owned by this entry. UIKit disappearance
+// lets the native SDK cancel its refresh and auto-close work, including Off.
 //
 // Caller contract: must NOT be invoked from s_adQueue context — would deadlock.
 void DaroUnityLightPopup_DestroyAll(void) {
@@ -369,6 +424,7 @@ void DaroUnityLightPopup_DestroyAll(void) {
 
         for (DaroUnityLightPopupEntry* entry in s_lightPopups.allValues) {
             entry.destroyed = YES;   // A2: armed before dict ref release
+            ReleasePresentation(entry);
         }
         [s_lightPopups removeAllObjects];
 

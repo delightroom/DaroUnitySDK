@@ -83,6 +83,10 @@ namespace Daro.Internal
             _adObject.Call("load", _activity, _proxy, iconWidth, iconHeight);
         }
 
+        public bool SupportsNativeMedia => false;
+        public void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled) { }
+        public void ClearMediaScreenRect() { }
+
         public void ConfigureAdChoices(DaroAdChoicesPosition position)
         {
             if (_disposed || _adObject == null) return;

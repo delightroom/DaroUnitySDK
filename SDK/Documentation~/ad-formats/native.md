@@ -115,9 +115,9 @@ _ad.NotifyVisible();
 _ad.NotifyHidden();
 ```
 
-On iOS, `NotifyVisible()` requests native presentation after load success and valid CTA geometry. `NotifyHidden()` hides the native subtree and disables touch. `NotifyClicked()` forwards Unity button clicks on Android and Editor; the iOS native overlay receives touches directly.
+On iOS, `NotifyVisible()` requests native presentation after load success and valid CTA or media geometry. `NotifyHidden()` hides the native subtree and disables touch. `NotifyClicked()` forwards Unity button clicks on Android and Editor; the iOS native overlay receives touches directly.
 
-When removing or replacing the raw UI, call `UnwireCta()` and remove your `onClick` listener. If you manage geometry directly with `SetCtaScreenRect`, call `ClearCtaScreenRect()` on teardown and resend the rectangle when your layout or screen size changes. `touchEnabled: false` disables interaction; use `NotifyHidden()` or `ClearCtaScreenRect()` to hide native UI.
+When removing or replacing the raw UI, call `UnwireCta()` and remove your `onClick` listener. If you manage geometry directly with `SetCtaScreenRect`, call `ClearCtaScreenRect()` on teardown and resend the rectangle when your layout or screen size changes. `touchEnabled: false` disables interaction. `ClearCtaScreenRect()` removes only the CTA area and its touch; use `NotifyHidden()` to hide the whole native ad, including media.
 
 Also set the icon size hint before `Load()`:
 ```csharp
@@ -182,9 +182,9 @@ Each `DaroNativeAd` instance attaches a 200×200 transparent host `FrameLayout` 
 
 ### iOS
 
-Each instance attaches an initially hidden host to `UnityGetGLViewController().view`. The host becomes visible only when the ad is loaded, `NotifyVisible()` has been called, and a valid CTA screen rectangle intersects the screen. `Load()` alone leaves all native children hidden. Disabling CTA interaction keeps the native UI visible while closing its touch gate.
+Each instance attaches an initially hidden host to `UnityGetGLViewController().view`. The host becomes visible only when the ad is loaded, `NotifyVisible()` has been called, and a valid CTA or media screen rectangle intersects the screen (with AdChoices, the full ad area). `Load()` alone leaves all native children hidden. Disabling CTA interaction keeps the native UI visible while closing its touch gate.
 
-The CTA helper clears geometry when the slot or CTA GameObject is inactive, its Canvas is disabled, or its inherited CanvasGroup visibility is fully transparent. It resends geometry when visible again. `Unbind()` / `UnwireCta()` hide the native subtree by clearing geometry; `Dispose()` removes it. Rebinding the same ad restores it with fresh geometry. The host stays attached while hidden, retaining the existing native refresh behavior.
+The CTA helper clears geometry when the slot or CTA GameObject is inactive, its Canvas is disabled, or its inherited CanvasGroup visibility is fully transparent. It resends geometry when visible again. `Unbind()` hides the native subtree by clearing CTA, AdChoices, and media geometry; `UnwireCta()` clears only the CTA area. `Dispose()` removes the host. Rebinding the same ad restores it with fresh geometry. The host stays attached while hidden, retaining the existing native refresh behavior.
 
 `OnAdImpression` fires at the mediation revenue moment, independent of actual viewability — treat it as a billing/accounting event, not a "user saw it" signal.
 
@@ -229,3 +229,26 @@ The ad argument is null. You either passed the wrong field or the ad was dispose
 - **No `OnAdDismissed`.** Same reason.
 - **No `OnAdFailedToShow`.** No native show pathway.
 - **No `OnAdExpired`.** Mediation does not push an expiry signal — implement a publisher-side timer if you need one.
+
+### iOS native media
+
+Assign `DaroNativeAdView.MediaContainer` to a `RawImage` with a reserved image/video area.
+`Bind` keeps the slot active when `Info.AssetTypes` contains `Media`, even when
+`Info.MediaImage` is null. The image/video is rendered by the network's native view
+at the slot's screen coordinates. The Unity `RawImage` itself does not draw a white
+placeholder. Removing the media asset on refresh collapses the slot and hides the
+previous native media.
+
+Raw/custom-UI integrations can use `WireMedia(RectTransform)` on a screen-space
+Canvas, or `SetMediaScreenRect(rect, visible, touchEnabled)` with bottom-left Unity
+screen pixels. Reserve the matching space in your layout; update coordinates after
+layout or rotation, and call `ClearMediaScreenRect()` when removing the slot.
+`NotifyHidden()` also hides the entire native ad. Media geometry is separate from
+CTA and AdChoices geometry. `UnwireMedia()` stops automatic tracking.
+
+Do not infer that media is absent from a null `MediaImage`. Networks such as
+MAX/Facebook can require the actual native media view to be displayed before they
+report impressions or clicks. A CTA-only layout does not provide that media view.
+The network media can receive real UIKit touches, including its playback controls;
+use `OnAdClicked` for ad click callbacks. Native media presentation is currently
+supported on iOS only; the new geometry methods are no-ops on Android.

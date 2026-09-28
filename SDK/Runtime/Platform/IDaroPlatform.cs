@@ -74,7 +74,7 @@ namespace Daro.Internal
         // ── Light Popup ad operations ─────────────────────────────────────
         // Options baked at Create time (immutable per instance). Mirrors the v1 fullscreen
         // 5-method mold (Create / Load / IsReady / Show / Destroy).
-        void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options);
+        void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options);
         void LoadLightPopup(string adUnitId);
         bool IsLightPopupReady(string adUnitId);
         void ShowLightPopup(string adUnitId);

@@ -89,6 +89,8 @@ namespace Daro
         // MonoBehaviour body lives in SDK/Runtime/Internal/DaroNativeCtaDriver.cs.
         private DaroNativeCtaDriver? _ctaDriver;
         private DaroNativeAdChoicesDriver? _adChoicesDriver;
+        private DaroNativeMediaDriver? _mediaDriver;
+        internal bool UsesNativeMedia => _handle?.SupportsNativeMedia == true;
 
         /// <summary>
         /// Slot-view enabled signal — set by <see cref="DaroNativeAdView"/>'s
@@ -165,6 +167,7 @@ namespace Daro
             _loaded = false;
             _ctaDriver?.InvalidateSync();
             _adChoicesDriver?.InvalidateSync();
+            _mediaDriver?.InvalidateSync();
             _handle!.Load(w, h);
         }
 
@@ -318,9 +321,10 @@ namespace Daro
         }
 
         /// <summary>
-        /// Direct escape-hatch counterpart — invalidate overlay geometry.
-        /// On iOS this hides native UI and disables touch until new geometry
-        /// is supplied. Publisher must call on teardown when
+        /// Direct escape-hatch counterpart — invalidate CTA overlay geometry.
+        /// On iOS this removes the CTA area and its touch until new geometry
+        /// is supplied. Separately wired media stays visible; use
+        /// <see cref="NotifyHidden"/> to hide the whole native ad. Publisher must call on teardown when
         /// using <see cref="SetCtaScreenRect"/>. <see cref="WireCtaButton"/>
         /// users do not need to call this — the helper auto-clears on its
         /// own lifecycle.
@@ -378,6 +382,50 @@ namespace Daro
             if (!_disposed) _handle?.ClearAdChoicesScreenRect();
         }
 
+        /// <summary>
+        /// Tracks an iOS native media view in a screen-space Canvas. The area reserves
+        /// space for the network's real image/video view; no Texture2D is required.
+        /// Android currently has no native media presentation through this API.
+        /// </summary>
+        public void WireMedia(RectTransform mediaArea)
+        {
+            if (mediaArea == null) throw new ArgumentNullException(nameof(mediaArea));
+            if (_disposed) return;
+            var canvas = mediaArea.GetComponentInParent<Canvas>();
+            if (canvas == null || canvas.renderMode == RenderMode.WorldSpace)
+                throw new NotSupportedException("Native media requires a screen-space canvas.");
+            if (_mediaDriver != null && _mediaDriver.MediaArea == mediaArea) return;
+            UnwireMedia();
+            _mediaDriver = DaroNativeMediaDriver.Attach(this, mediaArea);
+        }
+
+        /// <summary>Stops tracking and hides the native media view.</summary>
+        public void UnwireMedia()
+        {
+            if (_disposed) return;
+            _mediaDriver?.Detach();
+            _mediaDriver = null;
+        }
+
+        /// <summary>
+        /// Places iOS native media in Unity bottom-left screen pixels. Raw-path callers
+        /// must update after layout/rotation and hide when their UI is hidden.
+        /// Reserves no Unity layout space. Android is currently a no-op.
+        /// </summary>
+        public void SetMediaScreenRect(Rect mediaScreenRect, bool visible, bool touchEnabled = true)
+        {
+            if (_disposed) return;
+            if (!IsFiniteRect(mediaScreenRect))
+                throw new ArgumentException("Media area must contain finite coordinates.", nameof(mediaScreenRect));
+            _handle?.SetMediaScreenRect(mediaScreenRect, visible, touchEnabled);
+        }
+
+        /// <summary>Hides native media and clears its screen area.</summary>
+        public void ClearMediaScreenRect()
+        {
+            if (!_disposed) _handle?.ClearMediaScreenRect();
+        }
+
         private static bool IsFiniteRect(Rect r) =>
             !float.IsNaN(r.x)      && !float.IsInfinity(r.x) &&
             !float.IsNaN(r.y)      && !float.IsInfinity(r.y) &&
@@ -432,6 +480,13 @@ namespace Daro
                 try { _adChoicesDriver.Detach(); }
                 catch (Exception e) { DaroLog.Warn("Native", $"AdChoices driver Detach threw: {e}"); }
                 _adChoicesDriver = null;
+            }
+
+            if (disposing && _mediaDriver != null)
+            {
+                try { _mediaDriver.Detach(); }
+                catch (Exception e) { DaroLog.Warn("Native", $"Media driver Detach threw: {e}"); }
+                _mediaDriver = null;
             }
 
             _disposed = true;

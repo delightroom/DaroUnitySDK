@@ -392,7 +392,7 @@ namespace Daro.Internal
             float bodyR,      float bodyG,      float bodyB,      float bodyA,
             float ctaBgR,     float ctaBgG,     float ctaBgB,     float ctaBgA,
             float ctaTextR,   float ctaTextG,   float ctaTextB,   float ctaTextA,
-            string closeButtonText);
+            string closeButtonText, int useNativeDefaults);
         [DllImport(DLL)] private static extern void DaroUnity_LoadLightPopup(string adUnitId);
         [DllImport(DLL)] private static extern bool DaroUnity_IsLightPopupReady(string adUnitId);
         [DllImport(DLL)] private static extern void DaroUnity_ShowLightPopup(string adUnitId);
@@ -408,9 +408,11 @@ namespace Daro.Internal
         //   closeButtonTextColor because
         //   iOS lacks a separate icon-color slot.
 
-        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions o)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? o)
         {
             DaroLog.Verbose("LightPopup", $"Platform[iOS].CreateLightPopup adUnit='{adUnitId}'");
+            bool useNativeDefaults = o == null;
+            o ??= new DaroLightPopupAdOptions();
             DaroUnity_CreateLightPopup(
                 adUnitId,
                 B(o.BackgroundColor.r),            B(o.BackgroundColor.g),            B(o.BackgroundColor.b),            B(o.BackgroundColor.a),
@@ -422,7 +424,7 @@ namespace Daro.Internal
                 B(o.BodyColor.r),                  B(o.BodyColor.g),                  B(o.BodyColor.b),                  B(o.BodyColor.a),
                 B(o.CtaBackgroundColor.r),         B(o.CtaBackgroundColor.g),         B(o.CtaBackgroundColor.b),         B(o.CtaBackgroundColor.a),
                 B(o.CtaTextColor.r),               B(o.CtaTextColor.g),               B(o.CtaTextColor.b),               B(o.CtaTextColor.a),
-                o.CloseButtonText ?? "Close");
+                o.CloseButtonText ?? "Close", useNativeDefaults ? 1 : 0);
         }
 
         public void LoadLightPopup(string adUnitId)

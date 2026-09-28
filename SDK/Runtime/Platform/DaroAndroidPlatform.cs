@@ -938,16 +938,18 @@ namespace Daro.Internal
         // 36 params beyond adUnitId (9×4 ARGB ints + closeButtonText),
         // and the proxy needs interface name IDaroLightPopupCallback rather than
         // IDaroAdCallback.
-        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions options)
+        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options)
         {
             DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitId}'");
             // Native-first dispose ordering for any stale instance.
             DestroyAdObject(adUnitId);
 
             var proxy = new DaroLightPopupCallbackProxy(adUnitId, this);
+            bool useNativeDefaults = options == null;
+            options ??= new DaroLightPopupAdOptions();
 
-            // 37-arg ctor: adUnitId + 9 colors × 4 channels (A,R,G,B order
-            // per field, matching Kotlin ctor signature) + closeButtonText. Color32 byte
+            // JNI ctor: adUnitId + 9 colors × 4 channels (A,R,G,B order
+            // per field) + closeButtonText + useNativeDefaults. Color32 byte
             // (0–255 unsigned) cast to int for JNI — no sign-extension risk because
             // C# `byte` is unsigned, so `(int)(byte)0xB2 == 178`, never negative.
             var adObj = new AndroidJavaObject(
@@ -962,7 +964,8 @@ namespace Daro.Internal
                 (int)options.CtaBackgroundColor.a,         (int)options.CtaBackgroundColor.r,         (int)options.CtaBackgroundColor.g,         (int)options.CtaBackgroundColor.b,
                 (int)options.CtaTextColor.a,               (int)options.CtaTextColor.r,               (int)options.CtaTextColor.g,               (int)options.CtaTextColor.b,
                 (int)options.CloseButtonColor.a,           (int)options.CloseButtonColor.r,           (int)options.CloseButtonColor.g,           (int)options.CloseButtonColor.b,
-                options.CloseButtonText ?? "Close"
+                options.CloseButtonText ?? "Close",
+                useNativeDefaults
             );
 
             _proxies[adUnitId]   = proxy;

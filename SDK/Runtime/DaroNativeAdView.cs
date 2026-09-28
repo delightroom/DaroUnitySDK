@@ -124,6 +124,11 @@ namespace Daro
                 try { ad.WireAdChoices((RectTransform)transform); }
                 catch { ad.UnwireCta(); throw; }
             }
+            if (MediaContainer != null && ad.UsesNativeMedia)
+            {
+                try { ad.WireMedia(MediaContainer.rectTransform); }
+                catch { ad.UnwireCta(); ad.UnwireAdChoices(); throw; }
+            }
             _boundAd = ad;
 
             ApplyInfo(ad.Info!);
@@ -156,6 +161,7 @@ namespace Daro
             // Must run before _boundAd is nulled below.
             _boundAd.UnwireCta();
             _boundAd.UnwireAdChoices();
+            _boundAd.UnwireMedia();
 
             if (TitleText      != null) TitleText.text         = string.Empty;
             if (BodyText       != null) BodyText.text          = string.Empty;
@@ -217,7 +223,12 @@ namespace Daro
                 // null texture renders as an opaque white box AND still reserves
                 // layout space; deactivating the GameObject drops it from the
                 // layout so the ad shrinks to fit (uGUI ignores inactive children).
-                MediaContainer.gameObject.SetActive(info.MediaImage != null);
+                bool nativeMedia = _boundAd?.UsesNativeMedia == true &&
+                    info.AssetTypes.Contains(NativeAdAssetType.Media);
+                // UIKit renders the native media. Keep its layout anchor active
+                // even though no Unity texture exists; suppress the white quad.
+                MediaContainer.canvasRenderer.SetAlpha(nativeMedia ? 0f : 1f);
+                MediaContainer.gameObject.SetActive(nativeMedia || info.MediaImage != null);
             }
             if (CtaButton != null)
             {
