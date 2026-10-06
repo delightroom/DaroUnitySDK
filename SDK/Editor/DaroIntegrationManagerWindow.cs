@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Daro.Editor.Devtools;
 using UnityEditor;
@@ -111,6 +112,7 @@ namespace Daro.Editor
 
         private void OnDisable()
         {
+            Undo.undoRedoPerformed -= UpdateSafeDkField;
             if (_localizationHandler != null)
             {
                 DaroImLocalization.Changed -= _localizationHandler;
@@ -120,6 +122,7 @@ namespace Daro.Editor
 
         private void OnEnable()
         {
+            Undo.undoRedoPerformed += UpdateSafeDkField;
             // CreateGUI may not have run yet on first enable / domain reload;
             // BindOrShowNoSettings touches cached elements that don't exist
             // until then.
@@ -130,6 +133,7 @@ namespace Daro.Editor
         private void OnFocus()
         {
             if (_validationList == null) return;
+            UpdateSafeDkField();
             RefreshValidation();
             UpdateDevtoolsLogOverlayStatus();
         }
@@ -206,6 +210,17 @@ namespace Daro.Editor
 
         private void WireButtons()
         {
+            rootVisualElement.Q<DropdownField>("im-android-safedk-field")?.RegisterValueChangedCallback(evt =>
+            {
+                if (_serializedSettings == null || _settings == null) return;
+                var field = rootVisualElement.Q<DropdownField>("im-android-safedk-field");
+                var choice = field.choices.IndexOf(evt.newValue);
+                // Updating localized choices can emit a value from the previous language.
+                if (choice < 0) return;
+                _serializedSettings.Update();
+                _serializedSettings.FindProperty("androidSafedkConfigurationCacheWorkaround").enumValueIndex = choice;
+                _serializedSettings.ApplyModifiedProperties();
+            });
             rootVisualElement.Q<Button>("im-create-settings-btn")?.RegisterCallback<ClickEvent>(_ =>
                 CreateSettingsAsset());
 
@@ -340,6 +355,8 @@ namespace Daro.Editor
             SetTextLabel("im-ios-att-field",            "field.attDescription");
             SetTextLabel("im-android-integrationkey-field", "field.integrationKey");
 
+            UpdateSafeDkField();
+
             SetButton("im-validate-btn",                "btn.runChecks");
             SetButton("im-validate-ios-btn",            "btn.validateKey");
             SetButton("im-validate-android-btn",        "btn.validateKey");
@@ -356,6 +373,22 @@ namespace Daro.Editor
                 _assetPathLabel.text = string.Empty;
             else if (_assetPathLabel != null && string.IsNullOrEmpty(AssetDatabase.GetAssetPath(_settings)))
                 _assetPathLabel.text = DaroImLocalization.Get("assetPath.unsaved");
+        }
+
+        private void UpdateSafeDkField()
+        {
+            var field = rootVisualElement.Q<DropdownField>("im-android-safedk-field");
+            if (field == null) return;
+            field.label = DaroImLocalization.Get("field.safedk");
+            field.choices = new List<string>
+            {
+                DaroImLocalization.Get("safedk.preserve"),
+                DaroImLocalization.Get("safedk.enabled"),
+                DaroImLocalization.Get("safedk.disabled"),
+            };
+            var choice = _settings == null ? 0 : (int)_settings.androidSafedkConfigurationCacheWorkaround;
+            field.SetValueWithoutNotify(field.choices[Math.Max(0, Math.Min(2, choice))]);
+            SetLabel("im-android-safedk-help", "safedk.help");
         }
 
         private void SetLabel(string name, string key)
@@ -464,6 +497,7 @@ namespace Daro.Editor
 
             _serializedSettings = new SerializedObject(_settings);
             rootVisualElement.Bind(_serializedSettings);
+            UpdateSafeDkField();
 
             RefreshValidation();
         }

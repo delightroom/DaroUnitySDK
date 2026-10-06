@@ -32,7 +32,7 @@ namespace Daro.Editor
         // Kotlin Gradle Plugin is no longer injected — the shim is now shipped
         // as a prebuilt AAR (SDK/Plugins/Android/daro-android-wrapper.aar),
         // so the consumer's build never compiles our Kotlin source.
-        internal const string DaroPluginCoords = "so.daro:daro-plugin:2.0.0";
+        internal const string DaroPluginCoords = "so.daro:daro-plugin:2.0.3";
         internal const string AppLovinQualityServiceClasspath =
             "com.applovin.quality:AppLovinQualityServiceGradlePlugin:5.5.2";
 
@@ -87,20 +87,27 @@ namespace Daro.Editor
         // variant, so the id no longer branches.
         internal const string GradlePluginId = "so.daro";
 
-        // gradle.properties keys to set additively (only if absent).
-        // `daroIntegrationKey` is the only key we own — the so.daro plugin's
-        // IntegrationKeySource reads the gradle property first, then the
-        // app manifest's DARO_INTEGRATION_KEY meta-data. EDM4U writes
-        // `android.useAndroidX=true` + `android.enableJetifier=true` itself
-        // (verified against EDM4U 1.2.x output 2026-04-29: `# Android Resolver
-        // Properties Start` block). We do NOT duplicate those.
+        internal const string SafeDkWorkaroundProperty = "daro.safedkConfigurationCacheWorkaround";
+
+        // Integration key remains additive; an explicitly selected workaround overrides
+        // the customer's value. PreserveExisting never supplies a replacement.
         internal static IReadOnlyDictionary<string, string> GetGradleProperties(DaroSettings settings)
         {
             if (!ShouldApply(settings)) return EmptyProps;
-            return new Dictionary<string, string>(1)
+            var props = new Dictionary<string, string>
             {
                 ["daroIntegrationKey"] = settings.androidIntegrationKey,
             };
+            switch (settings.androidSafedkConfigurationCacheWorkaround)
+            {
+                case SafeDkConfigurationCacheWorkaround.Enabled:
+                    props[SafeDkWorkaroundProperty] = "true";
+                    break;
+                case SafeDkConfigurationCacheWorkaround.Disabled:
+                    props[SafeDkWorkaroundProperty] = "false";
+                    break;
+            }
+            return props;
         }
     }
 }

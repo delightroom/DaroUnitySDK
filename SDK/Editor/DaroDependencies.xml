@@ -61,7 +61,7 @@
         <iosPod name="DaroObjCBridge" version="2.0.1" />
     </iosPods>
     <androidPackages>
-        <androidPackage spec="so.daro:daro-sdk:2.0.1">
+        <androidPackage spec="so.daro:daro-sdk:2.0.2">
             <repositories>
                 <repository>https://artifacts.applovin.com/android</repository>
                 <repository>https://artifact.bytedance.com/repository/pangle</repository>

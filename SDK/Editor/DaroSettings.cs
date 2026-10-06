@@ -11,6 +11,13 @@ namespace Daro.Editor
         MAX = 0,
     }
 
+    public enum SafeDkConfigurationCacheWorkaround
+    {
+        PreserveExisting = 0,
+        Enabled = 1,
+        Disabled = 2,
+    }
+
     [CreateAssetMenu(menuName = "Daro/Settings", fileName = "DaroSettings")]
     public sealed class DaroSettings : ScriptableObject
     {
@@ -43,6 +50,9 @@ namespace Daro.Editor
         // string — the Editor never decrypts (the secret lives only in the
         // native tools).
         public string androidIntegrationKey;
+
+        public SafeDkConfigurationCacheWorkaround androidSafedkConfigurationCacheWorkaround =
+            SafeDkConfigurationCacheWorkaround.PreserveExisting;
 
         // Legacy key pair (pre-unified generation, daro-m 1.3.x). Kept
         // serialized so the validator can detect an un-migrated settings

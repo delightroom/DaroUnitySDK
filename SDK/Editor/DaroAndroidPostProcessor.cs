@@ -32,7 +32,7 @@ namespace Daro.Editor
     //      Daro plugin's hooks expect plugins-DSL coordination semantics)
     //      + `minSdk` floor bump to 23.
     //   3. unityLibrary/build.gradle — `minSdk` floor bump only.
-    //   4. gradle.properties — daroIntegrationKey only (AndroidX/Jetifier
+    //   4. gradle.properties — integration key and optional SafeDK workaround (AndroidX/Jetifier
     //      are EDM4U's territory).
     //   5. proguard-user.txt — Daro keep rule (creates the file if absent).
     //
@@ -456,7 +456,7 @@ namespace Daro.Editor
         }
 
         // =====================================================================
-        // gradle.properties — daroIntegrationKey only (AndroidX / Jetifier are EDM4U-owned)
+        // gradle.properties — integration key and optional SafeDK workaround (AndroidX / Jetifier are EDM4U-owned)
         // =====================================================================
 
         private static void PatchGradleProperties(string filePath, DaroSettings settings)
@@ -468,7 +468,28 @@ namespace Daro.Editor
             var hadBlock = blockRegex.IsMatch(text);
             var textWithoutBlock = blockRegex.Replace(text, string.Empty);
 
+            var workaroundPattern = new Regex(
+                @"^[ \t\f]*" + Regex.Escape(DaroAndroidGradleContent.SafeDkWorkaroundProperty) +
+                @"(?:[ \t\f]*[=:][^\r\n]*|[ \t\f]+[^\r\n]*|\r?$)(?:\r?\n|$)",
+                RegexOptions.Multiline);
             var props = DaroAndroidGradleContent.GetGradleProperties(settings);
+            if (props.ContainsKey(DaroAndroidGradleContent.SafeDkWorkaroundProperty))
+            {
+                // Explicit choices replace matching keys outside the managed block too.
+                textWithoutBlock = workaroundPattern.Replace(textWithoutBlock, string.Empty);
+            }
+            else
+            {
+                // Keep preserved lines at their original position: later customer entries
+                // must retain precedence over an earlier generated value.
+                textWithoutBlock = blockRegex.Replace(text, previousBlock =>
+                {
+                    var preserved = new StringBuilder();
+                    foreach (Match property in workaroundPattern.Matches(previousBlock.Value))
+                        preserved.Append(property.Value);
+                    return preserved.ToString();
+                });
+            }
             var existingKeys = ParsePropertyKeys(textWithoutBlock);
 
             // Filter to keys that are NOT already present anywhere in the file
