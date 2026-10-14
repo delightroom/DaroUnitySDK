@@ -190,6 +190,46 @@ namespace Daro.Internal
                 _parent = parent;
             }
 
+            // Unity's default proxy unboxes Java arrays one element at a time.
+            // Read the icon in bulk before that path; retain the original callback dispatch.
+            public override AndroidJavaObject Invoke(string methodName, AndroidJavaObject[] javaArgs)
+            {
+                if (methodName != nameof(onAdLoaded) || javaArgs == null || javaArgs.Length != 9)
+                    return base.Invoke(methodName, javaArgs);
+
+                var args = new object[9];
+                try
+                {
+                    for (int i = 0; i < javaArgs.Length; i++)
+                    {
+                        var arg = javaArgs[i];
+                        if (arg == null || arg.GetRawObject() == IntPtr.Zero) continue;
+
+                        if (i == 4)
+                        {
+                            // Java bytes are signed; copy their bits without changing PNG data.
+                            var signed = AndroidJNI.FromSByteArray(arg.GetRawObject());
+                            var bytes = new byte[signed.Length];
+                            Buffer.BlockCopy(signed, 0, bytes, 0, signed.Length);
+                            args[i] = bytes;
+                        }
+                        else if (i == 6)
+                            args[i] = arg.Call<int>("intValue");
+                        else
+                            args[i] = arg.Call<string>("toString");
+                    }
+                }
+                finally
+                {
+                    // The base AndroidJavaObject[] overload normally owns this cleanup.
+                    // Our fast path replaces it, and captures only managed values.
+                    foreach (var arg in javaArgs) arg?.Dispose();
+                }
+
+                // object[] bypasses array unboxing while preserving reflection/error handling.
+                return base.Invoke(methodName, args);
+            }
+
             // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 네이티브는 onAdLoaded 가
             // 아이콘 폴링 뒤에 와서 impression 이 먼저 도착할 수 있고, 그때 기억한 값은 없거나 이전 광고 것이다.
             private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
