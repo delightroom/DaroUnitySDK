@@ -58,10 +58,10 @@
                  Consumer app minSdk 23.
     -->
     <iosPods>
-        <iosPod name="DaroObjCBridge" version="2.0.3-rc.4" />
+        <iosPod name="DaroObjCBridge" version="2.0.3-rc.5" />
     </iosPods>
     <androidPackages>
-        <androidPackage spec="so.daro:daro-sdk:2.0.4-rc.5">
+        <androidPackage spec="so.daro:daro-sdk:2.0.4-rc.6">
             <repositories>
                 <repository>https://artifacts.applovin.com/android</repository>
                 <repository>https://artifact.bytedance.com/repository/pangle</repository>
