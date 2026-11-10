@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 void DaroUnity_CreateLightPopup(
-    const char* adUnitId,
+    const char* adUnitKey,
     float bgR,        float bgG,        float bgB,        float bgA,
     float containerR, float containerG, float containerB, float containerA,
     float adMarkTextR,float adMarkTextG,float adMarkTextB,float adMarkTextA,
@@ -25,10 +25,10 @@ void DaroUnity_CreateLightPopup(
     float ctaTextR,   float ctaTextG,   float ctaTextB,   float ctaTextA,
     const char* closeButtonText, int useNativeDefaults);
 
-void DaroUnity_LoadLightPopup(const char* adUnitId);
-bool DaroUnity_IsLightPopupReady(const char* adUnitId);
-void DaroUnity_ShowLightPopup(const char* adUnitId);
-void DaroUnity_DestroyLightPopup(const char* adUnitId);
+void DaroUnity_LoadLightPopup(const char* adUnitKey);
+bool DaroUnity_IsLightPopupReady(const char* adUnitKey);
+void DaroUnity_ShowLightPopup(const char* adUnitKey);
+void DaroUnity_DestroyLightPopup(const char* adUnitKey);
 
 #ifdef __cplusplus
 }

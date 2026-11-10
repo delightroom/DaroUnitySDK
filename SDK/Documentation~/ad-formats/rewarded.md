@@ -12,12 +12,12 @@ using UnityEngine;
 
 public sealed class RewardedHost : MonoBehaviour
 {
-    [SerializeField] private string _adUnitId = "your-rewarded-ad-unit-id";
+    [SerializeField] private string _adUnitKey = "your-rewarded-ad-unit-id";
     private DaroRewardedAd _ad;
 
     private void OnEnable()
     {
-        _ad = new DaroRewardedAd(_adUnitId);
+        _ad = new DaroRewardedAd(_adUnitKey);
 
         _ad.OnAdLoaded       += info => Debug.Log("rewarded loaded");
         _ad.OnAdFailedToLoad += err  => Debug.LogWarning($"load failed: {err.Message}");
@@ -60,7 +60,7 @@ public sealed class RewardedHost : MonoBehaviour
 
 ## Differences vs Interstitial (the whole list)
 
-1. **Class**: `DaroRewardedAd` (constructor signature identical: `(string adUnitId)`).
+1. **Class**: `DaroRewardedAd` (constructor signature identical: `(string adUnitKey)`).
 2. **Extra event**: `OnEarnedReward` — `Action<DaroAdInfo, DaroRewardItem>`. Fires once per completed view.
 3. **Extra method**: `SetCustomData(string)` — opaque string forwarded to your mediation's reward callback for S2S validation. Call before `Show()`.
 

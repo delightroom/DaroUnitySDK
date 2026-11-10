@@ -49,16 +49,16 @@ using UnityEngine;
 
 public sealed class AdHost : MonoBehaviour
 {
-    private const string AdUnitId = "your-ad-unit-id";
+    private const string AdUnitKey = "your-ad-unit-id";
     private DaroInterstitialAd _ad;   // nullable field
 
     private void OnEnable()
     {
         // 1. Construct (ad unit id).
-        _ad = new DaroInterstitialAd(AdUnitId);
+        _ad = new DaroInterstitialAd(AdUnitKey);
 
         // 2. Register every event handler BEFORE calling Load().
-        _ad.OnAdLoaded       += info => Debug.Log($"loaded ad={info.AdUnitId}");
+        _ad.OnAdLoaded       += info => Debug.Log($"loaded ad={info.AdUnitKey}");
         _ad.OnAdFailedToLoad += err  => Debug.LogWarning($"load failed code={err.Code}: {err.Message}");
         _ad.OnAdShown        += info => Debug.Log("shown");
         _ad.OnAdFailedToShow += err  => Debug.LogWarning($"show failed: {err.Message}");

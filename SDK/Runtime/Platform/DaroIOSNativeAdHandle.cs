@@ -57,7 +57,7 @@ namespace Daro.Internal
     internal sealed class DaroIOSNativeAdHandle : INativeAdHandle
     {
         // ── instance state ─────────────────────────────────────────────────
-        private readonly string             _adUnitId;
+        private readonly string             _adUnitKey;
         private readonly INativeAdEventSink _sink;
         private readonly int                _handleId;
 
@@ -71,9 +71,9 @@ namespace Daro.Internal
         private static int s_nextId;   // accessed via Interlocked.Increment
 
         // ── ctor ───────────────────────────────────────────────────────────
-        internal DaroIOSNativeAdHandle(string adUnitId, INativeAdEventSink sink)
+        internal DaroIOSNativeAdHandle(string adUnitKey, INativeAdEventSink sink)
         {
-            _adUnitId = adUnitId;
+            _adUnitKey = adUnitKey;
             _sink     = sink;
             _handleId = Interlocked.Increment(ref s_nextId);
 
@@ -82,13 +82,13 @@ namespace Daro.Internal
             lock (s_lock) { s_handles[_handleId] = this; }
 
             EnsureNativeAdCallbackRegistered();
-            DaroUnity_NativeAd_Create(_handleId, adUnitId);
+            DaroUnity_NativeAd_Create(_handleId, adUnitKey);
         }
 
         // ── INativeAdHandle ────────────────────────────────────────────────
         public void Load(int iconWidth, int iconHeight)
         {
-            DaroLog.Verbose("Native", $"Handle[iOS].Load adUnit='{_adUnitId}/h{_handleId}' icon={iconWidth}x{iconHeight} disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[iOS].Load adUnit='{_adUnitKey}/h{_handleId}' icon={iconWidth}x{iconHeight} disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_Load(_handleId, iconWidth, iconHeight);
         }
@@ -127,21 +127,21 @@ namespace Daro.Internal
 
         public void NotifyVisible()
         {
-            DaroLog.Verbose("Native", $"Handle[iOS].NotifyVisible adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[iOS].NotifyVisible adUnit='{_adUnitKey}/h{_handleId}' disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_NotifyVisible(_handleId);
         }
 
         public void NotifyHidden()
         {
-            DaroLog.Verbose("Native", $"Handle[iOS].NotifyHidden adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[iOS].NotifyHidden adUnit='{_adUnitKey}/h{_handleId}' disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_NotifyHidden(_handleId);
         }
 
         public void NotifyClicked()
         {
-            DaroLog.Verbose("Native", $"Handle[iOS].NotifyClicked adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[iOS].NotifyClicked adUnit='{_adUnitKey}/h{_handleId}' disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_NotifyClicked(_handleId);
         }
@@ -152,7 +152,7 @@ namespace Daro.Internal
         public void SetCtaScreenRect(UnityEngine.Rect rect, bool touchEnabled)
         {
             DaroLog.Verbose("Native",
-                $"Handle[iOS].SetCtaScreenRect adUnit='{_adUnitId}/h{_handleId}' rect={rect} touchEnabled={touchEnabled} disposed={_disposed}");
+                $"Handle[iOS].SetCtaScreenRect adUnit='{_adUnitKey}/h{_handleId}' rect={rect} touchEnabled={touchEnabled} disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_SetCtaScreenRect(
                 _handleId, rect.x, rect.y, rect.width, rect.height, touchEnabled);
@@ -161,7 +161,7 @@ namespace Daro.Internal
         public void ClearCtaScreenRect()
         {
             DaroLog.Verbose("Native",
-                $"Handle[iOS].ClearCtaScreenRect adUnit='{_adUnitId}/h{_handleId}' disposed={_disposed}");
+                $"Handle[iOS].ClearCtaScreenRect adUnit='{_adUnitKey}/h{_handleId}' disposed={_disposed}");
             if (_disposed) return;
             DaroUnity_NativeAd_ClearCtaScreenRect(_handleId);
         }
@@ -170,7 +170,7 @@ namespace Daro.Internal
         {
             if (_disposed) return;
             _disposed = true;   // Layer-2 armed FIRST
-            DaroLog.Verbose("Native", $"Handle[iOS].Dispose adUnit='{_adUnitId}/h{_handleId}'");
+            DaroLog.Verbose("Native", $"Handle[iOS].Dispose adUnit='{_adUnitKey}/h{_handleId}'");
 
             try
             {
@@ -179,7 +179,7 @@ namespace Daro.Internal
             catch (Exception e)
             {
                 DaroLog.Warn("Native",
-                    $"DaroIOSNativeAdHandle({_adUnitId}/h{_handleId}) destroy threw: {e}");
+                    $"DaroIOSNativeAdHandle({_adUnitKey}/h{_handleId}) destroy threw: {e}");
             }
 
             // De-register AFTER PInvoke returns — Layer-2 already gates any
@@ -222,13 +222,13 @@ namespace Daro.Internal
             string? evt = DaroJsonHelpers.GetJsonString(eventJson, "event");
             if (evt == null) return;             // malformed → silent drop
 
-            string adUnitId = handle._adUnitId;
+            string adUnitKey = handle._adUnitKey;
 
             switch (evt)
             {
                 case "adLoaded":
                 {
-                    var adInfo  = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
+                    var adInfo  = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
 
                     Texture2D? icon = BuildTexture(iconPng, iconLen);
 
@@ -258,25 +258,25 @@ namespace Daro.Internal
                     var raw = DaroJsonHelpers.GetJsonInt   (eventJson, "errorCode");
                     var msg = DaroJsonHelpers.GetJsonString(eventJson, "errorMessage") ?? string.Empty;
                     var err = new DaroAdLoadError(
-                        DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitId, raw);
+                        DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitKey, raw);
                     Safely(() => handle._sink.OnAdFailedToLoad(err));
                     break;
                 }
                 case "adImpression":
                 {
-                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
                     Safely(() => handle._sink.OnAdImpression(info));
                     break;
                 }
                 case "adClicked":
                 {
-                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
                     Safely(() => handle._sink.OnAdClicked(info));
                     break;
                 }
                 case "adRevenuePaid":
                 {
-                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitId);
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
                     var revenue = DaroRevenueInfo.FromMicros(
                         DaroJsonHelpers.GetJsonLong(eventJson, "valueMicros"),
                         DaroJsonHelpers.GetJsonString(eventJson, "currencyCode") ?? "USD",
@@ -326,7 +326,7 @@ namespace Daro.Internal
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_ClearAdChoicesScreenRect(int handleId);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Create(
-            int handleId, string adUnitId);
+            int handleId, string adUnitKey);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Load(
             int handleId, int iconWidth, int iconHeight);

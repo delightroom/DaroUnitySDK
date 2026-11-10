@@ -13,7 +13,7 @@ namespace Daro
     /// </summary>
     public sealed class DaroRewardedAd : IDisposable
     {
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         public event Action<DaroAdInfo>?                 OnAdLoaded;
         public event Action<DaroAdLoadError>?            OnAdFailedToLoad;
@@ -42,26 +42,26 @@ namespace Daro
         internal bool IsDisposed => _disposed;
 
         /// <summary>
-        /// Construct a rewarded ad instance bound to <paramref name="adUnitId"/>.
+        /// Construct a rewarded ad instance bound to <paramref name="adUnitKey"/>.
         /// </summary>
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroRewardedAd(string adUnitId)
+        public DaroRewardedAd(string adUnitKey)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
 
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
-                DaroAdFormat.Rewarded, AdUnitId, this,
-                () => DaroPlatform.Current.CreateRewarded(AdUnitId));
-            DaroLog.Verbose("Rewarded", $"ctor adUnit='{AdUnitId}'");
+                DaroAdFormat.Rewarded, AdUnitKey, this,
+                () => DaroPlatform.Current.CreateRewarded(AdUnitKey));
+            DaroLog.Verbose("Rewarded", $"ctor adUnit='{AdUnitKey}'");
         }
 
         /// <summary>
@@ -73,15 +73,15 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroRewardedAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("Rewarded",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
-            DaroLog.Verbose("Rewarded", $"Load adUnit='{AdUnitId}'");
-            DaroPlatform.Current.LoadRewarded(AdUnitId);
+            DaroLog.Verbose("Rewarded", $"Load adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.LoadRewarded(AdUnitKey);
         }
 
         /// <summary>
@@ -91,7 +91,7 @@ namespace Daro
         public bool IsReady()
         {
             if (_disposed) return false;
-            return DaroPlatform.Current.IsRewardedReady(AdUnitId);
+            return DaroPlatform.Current.IsRewardedReady(AdUnitKey);
         }
 
         /// <summary>
@@ -109,11 +109,11 @@ namespace Daro
 
             if (!IsReady())
             {
-                throw new InvalidOperationException($"Ad not ready: {AdUnitId}");
+                throw new InvalidOperationException($"Ad not ready: {AdUnitKey}");
             }
 
-            DaroLog.Verbose("Rewarded", $"Show adUnit='{AdUnitId}'");
-            DaroPlatform.Current.ShowRewarded(AdUnitId);
+            DaroLog.Verbose("Rewarded", $"Show adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.ShowRewarded(AdUnitKey);
         }
 
         /// <summary>
@@ -127,8 +127,8 @@ namespace Daro
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroRewardedAd));
             if (customData == null) throw new ArgumentNullException(nameof(customData));
-            DaroLog.Verbose("Rewarded", $"SetCustomData adUnit='{AdUnitId}' len={customData.Length}");
-            DaroPlatform.Current.SetRewardedCustomData(AdUnitId, customData);
+            DaroLog.Verbose("Rewarded", $"SetCustomData adUnit='{AdUnitKey}' len={customData.Length}");
+            DaroPlatform.Current.SetRewardedCustomData(AdUnitKey, customData);
         }
 
         /// <summary>
@@ -152,7 +152,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("Rewarded", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("Rewarded", $"Dispose adUnit='{AdUnitKey}'");
 
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
@@ -169,13 +169,13 @@ namespace Daro
             {
                 DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
                     DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                        DaroAdFormat.Rewarded, AdUnitId, this, _registryGeneration,
-                        () => platform.DestroyRewarded(AdUnitId)));
+                        DaroAdFormat.Rewarded, AdUnitKey, this, _registryGeneration,
+                        () => platform.DestroyRewarded(AdUnitKey)));
             }
             catch (Exception e)
             {
                 DaroLog.Warn("Rewarded",
-                    $"DestroyRewarded({AdUnitId}) threw during Dispose: {e}");
+                    $"DestroyRewarded({AdUnitKey}) threw during Dispose: {e}");
             }
         }
 
@@ -184,63 +184,63 @@ namespace Daro
         internal void FireOnAdLoaded(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+            DaroLog.Verbose("Rewarded", $"FireOnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, info);
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("Rewarded", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
         internal void FireOnAdShown(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdShown adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Rewarded", $"FireOnAdShown adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdShown, info);
         }
 
         internal void FireOnAdFailedToShow(DaroAdDisplayError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdFailedToShow adUnit='{AdUnitId}' code={error.Code}");
+            DaroLog.Verbose("Rewarded", $"FireOnAdFailedToShow adUnit='{AdUnitKey}' code={error.Code}");
             SafeEventInvoker.Invoke(OnAdFailedToShow, error);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Rewarded", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Rewarded", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdDismissed(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdDismissed adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Rewarded", $"FireOnAdDismissed adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
         }
 
         internal void FireOnEarnedReward(DaroAdInfo info, DaroRewardItem reward)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnEarnedReward adUnit='{AdUnitId}' reward={reward.Amount} '{reward.RewardType}'");
+            DaroLog.Verbose("Rewarded", $"FireOnEarnedReward adUnit='{AdUnitKey}' reward={reward.Amount} '{reward.RewardType}'");
             SafeEventInvoker.Invoke(OnEarnedReward, info, reward);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Rewarded", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("Rewarded", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }

@@ -12,13 +12,13 @@ using UnityEngine;
 
 public sealed class LightPopupHost : MonoBehaviour
 {
-    [SerializeField] private string _adUnitId = "your-light-popup-ad-unit-id";
+    [SerializeField] private string _adUnitKey = "your-light-popup-ad-unit-id";
     private DaroLightPopupAd _ad;
 
     private void OnEnable()
     {
         // null options → current platform-native appearance.
-        _ad = new DaroLightPopupAd(_adUnitId, options: null);
+        _ad = new DaroLightPopupAd(_adUnitKey, options: null);
 
         _ad.OnAdLoaded       += info => Debug.Log($"light popup loaded latency={info.Latency}ms");
         _ad.OnAdFailedToLoad += err  => Debug.LogWarning($"load failed: {err.Message}");
@@ -57,7 +57,7 @@ var options = new DaroLightPopupAdOptions
     CloseButtonText    = "Close (custom)",
 };
 
-_ad = new DaroLightPopupAd(_adUnitId, options);
+_ad = new DaroLightPopupAd(_adUnitKey, options);
 _ad.Load();
 ```
 
@@ -93,7 +93,7 @@ var newOptions = new DaroLightPopupAdOptions
 };
 
 _ad?.Dispose();
-_ad = new DaroLightPopupAd(_adUnitId, newOptions);
+_ad = new DaroLightPopupAd(_adUnitKey, newOptions);
 _ad.OnAdLoaded += info => Debug.Log("light popup loaded");   // re-subscribe handlers on the new instance
 _ad.Load();
 ```

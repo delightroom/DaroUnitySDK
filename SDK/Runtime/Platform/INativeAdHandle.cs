@@ -12,8 +12,8 @@ namespace Daro.Internal
     /// </summary>
     /// <remarks>
     /// Native ad uses an instance-owned pattern (vs. the platform-managed
-    /// adUnitId-keyed dict used by other formats). N <see cref="DaroNativeAd"/>
-    /// instances with the same adUnitId yield N independent handles + native
+    /// adUnitKey-keyed dict used by other formats). N <see cref="DaroNativeAd"/>
+    /// instances with the same adUnitKey yield N independent handles + native
     /// loaders — required for list-UI use cases.
     /// </remarks>
     internal interface INativeAdHandle : IDisposable

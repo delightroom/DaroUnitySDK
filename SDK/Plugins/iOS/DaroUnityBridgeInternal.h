@@ -31,22 +31,22 @@ extern NSMutableDictionary<NSString*, DaroUnityBannerEntry*>* s_banners;
 // Native ad storage. Defined in DaroUnityNativeAd.mm; the native-ad extern
 // entries manage this dictionary while DaroUnityBridge.mm bootstraps it.
 // Keyed by C#-allocated monotonic int handleId (boxed via NSNumber) — the
-// adUnitId-keyed pattern doesn't fit native ad's instance-owned model
-// (multi-instance same adUnitId).
+// adUnitKey-keyed pattern doesn't fit native ad's instance-owned model
+// (multi-instance same adUnitKey).
 @class DaroUnityNativeAdEntry;
 extern NSMutableDictionary<NSNumber*, DaroUnityNativeAdEntry*>* s_nativeAds;
 
 // Light Popup storage. Defined in DaroUnityLightPopup.mm; the light-popup
 // extern entries manage this dictionary while DaroUnityBridge.mm bootstraps
-// it. adUnitId-keyed (interstitial-style single-per-adUnitId), unlike native
+// it. adUnitKey-keyed (interstitial-style single-per-adUnitKey), unlike native
 // ad's instance-keyed model.
 @class DaroUnityLightPopupEntry;
 extern NSMutableDictionary<NSString*, DaroUnityLightPopupEntry*>* s_lightPopups;
 
 // Single JSON-event channel back to Unity. Defined in DaroUnityBridge.mm.
-// adUnitId may be the "__sdk__" sentinel for SDK lifecycle events; banner
+// adUnitKey may be the "__sdk__" sentinel for SDK lifecycle events; banner
 // always passes a real ad unit id.
-extern void DaroDispatch(NSString* _Nullable adUnitId, NSString* eventJson);
+extern void DaroDispatch(NSString* _Nullable adUnitKey, NSString* eventJson);
 
 // Minimal JSON string escape — matches DaroUnityBridge.mm's set
 // (",", "\\", "\n", "\t", "\r", control chars). Defined in DaroUnityBridge.mm.
@@ -109,7 +109,7 @@ extern "C" {
 // Defined in DaroUnityBridge.mm.
 void DaroUnityWireRevenue(id ad,
                           id<DaroUnityAdInfoHolder> _Nullable holder,
-                          NSString* adUnitId,
+                          NSString* adUnitKey,
                           NSInteger adFormat);
 
 void DaroUnityNativeAd_DestroyAll(void);

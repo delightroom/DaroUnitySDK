@@ -9,7 +9,7 @@ namespace Daro
     public sealed class DaroAdInfo
     {
         public DaroAdFormat AdFormat { get; }
-        public string       AdUnitId { get; }
+        public string       AdUnitKey { get; }
 
         /// <summary>
         /// Load latency in milliseconds; <c>null</c> if the native side
@@ -37,13 +37,13 @@ namespace Daro
         // 세 인자로 부른다. 소스 호환을 깨지 않고 표면만 넓힌다.
         public DaroAdInfo(
             DaroAdFormat adFormat,
-            string adUnitId,
+            string adUnitKey,
             double? latency,
             string? mediationPlatform = null,
             string? adNetwork = null)
         {
             AdFormat          = adFormat;
-            AdUnitId          = adUnitId;
+            AdUnitKey          = adUnitKey;
             Latency           = latency;
             MediationPlatform = mediationPlatform;
             AdNetwork         = adNetwork;

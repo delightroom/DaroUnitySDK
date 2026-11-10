@@ -12,13 +12,13 @@ using UnityEngine;
 
 public sealed class BannerHost : MonoBehaviour
 {
-    [SerializeField] private string _adUnitId = "your-banner-ad-unit-id";
+    [SerializeField] private string _adUnitKey = "your-banner-ad-unit-id";
     private DaroBannerAd _banner;
 
     private void OnEnable()
     {
         _banner = new DaroBannerAd(
-            _adUnitId,
+            _adUnitKey,
             DaroBannerSize.Standard,
             DaroBannerPosition.BottomCenter);
 

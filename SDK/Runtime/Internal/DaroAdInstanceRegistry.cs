@@ -7,7 +7,7 @@ using System.Threading;
 namespace Daro.Internal
 {
     /// <summary>
-    /// Thread-safe map from <c>(format, adUnitId)</c> to the live
+    /// Thread-safe map from <c>(format, adUnitKey)</c> to the live
     /// ad instance, used by the platform event plumbing in
     /// <c>DaroSdk.InitializeAsync</c> to route native callbacks to
     /// the correct ad object.
@@ -21,12 +21,12 @@ namespace Daro.Internal
     /// becomes a silent no-op — which is correct behavior.</para>
     ///
     /// <para>The key is <c>(DaroAdFormat, string)</c>: two ad formats
-    /// may share an adUnitId in principle (though this is rare),
-    /// and the event-routing side can't rely on "one adUnitId = one
+    /// may share an adUnitKey in principle (though this is rare),
+    /// and the event-routing side can't rely on "one adUnitKey = one
     /// instance across all formats".</para>
     ///
     /// <para><b>Instance replacement</b>: constructing a
-    /// second instance with the same <c>(format, adUnitId)</c>
+    /// second instance with the same <c>(format, adUnitKey)</c>
     /// replaces the prior registration. The registry serializes create /
     /// destroy ownership per key so a stale finalizer cannot destroy a
     /// newer native handle.</para>
@@ -38,13 +38,13 @@ namespace Daro.Internal
     /// </remarks>
     internal static class DaroAdInstanceRegistry
     {
-        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), WeakReference> _map
+        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitKey), WeakReference> _map
             = new ConcurrentDictionary<(DaroAdFormat, string), WeakReference>();
 
-        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), long> _generations
+        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitKey), long> _generations
             = new ConcurrentDictionary<(DaroAdFormat, string), long>();
 
-        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitId), object> _keyLocks
+        private static readonly ConcurrentDictionary<(DaroAdFormat format, string adUnitKey), object> _keyLocks
             = new ConcurrentDictionary<(DaroAdFormat, string), object>();
 
         private static long _nextGeneration;
@@ -59,20 +59,20 @@ namespace Daro.Internal
         // by ResetStatics so play-mode re-entry starts clean.
         private static volatile bool _isShuttingDown;
 
-        private static object Gate((DaroAdFormat format, string adUnitId) key) =>
+        private static object Gate((DaroAdFormat format, string adUnitKey) key) =>
             _keyLocks.GetOrAdd(key, _ => new object());
 
         /// <summary>
         /// Reserve a new ownership token for <paramref name="format"/> +
-        /// <paramref name="adUnitId"/> before platform Create replaces the
+        /// <paramref name="adUnitKey"/> before platform Create replaces the
         /// previous native handle. This invalidates stale instances even if their
         /// short weak reference has already been cleared before finalization.
         /// </summary>
-        internal static long ReserveGeneration(DaroAdFormat format, string adUnitId)
+        internal static long ReserveGeneration(DaroAdFormat format, string adUnitKey)
         {
-            if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
+            if (adUnitKey == null) throw new ArgumentNullException(nameof(adUnitKey));
 
-            var key = (format, adUnitId);
+            var key = (format, adUnitKey);
             lock (Gate(key))
             {
                 var generation = Interlocked.Increment(ref _nextGeneration);
@@ -86,12 +86,12 @@ namespace Daro.Internal
         /// Register a constructed instance under a reserved generation. Last
         /// writer wins — duplicate-construction-replaces rule.
         /// </summary>
-        internal static void Register(DaroAdFormat format, string adUnitId, object instance, long generation)
+        internal static void Register(DaroAdFormat format, string adUnitKey, object instance, long generation)
         {
-            if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
+            if (adUnitKey == null) throw new ArgumentNullException(nameof(adUnitKey));
             if (instance == null) throw new ArgumentNullException(nameof(instance));
 
-            var key = (format, adUnitId);
+            var key = (format, adUnitKey);
             lock (Gate(key))
             {
                 _generations[key] = generation;
@@ -106,15 +106,15 @@ namespace Daro.Internal
         /// </summary>
         internal static long CreateAndRegister(
             DaroAdFormat format,
-            string adUnitId,
+            string adUnitKey,
             object instance,
             Action createPlatformHandle)
         {
-            if (adUnitId == null) throw new ArgumentNullException(nameof(adUnitId));
+            if (adUnitKey == null) throw new ArgumentNullException(nameof(adUnitKey));
             if (instance == null) throw new ArgumentNullException(nameof(instance));
             if (createPlatformHandle == null) throw new ArgumentNullException(nameof(createPlatformHandle));
 
-            var key = (format, adUnitId);
+            var key = (format, adUnitKey);
             lock (Gate(key))
             {
                 var hadGeneration = _generations.TryGetValue(key, out var previousGeneration);
@@ -145,12 +145,12 @@ namespace Daro.Internal
 
         /// <summary>
         /// True while <paramref name="generation"/> is still the current owner
-        /// for <paramref name="format"/> + <paramref name="adUnitId"/>.
+        /// for <paramref name="format"/> + <paramref name="adUnitKey"/>.
         /// </summary>
-        internal static bool IsCurrentGeneration(DaroAdFormat format, string adUnitId, long generation)
+        internal static bool IsCurrentGeneration(DaroAdFormat format, string adUnitKey, long generation)
         {
-            if (adUnitId == null || generation == 0) return false;
-            return _generations.TryGetValue((format, adUnitId), out var current)
+            if (adUnitKey == null || generation == 0) return false;
+            return _generations.TryGetValue((format, adUnitKey), out var current)
                 && current == generation;
         }
 
@@ -159,14 +159,14 @@ namespace Daro.Internal
         /// is not registered, the stored instance has been garbage-collected,
         /// or the registered instance isn't of type <typeparamref name="T"/>.
         /// </summary>
-        internal static T? Find<T>(DaroAdFormat format, string adUnitId) where T : class
+        internal static T? Find<T>(DaroAdFormat format, string adUnitKey) where T : class
         {
             // Teardown gate: once SDK is shutting down, no callback should
             // reach a public event. Returning null here makes the existing
             // forwarder no-op path catch it.
             if (_isShuttingDown) return null;
-            if (adUnitId == null) return null;
-            if (!_map.TryGetValue((format, adUnitId), out var weak)) return null;
+            if (adUnitKey == null) return null;
+            if (!_map.TryGetValue((format, adUnitKey), out var weak)) return null;
 
             // WeakReference.Target returns null once the GC has collected
             // the referenced object — exactly the "consumer forgot to Dispose
@@ -203,14 +203,14 @@ namespace Daro.Internal
 
         /// <summary>
         /// Remove the registration for <paramref name="format"/> +
-        /// <paramref name="adUnitId"/> if the stored WeakReference still
+        /// <paramref name="adUnitKey"/> if the stored WeakReference still
         /// points at <paramref name="instance"/>. A different instance
         /// (e.g. after a replace) must not be clobbered.
         /// </summary>
-        internal static void Unregister(DaroAdFormat format, string adUnitId, object instance, long generation)
+        internal static void Unregister(DaroAdFormat format, string adUnitKey, object instance, long generation)
         {
-            if (adUnitId == null || instance == null) return;
-            var key = (format, adUnitId);
+            if (adUnitKey == null || instance == null) return;
+            var key = (format, adUnitKey);
 
             lock (Gate(key))
             {
@@ -226,15 +226,15 @@ namespace Daro.Internal
         /// </summary>
         internal static bool ReleasePlatformHandleIfCurrent(
             DaroAdFormat format,
-            string adUnitId,
+            string adUnitKey,
             object instance,
             long generation,
             Action destroyPlatformHandle)
         {
-            if (adUnitId == null || instance == null || generation == 0) return false;
+            if (adUnitKey == null || instance == null || generation == 0) return false;
             if (destroyPlatformHandle == null) throw new ArgumentNullException(nameof(destroyPlatformHandle));
 
-            var key = (format, adUnitId);
+            var key = (format, adUnitKey);
             lock (Gate(key))
             {
                 if (!_generations.TryGetValue(key, out var current) || current != generation)
@@ -247,7 +247,7 @@ namespace Daro.Internal
         }
 
         private static void RemoveRegistrationNoLock(
-            (DaroAdFormat format, string adUnitId) key,
+            (DaroAdFormat format, string adUnitKey) key,
             object instance,
             long generation)
         {

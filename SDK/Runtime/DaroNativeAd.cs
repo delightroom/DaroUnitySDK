@@ -15,8 +15,8 @@ namespace Daro
     /// </summary>
     /// <remarks>
     /// <para>Unlike fullscreen + banner formats (platform-managed dict keyed
-    /// by <c>adUnitId</c>), Native is <em>instance-owned</em>: each instance
-    /// gets its own <see cref="INativeAdHandle"/>; same <c>adUnitId</c> across
+    /// by <c>adUnitKey</c>), Native is <em>instance-owned</em>: each instance
+    /// gets its own <see cref="INativeAdHandle"/>; same <c>adUnitKey</c> across
     /// N instances yields N independent native loaders. Natural fit for list
     /// UIs.</para>
     ///
@@ -37,7 +37,7 @@ namespace Daro
     public sealed class DaroNativeAd : IDisposable
     {
         // ── Identity ─────────────────────────────────────────────────────
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         /// <summary>Requested corner. Null preserves the platform's existing placement.</summary>
         public DaroAdChoicesPosition? AdChoicesPosition { get; }
@@ -102,27 +102,27 @@ namespace Daro
         internal bool IsSlotViewActive { get; set; } = true;
 
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroNativeAd(string adUnitId) : this(adUnitId, null) { }
+        public DaroNativeAd(string adUnitKey) : this(adUnitKey, null) { }
 
         /// <summary>
         /// Creates an ad with AdChoices in the requested corner of its full ad area.
         /// Bind a DaroNativeAdView or call WireAdChoices to provide that area.
         /// </summary>
-        public DaroNativeAd(string adUnitId, DaroAdChoicesPosition adChoicesPosition)
-            : this(adUnitId, (DaroAdChoicesPosition?)adChoicesPosition) { }
+        public DaroNativeAd(string adUnitKey, DaroAdChoicesPosition adChoicesPosition)
+            : this(adUnitKey, (DaroAdChoicesPosition?)adChoicesPosition) { }
 
-        private DaroNativeAd(string adUnitId, DaroAdChoicesPosition? adChoicesPosition)
+        private DaroNativeAd(string adUnitKey, DaroAdChoicesPosition? adChoicesPosition)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
             if (adChoicesPosition.HasValue &&
                 !Enum.IsDefined(typeof(DaroAdChoicesPosition), adChoicesPosition.Value))
                 throw new ArgumentOutOfRangeException(nameof(adChoicesPosition));
@@ -131,7 +131,7 @@ namespace Daro
             // Sink holds a direct reference to this instance — routing is
             // per-instance, no registry lookup needed.
             var sink = new InstanceSink(this);
-            _handle  = DaroPlatform.Current.CreateNativeAdHandle(adUnitId, sink);
+            _handle  = DaroPlatform.Current.CreateNativeAdHandle(adUnitKey, sink);
             try
             {
                 if (adChoicesPosition.HasValue) _handle.ConfigureAdChoices(adChoicesPosition.Value);
@@ -142,7 +142,7 @@ namespace Daro
                 _handle = null;
                 throw;
             }
-            DaroLog.Verbose("Native", $"ctor adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"ctor adUnit='{AdUnitKey}'");
         }
 
         /// <summary>
@@ -153,17 +153,17 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroNativeAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("Native",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
             // Clamp to ≥1 — Glide rejects 0-dim views, our shim host needs >0.
             var w = Mathf.Max(1, IconSize.x);
             var h = Mathf.Max(1, IconSize.y);
-            DaroLog.Verbose("Native", $"Load adUnit='{AdUnitId}' iconSize={w}x{h}");
+            DaroLog.Verbose("Native", $"Load adUnit='{AdUnitKey}' iconSize={w}x{h}");
             _loaded = false;
             _ctaDriver?.InvalidateSync();
             _adChoicesDriver?.InvalidateSync();
@@ -181,7 +181,7 @@ namespace Daro
         public void NotifyVisible()
         {
             if (_disposed) return;
-            DaroLog.Verbose("Native", $"NotifyVisible adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"NotifyVisible adUnit='{AdUnitKey}'");
             _handle?.NotifyVisible();
         }
 
@@ -193,7 +193,7 @@ namespace Daro
         public void NotifyHidden()
         {
             if (_disposed) return;
-            DaroLog.Verbose("Native", $"NotifyHidden adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"NotifyHidden adUnit='{AdUnitKey}'");
             _handle?.NotifyHidden();
         }
 
@@ -206,7 +206,7 @@ namespace Daro
         public void NotifyClicked()
         {
             if (_disposed) return;
-            DaroLog.Verbose("Native", $"NotifyClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"NotifyClicked adUnit='{AdUnitKey}'");
             _handle?.NotifyClicked();
         }
 
@@ -266,7 +266,7 @@ namespace Daro
             }
 
             DaroLog.Verbose("Native",
-                $"WireCtaButton adUnit='{AdUnitId}' button='{button.name}' " +
+                $"WireCtaButton adUnit='{AdUnitKey}' button='{button.name}' " +
                 $"canvas='{canvas?.name ?? "<none>"}' mode={canvas?.renderMode}");
 
             _ctaDriver = DaroNativeCtaDriver.Attach(this, button);
@@ -282,7 +282,7 @@ namespace Daro
             if (_disposed) return;
             if (_ctaDriver == null) return;
 
-            DaroLog.Verbose("Native", $"UnwireCta adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"UnwireCta adUnit='{AdUnitKey}'");
             _ctaDriver.Detach();   // → ClearCtaScreenRect on live handle → disable driver
             _ctaDriver = null;
         }
@@ -314,7 +314,7 @@ namespace Daro
             if (!IsFiniteRect(screenRect))
             {
                 DaroLog.Warn("Native",
-                    $"SetCtaScreenRect adUnit='{AdUnitId}' rejected — non-finite rect {screenRect}.");
+                    $"SetCtaScreenRect adUnit='{AdUnitKey}' rejected — non-finite rect {screenRect}.");
                 return;
             }
             _handle?.SetCtaScreenRect(screenRect, touchEnabled);
@@ -332,7 +332,7 @@ namespace Daro
         public void ClearCtaScreenRect()
         {
             if (_disposed) return;
-            DaroLog.Verbose("Native", $"ClearCtaScreenRect adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"ClearCtaScreenRect adUnit='{AdUnitKey}'");
             _handle?.ClearCtaScreenRect();
         }
 
@@ -470,7 +470,7 @@ namespace Daro
                 catch (Exception e)
                 {
                     DaroLog.Warn("Native",
-                        $"DaroNativeAd({AdUnitId}) cta driver Detach threw: {e}");
+                        $"DaroNativeAd({AdUnitKey}) cta driver Detach threw: {e}");
                 }
                 _ctaDriver = null;
             }
@@ -493,7 +493,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("Native", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("Native", $"Dispose adUnit='{AdUnitKey}'");
 
                 OnNativeAdAssetLoaded = null;
                 OnAdLoaded       = null;
@@ -517,7 +517,7 @@ namespace Daro
             catch (Exception e)
             {
                 DaroLog.Warn("Native",
-                    $"DaroNativeAd({AdUnitId}) handle Dispose threw: {e}");
+                    $"DaroNativeAd({AdUnitKey}) handle Dispose threw: {e}");
             }
             _handle = null;
         }
@@ -525,7 +525,7 @@ namespace Daro
         // ── Internal Fire* (called from sink on Unity main thread) ───────
         //
         // Native ad uses INativeAdEventSink direct routing instead of the
-        // (format, adUnitId) registry pattern other formats use. The Find
+        // (format, adUnitKey) registry pattern other formats use. The Find
         // gate in DaroAdInstanceRegistry does not see native ad callbacks
         // because the registry has no entry for them. To prevent in-flight
         // native callbacks after teardown from dispatching public C# events,
@@ -548,7 +548,7 @@ namespace Daro
             Info    = nativeInfo;
             _ctaDriver?.InvalidateSync();
             _adChoicesDriver?.InvalidateSync();
-            DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitId}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
+            DaroLog.Verbose("Native", $"FireOnAdLoaded adUnit='{AdUnitKey}' title='{nativeInfo.Title}' cta='{nativeInfo.CallToAction}' icon={(nativeInfo.Icon != null ? "present" : "null")} latency={adInfo.Latency}");
             var assetHandlers = OnNativeAdAssetLoaded?.GetInvocationList();
             if (assetHandlers != null)
             {
@@ -579,7 +579,7 @@ namespace Daro
                 _handle?.ClearAdChoicesScreenRect();
                 _adChoicesDriver?.InvalidateSync();
             }
-            DaroLog.Verbose("Native", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("Native", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
             DestroyInfoTextures(previousInfo);
         }
@@ -595,21 +595,21 @@ namespace Daro
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
-            DaroLog.Verbose("Native", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
-            DaroLog.Verbose("Native", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Native", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
-            DaroLog.Verbose("Native", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("Native", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 

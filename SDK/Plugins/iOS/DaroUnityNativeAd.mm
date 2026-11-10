@@ -15,7 +15,7 @@
 //    Destroy       → Layer-1 destroyed=YES + view removeFromSuperview + dict nil
 //
 //  Multi-instance: handleId-keyed s_nativeAds NSDictionary;
-//  same adUnitId across N handles yields N independent entries.
+//  same adUnitKey across N handles yields N independent entries.
 //
 //  Threading: dictionary mutations on s_adQueue (serial); UIView ops and native
 //  ad delegate handling run on dispatch_get_main_queue. Native callback origin
@@ -80,7 +80,7 @@ static void DaroUnityNativeAdEmitCallback(int handleId,
 
 // Per-instance entry — strong refs survive ARC drop until s_nativeAds[id] = nil.
 @interface DaroUnityNativeAdEntry : NSObject
-@property (nonatomic, copy)   NSString*                                  adUnitId;
+@property (nonatomic, copy)   NSString*                                  adUnitKey;
 @property (nonatomic, copy) NSString* assetTypes;
 @property (nonatomic, assign) int                                        handleId;
 // Load writes this on main, while destroy paths snapshot it on s_adQueue
@@ -697,9 +697,9 @@ void DaroUnity_NativeAd_SetCallback(DaroNativeAdCallbackFn callback) {
     s_nativeAdCallback = callback;
 }
 
-void DaroUnity_NativeAd_Create(int handleId, const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_NativeAd_Create(int handleId, const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     NSNumber* key  = @(handleId);
 
     dispatch_async(s_adQueue, ^{
@@ -707,7 +707,7 @@ void DaroUnity_NativeAd_Create(int handleId, const char* adUnitId) {
         s_nativeAds[key] = nil;
 
         DaroUnityNativeAdEntry* entry = [DaroUnityNativeAdEntry new];
-        entry.adUnitId = unit;
+        entry.adUnitKey = unit;
         entry.handleId = handleId;
         entry.visibleRequested = NO;
 
@@ -790,9 +790,9 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
             // auto-fire loadNativeAd via DaroObjCNativeView's didMoveToSuperview
             // (DaroObjCNativeView.swift:106-118) — racing past bindNativeViews.
             DaroObjCNativeView* nativeView = entry.adChoicesPosition
-                ? [[DaroObjCNativeView alloc] initWithUnitId:entry.adUnitId autoLoad:NO
+                ? [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey autoLoad:NO
                     preferredAdChoicesPosition:(DaroAdChoicesPosition)entry.adChoicesPosition.integerValue]
-                : [[DaroObjCNativeView alloc] initWithUnitId:entry.adUnitId autoLoad:NO];
+                : [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey autoLoad:NO];
             nativeView.delegate = entry.delegate;
             // ILRD is a billing datapoint and does not mutate entry state, so
             // keep it handle-routed even if the originating view was reloaded.

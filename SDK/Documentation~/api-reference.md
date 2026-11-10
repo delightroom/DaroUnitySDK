@@ -48,10 +48,10 @@ namespace Daro
     public sealed class DaroInterstitialAd : IDisposable
     {
         // --- construction ---
-        public DaroInterstitialAd(string adUnitId);
+        public DaroInterstitialAd(string adUnitKey);
 
         // --- properties ---
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         // --- methods ---
         public void Load();         // async — outcome arrives via OnAdLoaded / OnAdFailedToLoad
@@ -80,7 +80,7 @@ namespace Daro
 {
     public sealed class DaroRewardedAd : IDisposable
     {
-        public DaroRewardedAd(string adUnitId);
+        public DaroRewardedAd(string adUnitKey);
 
         // ... (same Load / IsReady / Show / Dispose + seven events as DaroInterstitialAd) ...
 
@@ -102,9 +102,9 @@ namespace Daro
 {
     public sealed class DaroAppOpenAd : IDisposable
     {
-        public DaroAppOpenAd(string adUnitId);
+        public DaroAppOpenAd(string adUnitKey);
 
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         public void Load();
         public bool IsReady();
@@ -135,12 +135,12 @@ namespace Daro
     {
         // --- construction ---
         public DaroBannerAd(
-            string adUnitId,
+            string adUnitKey,
             DaroBannerSize size = DaroBannerSize.Standard,
             DaroBannerPosition position = DaroBannerPosition.BottomCenter);
 
         // --- properties ---
-        public string             AdUnitId  { get; }
+        public string             AdUnitKey  { get; }
         public DaroBannerSize     Size      { get; }
         public DaroBannerPosition Position  { get; }   // updated via SetPosition
 
@@ -200,10 +200,10 @@ namespace Daro
     public sealed class DaroNativeAd : IDisposable
     {
         // --- construction ---
-        public DaroNativeAd(string adUnitId);
+        public DaroNativeAd(string adUnitKey);
 
         // --- properties ---
-        public string            AdUnitId  { get; }
+        public string            AdUnitKey  { get; }
         public Vector2Int        IconSize  { get; set; }     // default (200, 200); set BEFORE Load
         public DaroNativeAdInfo? Info      { get; }          // set before OnNativeAdAssetLoaded; cleared on failed reload + Dispose
         public bool              IsReady   { get; }          // property (not method) — false after Dispose
@@ -228,7 +228,7 @@ namespace Daro
 }
 ```
 
-> **Multi-instance**: same `adUnitId` on N instances yields N independent native ads. Natural fit for feed / list UIs.
+> **Multi-instance**: same `adUnitKey` on N instances yields N independent native ads. Natural fit for feed / list UIs.
 
 `OnNativeAdAssetLoaded` fires once on the Unity main thread before `OnAdLoaded`, after `Info` and `IsReady` are set. Its set reports native SDK receipt, independent of publisher slot registration. `Info.AssetTypes` reuses an immutable snapshot, so reading the property and calling `Contains` do not allocate. Mutating that snapshot throws `NotSupportedException`; use `new HashSet<NativeAdAssetType>(info.AssetTypes)` when an editable copy is needed. Every event subscriber receives a separate mutable set; changing it cannot affect other subscribers or the SDK. Duplicate types are removed and enumeration order is unspecified.
 
@@ -289,11 +289,11 @@ namespace Daro
     {
         // --- construction ---
         public DaroLightPopupAd(
-            string adUnitId,
+            string adUnitKey,
             DaroLightPopupAdOptions? options = null);   // null → daro defaults
 
         // --- properties ---
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         // --- methods ---
         public void Load();
@@ -361,7 +361,7 @@ namespace Daro
 public sealed class DaroAdInfo
 {
     public DaroAdFormat AdFormat          { get; }
-    public string       AdUnitId          { get; }
+    public string       AdUnitKey          { get; }
     public double?      Latency           { get; }   // milliseconds, nullable
     public string?      MediationPlatform { get; }   // "daroa" | "darom" | null
     public string?      AdNetwork         { get; }   // vendor name as reported, or null
@@ -394,7 +394,7 @@ public sealed class DaroAdLoadError
 {
     public DaroAdLoadErrorCode Code     { get; }
     public string              Message  { get; }
-    public string?             AdUnitId { get; }   // nullable — init-time failures are unit-agnostic
+    public string?             AdUnitKey { get; }   // nullable — init-time failures are unit-agnostic
     public int                 RawCode  { get; }   // raw mediation code, kept for deeper diagnosis
 }
 ```
@@ -495,6 +495,6 @@ public enum DaroAdDisplayErrorCode
 - **Finalizer provides a best-effort native resource backstop** if you forget `Dispose()`, but the timing is non-deterministic. Explicit `Dispose()` is still the supported lifecycle boundary.
 - **AppOpen + Android**: the Unity shim makes `Load()` cache-aware. Cache-empty loads use a polling-backed readiness bridge; cache-filled loads complete immediately with `latency=0`. Always gate `Show()` with `IsReady()`. See [`ad-formats/appopen.md`](ad-formats/appopen.md).
 - **Banner displays by default after `Load()` succeeds**. `OnAdShown` is synthesized by the C# facade after default display, and again after `Hide()` → `Show()`. Banner has no `OnAdFailedToShow` and no `OnAdDismissed`; see [`ad-formats/banner.md`](ad-formats/banner.md).
-- **Native is instance-owned**: same `adUnitId` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
+- **Native is instance-owned**: same `adUnitKey` on N instances → N independent ads. Banner / Interstitial / LightPopup follow the opposite "duplicate replaces prior" rule.
 - **Native textures are owned by the instance**: `Info.Icon` / `Info.MediaImage` are destroyed by `Dispose()`. Do not retain past disposal.
 - **LightPopup options are baked at construct time**: post-construct mutations of `DaroLightPopupAdOptions` are not propagated. Dispose + reconstruct to change colors.

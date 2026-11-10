@@ -133,7 +133,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 // C# DaroBannerAd Load/Show state; adHidden is emitted by this shim after
 // native detach completes and routed through DaroIOSPlatform.
 @interface DaroUnityBannerDelegate : NSObject <DaroObjCBannerViewDelegate>
-@property (nonatomic, copy) NSString* adUnitId;
+@property (nonatomic, copy) NSString* adUnitKey;
 // 마지막으로 받은 adInfo. Hide 가 만드는 합성 adHidden 이벤트에는 딸려오는 adInfo 가
 // 없어서 이 자리 말고는 그 이벤트에 미디에이션 귀속을 실을 방법이 없다.
 @property (nonatomic, strong, nullable) DaroObjCAdInfo* lastAdInfo;
@@ -143,10 +143,10 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 - (void)bannerViewDidLoad:(DaroObjCBannerView*)bannerView
                    adInfo:(DaroObjCAdInfo*)adInfo {
-    if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
-    DaroLogD(@"Banner", @"didLoad adUnit='%@'", self.adUnitId);
+    if (!BannerIsCurrent(self.adUnitKey, bannerView, NO)) return;
+    DaroLogD(@"Banner", @"didLoad adUnit='%@'", self.adUnitKey);
     self.lastAdInfo = adInfo;
-    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+    DaroDispatch(self.adUnitKey, [NSString stringWithFormat:
         @"{\"event\":\"adLoaded\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
@@ -155,10 +155,10 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
     // NSError code is fixed at -1 by DaroObjCBannerView (domain
     // com.daro.objcbridge.banner). C# DaroAdErrorCodeMapper.ToLoadErrorCode(-1)
     // resolves to DaroAdLoadErrorCode.Unspecified.
-    if (!BannerIsCurrent(self.adUnitId, bannerView, NO)) return;
+    if (!BannerIsCurrent(self.adUnitKey, bannerView, NO)) return;
     DaroLogW(@"Banner", @"Load failed adUnit='%@' code=%ld msg='%@'",
-        self.adUnitId, (long)error.code, error.localizedDescription);
-    NSString* unit = self.adUnitId;
+        self.adUnitKey, (long)error.code, error.localizedDescription);
+    NSString* unit = self.adUnitKey;
     dispatch_sync(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
         if (!entry || entry.bannerView != bannerView) return;
@@ -167,7 +167,7 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
         entry.delegate = nil;
     });
     [bannerView removeFromSuperview];
-    DaroDispatch(self.adUnitId,
+    DaroDispatch(self.adUnitKey,
         [NSString stringWithFormat:
             @"{\"event\":\"adFailedToLoad\",\"adFormat\":0,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
             (long)error.code, EscapeJson(error.localizedDescription)]);
@@ -175,19 +175,19 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 - (void)bannerViewDidClick:(DaroObjCBannerView*)bannerView
                     adInfo:(DaroObjCAdInfo*)adInfo {
-    if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
-    DaroLogD(@"Banner", @"didClick adUnit='%@'", self.adUnitId);
+    if (!BannerIsCurrent(self.adUnitKey, bannerView, YES)) return;
+    DaroLogD(@"Banner", @"didClick adUnit='%@'", self.adUnitKey);
     self.lastAdInfo = adInfo;
-    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+    DaroDispatch(self.adUnitKey, [NSString stringWithFormat:
         @"{\"event\":\"adClicked\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
 - (void)bannerViewDidRecordImpression:(DaroObjCBannerView*)bannerView
                                adInfo:(DaroObjCAdInfo*)adInfo {
-    if (!BannerIsCurrent(self.adUnitId, bannerView, YES)) return;
-    DaroLogD(@"Banner", @"didRecordImpression adUnit='%@'", self.adUnitId);
+    if (!BannerIsCurrent(self.adUnitKey, bannerView, YES)) return;
+    DaroLogD(@"Banner", @"didRecordImpression adUnit='%@'", self.adUnitKey);
     self.lastAdInfo = adInfo;
-    DaroDispatch(self.adUnitId, [NSString stringWithFormat:
+    DaroDispatch(self.adUnitKey, [NSString stringWithFormat:
         @"{\"event\":\"adImpression\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
 }
 
@@ -197,11 +197,11 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
 
 extern "C" {
 
-// Reserve the dictionary slot for adUnitId. The view is constructed lazily
+// Reserve the dictionary slot for adUnitKey. The view is constructed lazily
 // at LoadBanner because DaroObjCBannerView requires bannerSize at init time (Create/Load split).
-void DaroUnity_CreateBanner(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_CreateBanner(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     dispatch_async(s_adQueue, ^{
         DaroObjCBannerView* oldView = s_banners[unit].bannerView;
         if (oldView) {
@@ -218,9 +218,9 @@ void DaroUnity_CreateBanner(const char* adUnitId) {
     });
 }
 
-void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_LoadBanner(const char* adUnitKey, int sizeOrdinal) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"Banner", @"Load adUnit='%@' size=%d", unit, sizeOrdinal);
     dispatch_async(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
@@ -259,9 +259,9 @@ void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
             DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
                 ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
             DaroUnityBannerDelegate* delegate = [DaroUnityBannerDelegate new];
-            delegate.adUnitId = unit;
+            delegate.adUnitKey = unit;
             DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
-                initWithUnitId:unit bannerSize:nativeSize autoLoad:NO];
+                initWithAdUnitKey:unit bannerSize:nativeSize autoLoad:NO];
             view.delegate = delegate;
             DaroUnityWireBannerRevenue(view, unit);
             [view setRootViewController:vc];
@@ -296,9 +296,9 @@ void DaroUnity_LoadBanner(const char* adUnitId, int sizeOrdinal) {
     });
 }
 
-void DaroUnity_ShowBanner(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_ShowBanner(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"Banner", @"Show adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
@@ -339,9 +339,9 @@ void DaroUnity_ShowBanner(const char* adUnitId) {
     });
 }
 
-void DaroUnity_HideBanner(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_HideBanner(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"Banner", @"Hide adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
@@ -372,9 +372,9 @@ void DaroUnity_HideBanner(const char* adUnitId) {
     });
 }
 
-void DaroUnity_DestroyBanner(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_DestroyBanner(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"Banner", @"Destroy adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroObjCBannerView* view = s_banners[unit].bannerView;
@@ -387,9 +387,9 @@ void DaroUnity_DestroyBanner(const char* adUnitId) {
     });
 }
 
-void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_SetBannerPosition(const char* adUnitKey, int positionOrdinal) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     dispatch_async(s_adQueue, ^{
         DaroUnityBannerEntry* entry = s_banners[unit];
         if (!entry) return;
@@ -431,11 +431,11 @@ void DaroUnity_SetBannerPosition(const char* adUnitId, int positionOrdinal) {
 // Unity's iOS scripting thread is the UIKit main thread, so this normally runs
 // on main; the [NSThread isMainThread] guard hops to main for any off-main
 // caller. s_banners is read under s_adQueue (mutated there).
-int DaroUnity_GetBannerScreenRect(const char* adUnitId,
+int DaroUnity_GetBannerScreenRect(const char* adUnitKey,
                                   float* outX, float* outY,
                                   float* outW, float* outH) {
-    if (!adUnitId) return 0;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+    if (!adUnitKey) return 0;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
 
     __block DaroObjCBannerView* view = nil;
     __block BOOL visible = NO;

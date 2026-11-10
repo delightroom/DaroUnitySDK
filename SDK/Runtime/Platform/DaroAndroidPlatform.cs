@@ -84,57 +84,57 @@ namespace Daro.Internal
 
         // ── Banner ad operations ─────────────────────────────────────────────
 
-        public void CreateBanner(string adUnitId)
+        public void CreateBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Android].CreateBanner adUnit='{adUnitId}'");
-            CreateAdObject(adUnitId, DaroAdFormat.Banner,
+            DaroLog.Verbose("Banner", $"Platform[Android].CreateBanner adUnit='{adUnitKey}'");
+            CreateAdObject(adUnitKey, DaroAdFormat.Banner,
                 "so.daro.unity.DaroUnityBannerAd");
         }
 
-        public void LoadBanner(string adUnitId, DaroBannerSize size)
+        public void LoadBanner(string adUnitKey, DaroBannerSize size)
         {
-            DaroLog.Verbose("Banner", $"Platform.LoadBanner adUnit='{adUnitId}' size={size} adObj={_adObjects.ContainsKey(adUnitId)} proxy={_proxies.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
-            if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
-            var generation = NextBannerGeneration(adUnitId);
+            DaroLog.Verbose("Banner", $"Platform.LoadBanner adUnit='{adUnitKey}' size={size} adObj={_adObjects.ContainsKey(adUnitKey)} proxy={_proxies.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
+            var generation = NextBannerGeneration(adUnitKey);
             // Kotlin shim: load(activity, bannerSizeOrdinal, generation, callback)
             adObj.Call("load", _activity, (int)size, generation, proxy);
         }
 
-        public void ShowBanner(string adUnitId)
+        public void ShowBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform.ShowBanner adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
+            DaroLog.Verbose("Banner", $"Platform.ShowBanner adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
             // Kotlin shim's show() takes no args — banner is always-on overlay,
             // doesn't need Activity at show time (already captured at load).
             adObj.Call("show");
         }
 
-        public void HideBanner(string adUnitId)
+        public void HideBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform.HideBanner adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
-            if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
-            adObj.Call("hide", CurrentBannerGeneration(adUnitId), proxy);
+            DaroLog.Verbose("Banner", $"Platform.HideBanner adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
+            adObj.Call("hide", CurrentBannerGeneration(adUnitKey), proxy);
         }
 
-        public void DestroyBanner(string adUnitId)
+        public void DestroyBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Android].DestroyBanner adUnit='{adUnitId}'");
-            DestroyAdObject(adUnitId);
+            DaroLog.Verbose("Banner", $"Platform[Android].DestroyBanner adUnit='{adUnitKey}'");
+            DestroyAdObject(adUnitKey);
         }
 
-        public void SetBannerPosition(string adUnitId, DaroBannerPosition position)
+        public void SetBannerPosition(string adUnitKey, DaroBannerPosition position)
         {
-            DaroLog.Verbose("Banner", $"Platform.SetBannerPosition adUnit='{adUnitId}' position={position} adObj={_adObjects.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
+            DaroLog.Verbose("Banner", $"Platform.SetBannerPosition adUnit='{adUnitKey}' position={position} adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
             adObj.Call("setPosition", BannerPositionToGravity(position));
         }
 
-        public bool TryGetBannerScreenRect(string adUnitId, out Rect rect)
+        public bool TryGetBannerScreenRect(string adUnitKey, out Rect rect)
         {
             rect = default;
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return false;
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return false;
 
             int[]? r;
             try
@@ -146,7 +146,7 @@ namespace Daro.Internal
             catch (Exception e)
             {
                 DaroLog.Warn("Banner",
-                    $"Platform[Android].getScreenRectPx threw adUnit='{adUnitId}': {e.Message}");
+                    $"Platform[Android].getScreenRectPx threw adUnit='{adUnitKey}': {e.Message}");
                 return false;
             }
             if (r == null || r.Length < 4 || r[2] <= 0 || r[3] <= 0) return false;
@@ -252,73 +252,73 @@ namespace Daro.Internal
 
         // ── Instance lifecycle ───────────────────────────────────────────────
 
-        public void CreateInterstitial(string adUnitId)
+        public void CreateInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Android].CreateInterstitial adUnit='{adUnitId}'");
-            CreateAdObject(adUnitId, DaroAdFormat.Interstitial,
+            DaroLog.Verbose("Interstitial", $"Platform[Android].CreateInterstitial adUnit='{adUnitKey}'");
+            CreateAdObject(adUnitKey, DaroAdFormat.Interstitial,
                 "so.daro.unity.DaroUnityInterstitialAd");
         }
 
-        public void CreateRewarded(string adUnitId)
+        public void CreateRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].CreateRewarded adUnit='{adUnitId}'");
-            CreateAdObject(adUnitId, DaroAdFormat.Rewarded,
+            DaroLog.Verbose("Rewarded", $"Platform[Android].CreateRewarded adUnit='{adUnitKey}'");
+            CreateAdObject(adUnitKey, DaroAdFormat.Rewarded,
                 "so.daro.unity.DaroUnityRewardedAd");
         }
 
-        public void CreateAppOpen(string adUnitId)
+        public void CreateAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Android].CreateAppOpen adUnit='{adUnitId}'");
-            CreateAdObject(adUnitId, DaroAdFormat.AppOpen,
+            DaroLog.Verbose("AppOpen", $"Platform[Android].CreateAppOpen adUnit='{adUnitKey}'");
+            CreateAdObject(adUnitKey, DaroAdFormat.AppOpen,
                 "so.daro.unity.DaroUnityAppOpenAd");
         }
 
         private void CreateAdObject(
-            string adUnitId, DaroAdFormat format, string kotlinClass)
+            string adUnitKey, DaroAdFormat format, string kotlinClass)
         {
-            // Tear down any stale object for this adUnitId before creating fresh.
-            DestroyAdObject(adUnitId);
+            // Tear down any stale object for this adUnitKey before creating fresh.
+            DestroyAdObject(adUnitKey);
 
             AndroidJavaProxy proxy = format switch
             {
-                DaroAdFormat.Rewarded => new DaroRewardedCallbackProxy(adUnitId, this),
-                DaroAdFormat.Banner   => new DaroBannerCallbackProxy(adUnitId, this),
-                _                     => new DaroAdCallbackProxy(adUnitId, format, this),
+                DaroAdFormat.Rewarded => new DaroRewardedCallbackProxy(adUnitKey, this),
+                DaroAdFormat.Banner   => new DaroBannerCallbackProxy(adUnitKey, this),
+                _                     => new DaroAdCallbackProxy(adUnitKey, format, this),
             };
 
-            // Kotlin ctor signature is `(adUnitId: String)` for all three classes.
-            var adObj = new AndroidJavaObject(kotlinClass, adUnitId);
+            // Kotlin ctor signature is `(adUnitKey: String)` for all three classes.
+            var adObj = new AndroidJavaObject(kotlinClass, adUnitKey);
 
-            _proxies[adUnitId]   = proxy;
-            _adObjects[adUnitId] = adObj;
+            _proxies[adUnitKey]   = proxy;
+            _adObjects[adUnitKey] = adObj;
         }
 
         // ── Ad operations ────────────────────────────────────────────────────
 
-        public void LoadInterstitial(string adUnitId)
+        public void LoadInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Android].LoadInterstitial adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)} proxy={_proxies.ContainsKey(adUnitId)}");
-            LoadAd(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Android].LoadInterstitial adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)} proxy={_proxies.ContainsKey(adUnitKey)}");
+            LoadAd(adUnitKey);
         }
 
-        public void LoadRewarded(string adUnitId)
+        public void LoadRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].LoadRewarded adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)} proxy={_proxies.ContainsKey(adUnitId)}");
-            LoadAd(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Android].LoadRewarded adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)} proxy={_proxies.ContainsKey(adUnitKey)}");
+            LoadAd(adUnitKey);
         }
 
-        private void LoadAd(string adUnitId)
+        private void LoadAd(string adUnitKey)
         {
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
-            if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
             adObj.Call("load", _activity, proxy);
         }
 
-        public void LoadAppOpen(string adUnitId)
+        public void LoadAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Android].LoadAppOpen adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)} proxy={_proxies.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
-            if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
+            DaroLog.Verbose("AppOpen", $"Platform[Android].LoadAppOpen adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)} proxy={_proxies.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
             // AppOpen native API takes Application context for load (Builder
             // requirement) and Activity for show.
             adObj.Call("load", _application, proxy);
@@ -326,65 +326,65 @@ namespace Daro.Internal
 
         // IsReady* family is polled frequently (often every frame from consumer
         // code); we skip dev-track tracing here to avoid console spam.
-        public bool IsInterstitialReady(string adUnitId) => IsAdReady(adUnitId);
-        public bool IsRewardedReady(string adUnitId)     => IsAdReady(adUnitId);
-        public bool IsAppOpenReady(string adUnitId)      => IsAdReady(adUnitId);
+        public bool IsInterstitialReady(string adUnitKey) => IsAdReady(adUnitKey);
+        public bool IsRewardedReady(string adUnitKey)     => IsAdReady(adUnitKey);
+        public bool IsAppOpenReady(string adUnitKey)      => IsAdReady(adUnitKey);
 
-        private bool IsAdReady(string adUnitId)
+        private bool IsAdReady(string adUnitKey)
         {
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return false;
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return false;
             return adObj.Call<bool>("isReady");
         }
 
-        public void ShowInterstitial(string adUnitId)
+        public void ShowInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Android].ShowInterstitial adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            ShowAd(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Android].ShowInterstitial adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            ShowAd(adUnitKey);
         }
 
-        public void ShowRewarded(string adUnitId)
+        public void ShowRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].ShowRewarded adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            ShowAd(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Android].ShowRewarded adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            ShowAd(adUnitKey);
         }
 
-        public void ShowAppOpen(string adUnitId)
+        public void ShowAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Android].ShowAppOpen adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            ShowAd(adUnitId);
+            DaroLog.Verbose("AppOpen", $"Platform[Android].ShowAppOpen adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            ShowAd(adUnitKey);
         }
 
-        private void ShowAd(string adUnitId)
+        private void ShowAd(string adUnitKey)
         {
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
             adObj.Call("show", _activity);
         }
 
-        public void SetRewardedCustomData(string adUnitId, string customData)
+        public void SetRewardedCustomData(string adUnitKey, string customData)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].SetRewardedCustomData adUnit='{adUnitId}' len={customData.Length} adObj={_adObjects.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
+            DaroLog.Verbose("Rewarded", $"Platform[Android].SetRewardedCustomData adUnit='{adUnitKey}' len={customData.Length} adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
             adObj.Call("setCustomData", customData);
         }
 
         // ── Destroy ──────────────────────────────────────────────────────────
 
-        public void DestroyInterstitial(string adUnitId)
+        public void DestroyInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Android].DestroyInterstitial adUnit='{adUnitId}'");
-            DestroyAdObject(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Android].DestroyInterstitial adUnit='{adUnitKey}'");
+            DestroyAdObject(adUnitKey);
         }
 
-        public void DestroyRewarded(string adUnitId)
+        public void DestroyRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Android].DestroyRewarded adUnit='{adUnitId}'");
-            DestroyAdObject(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Android].DestroyRewarded adUnit='{adUnitKey}'");
+            DestroyAdObject(adUnitKey);
         }
 
-        public void DestroyAppOpen(string adUnitId)
+        public void DestroyAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Android].DestroyAppOpen adUnit='{adUnitId}'");
-            DestroyAdObject(adUnitId);
+            DaroLog.Verbose("AppOpen", $"Platform[Android].DestroyAppOpen adUnit='{adUnitKey}'");
+            DestroyAdObject(adUnitKey);
         }
 
         /// <summary>
@@ -396,49 +396,49 @@ namespace Daro.Internal
         /// <c>IDisposable</c>; the underlying JNI ref is released when the
         /// proxy is GC'd, so we just drop our last reference here.
         /// </summary>
-        private void DestroyAdObject(string adUnitId)
+        private void DestroyAdObject(string adUnitKey)
         {
-            InvalidateBannerGenerationIfNeeded(adUnitId);
-            if (_adObjects.TryGetValue(adUnitId, out var adObj))
+            InvalidateBannerGenerationIfNeeded(adUnitKey);
+            if (_adObjects.TryGetValue(adUnitKey, out var adObj))
             {
                 adObj.Call("destroy");   // Kotlin: @Volatile destroyed = true (Layer 1)
                 adObj.Dispose();
-                _adObjects.Remove(adUnitId);
+                _adObjects.Remove(adUnitKey);
             }
-            _proxies.Remove(adUnitId);
+            _proxies.Remove(adUnitKey);
         }
 
-        private int NextBannerGeneration(string adUnitId)
+        private int NextBannerGeneration(string adUnitKey)
         {
-            _bannerGenerations.TryGetValue(adUnitId, out var current);
+            _bannerGenerations.TryGetValue(adUnitKey, out var current);
             var next = current + 1;
-            _bannerGenerations[adUnitId] = next;
+            _bannerGenerations[adUnitKey] = next;
             return next;
         }
 
-        private int CurrentBannerGeneration(string adUnitId)
+        private int CurrentBannerGeneration(string adUnitKey)
         {
-            _bannerGenerations.TryGetValue(adUnitId, out var current);
+            _bannerGenerations.TryGetValue(adUnitKey, out var current);
             return current;
         }
 
-        private void InvalidateBannerGenerationIfNeeded(string adUnitId)
+        private void InvalidateBannerGenerationIfNeeded(string adUnitKey)
         {
-            if (_proxies.TryGetValue(adUnitId, out var proxy) && proxy is DaroBannerCallbackProxy)
+            if (_proxies.TryGetValue(adUnitKey, out var proxy) && proxy is DaroBannerCallbackProxy)
             {
-                NextBannerGeneration(adUnitId);
+                NextBannerGeneration(adUnitKey);
             }
         }
 
         private bool IsCurrentBannerCallback(
-            string adUnitId,
+            string adUnitKey,
             int generation,
             DaroBannerCallbackProxy proxy)
         {
             return !_disposed
-                && _bannerGenerations.TryGetValue(adUnitId, out var current)
+                && _bannerGenerations.TryGetValue(adUnitKey, out var current)
                 && current == generation
-                && _proxies.TryGetValue(adUnitId, out var currentProxy)
+                && _proxies.TryGetValue(adUnitKey, out var currentProxy)
                 && ReferenceEquals(currentProxy, proxy);
         }
 
@@ -533,15 +533,15 @@ namespace Daro.Internal
 
         private class DaroAdCallbackProxy : AndroidJavaProxy
         {
-            private readonly string              _adUnitId;
+            private readonly string              _adUnitKey;
             private readonly DaroAdFormat        _format;
             private readonly DaroAndroidPlatform _platform;
 
             internal DaroAdCallbackProxy(
-                string adUnitId, DaroAdFormat format, DaroAndroidPlatform platform)
+                string adUnitKey, DaroAdFormat format, DaroAndroidPlatform platform)
                 : base("so.daro.unity.IDaroAdCallback")
             {
-                _adUnitId = adUnitId;
+                _adUnitKey = adUnitKey;
                 _format   = format;
                 _platform = platform;
             }
@@ -551,19 +551,19 @@ namespace Daro.Internal
             // cross-platform millis contract.
             // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
             // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
-            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
-                new DaroAdInfo(_format, adUnitId, latencyMs, mediationPlatform, adNetwork);
+            private DaroAdInfo MakeInfo(string adUnitKey, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(_format, adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdLoaded(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdLoaded?.Invoke(adUnitId, info));
+                    _platform._onAdLoaded?.Invoke(adUnitKey, info));
             }
 
             public void onAdFailedToLoad(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 // rawCode = 네이티브가 준 값 그대로. shim 이 `DaroError.errorCode`
@@ -574,68 +574,68 @@ namespace Daro.Internal
                 // 달라지므로 shim 이 제공하는 Daro 오류 코드를 사용한다.
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
-                    errorMessage, adUnitId, errorCode);
+                    errorMessage, adUnitKey, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToLoad?.Invoke(adUnitKey, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdShown(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdShown?.Invoke(adUnitId, info));
+                    _platform._onAdShown?.Invoke(adUnitKey, info));
             }
 
             // errorCode is always -1 from Kotlin (DaroAdDisplayFailError has
             // no int code). Stored as rawCode for diagnostic continuity even
             // though it conveys no extra info on Android.
             public void onAdFailedToShow(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 var err = new DaroAdDisplayError(
                     DaroAdErrorCodeMapper.ToDisplayErrorCode(errorCode),
                     errorMessage, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToShow?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToShow?.Invoke(adUnitKey, err));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdClicked(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdClicked?.Invoke(adUnitId, info));
+                    _platform._onAdClicked?.Invoke(adUnitKey, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdImpression(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdImpression?.Invoke(adUnitId, info));
+                    _platform._onAdImpression?.Invoke(adUnitKey, info));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdDismissed(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdDismissed?.Invoke(adUnitId, info));
+                    _platform._onAdDismissed?.Invoke(adUnitKey, info));
             }
 
             // No latency on the revenue path — daro-m's paid event tuple is
             // (valueMicros, currencyCode, precisionType) only.
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string adUnitKey, long valueMicros, string currencyCode, int precisionType,
                 string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
+                var info    = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+                    _platform._onAdRevenuePaid?.Invoke(adUnitKey, info, revenue));
             }
         }
 
@@ -646,103 +646,103 @@ namespace Daro.Internal
         // parent's name and lose `onEarnedReward` JNI dispatch.
         private sealed class DaroRewardedCallbackProxy : AndroidJavaProxy
         {
-            private readonly string              _adUnitId;
+            private readonly string              _adUnitKey;
             private readonly DaroAndroidPlatform _platform;
 
-            internal DaroRewardedCallbackProxy(string adUnitId, DaroAndroidPlatform platform)
+            internal DaroRewardedCallbackProxy(string adUnitKey, DaroAndroidPlatform platform)
                 : base("so.daro.unity.IDaroRewardedCallback")
             {
-                _adUnitId = adUnitId;
+                _adUnitKey = adUnitKey;
                 _platform = platform;
             }
 
             // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
             // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
-            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
-                new DaroAdInfo(DaroAdFormat.Rewarded, adUnitId, latencyMs, mediationPlatform, adNetwork);
+            private DaroAdInfo MakeInfo(string adUnitKey, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Rewarded, adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdLoaded(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdLoaded?.Invoke(adUnitId, info));
+                    _platform._onAdLoaded?.Invoke(adUnitKey, info));
             }
 
             public void onAdFailedToLoad(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
-                    errorMessage, adUnitId, errorCode);
+                    errorMessage, adUnitKey, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToLoad?.Invoke(adUnitKey, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdShown(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdShown?.Invoke(adUnitId, info));
+                    _platform._onAdShown?.Invoke(adUnitKey, info));
             }
 
             public void onAdFailedToShow(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 var err = new DaroAdDisplayError(
                     DaroAdErrorCodeMapper.ToDisplayErrorCode(errorCode),
                     errorMessage, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToShow?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToShow?.Invoke(adUnitKey, err));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdClicked(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdClicked?.Invoke(adUnitId, info));
+                    _platform._onAdClicked?.Invoke(adUnitKey, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdImpression(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdImpression?.Invoke(adUnitId, info));
+                    _platform._onAdImpression?.Invoke(adUnitKey, info));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdDismissed(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdDismissed?.Invoke(adUnitId, info));
+                    _platform._onAdDismissed?.Invoke(adUnitKey, info));
             }
 
             public void onEarnedReward(
-                string adUnitId, string rewardType, int rewardAmount, int latencyMs,
+                string adUnitKey, string rewardType, int rewardAmount, int latencyMs,
                 string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info   = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info   = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 var reward = new DaroRewardItem(rewardAmount, rewardType);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onEarnedReward?.Invoke(adUnitId, info, reward));
+                    _platform._onEarnedReward?.Invoke(adUnitKey, info, reward));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string adUnitKey, long valueMicros, string currencyCode, int precisionType,
                 string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
+                var info    = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+                    _platform._onAdRevenuePaid?.Invoke(adUnitKey, info, revenue));
             }
         }
 
@@ -752,13 +752,13 @@ namespace Daro.Internal
         // parent's name and break JNI dispatch.
         private sealed class DaroBannerCallbackProxy : AndroidJavaProxy
         {
-            private readonly string              _adUnitId;
+            private readonly string              _adUnitKey;
             private readonly DaroAndroidPlatform _platform;
 
-            internal DaroBannerCallbackProxy(string adUnitId, DaroAndroidPlatform platform)
+            internal DaroBannerCallbackProxy(string adUnitKey, DaroAndroidPlatform platform)
                 : base("so.daro.unity.IDaroBannerCallback")
             {
-                _adUnitId = adUnitId;
+                _adUnitKey = adUnitKey;
                 _platform = platform;
             }
 
@@ -766,70 +766,70 @@ namespace Daro.Internal
             // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
             // 배너의 generation 은 C# LoadBanner/destroy 만 올리고 네이티브 auto-refresh 는 안 올린다 —
             // generation 별 보관도 결국 유닛 단위 필드와 같았다. 이벤트별 귀속이면 키가 필요 없다.
-            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
-                new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latencyMs, mediationPlatform, adNetwork);
+            private DaroAdInfo MakeInfo(string adUnitKey, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Banner, adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
-            private bool IsCurrent(string adUnitId, int generation) =>
-                _platform.IsCurrentBannerCallback(adUnitId, generation, this);
+            private bool IsCurrent(string adUnitKey, int generation) =>
+                _platform.IsCurrentBannerCallback(adUnitKey, generation, this);
 
-            private void EnqueueIfCurrent(string adUnitId, int generation, Action deliver)
+            private void EnqueueIfCurrent(string adUnitKey, int generation, Action deliver)
             {
                 // Native callbacks can arrive on worker threads. Keep all
                 // Dictionary-backed generation/proxy checks on Unity main.
                 if (_platform._disposed) return;
                 MainThreadDispatcher.Enqueue(() =>
                 {
-                    if (!IsCurrent(adUnitId, generation)) return;
+                    if (!IsCurrent(adUnitKey, generation)) return;
                     deliver();
                 });
             }
 
-            public void onAdLoaded(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdLoaded(string adUnitKey, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdLoaded?.Invoke(adUnitId, info));
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdLoaded?.Invoke(adUnitKey, info));
             }
 
             public void onAdFailedToLoad(
-                string adUnitId, int generation, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int generation, int errorCode, string errorMessage, int latencyMs)
             {
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
-                    errorMessage, adUnitId, errorCode);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
+                    errorMessage, adUnitKey, errorCode);
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdFailedToLoad?.Invoke(adUnitKey, err));
             }
 
-            public void onAdImpression(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdImpression(string adUnitKey, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdImpression?.Invoke(adUnitId, info));
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdImpression?.Invoke(adUnitKey, info));
             }
 
-            public void onAdClicked(string adUnitId, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdClicked(string adUnitKey, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdClicked?.Invoke(adUnitId, info));
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdClicked?.Invoke(adUnitKey, info));
             }
 
-            public void onAdHidden(string adUnitId, int generation, string? mediationPlatform, string? adNetwork)
+            public void onAdHidden(string adUnitKey, int generation, string? mediationPlatform, string? adNetwork)
             {
-                var info = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdHidden?.Invoke(adUnitId, info));
+                var info = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdHidden?.Invoke(adUnitKey, info));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, int generation, long valueMicros, string currencyCode, int precisionType,
+                string adUnitKey, int generation, long valueMicros, string currencyCode, int precisionType,
                 string? mediationPlatform, string? adNetwork)
             {
-                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
+                var info    = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
-                EnqueueIfCurrent(adUnitId, generation,
-                    () => _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+                EnqueueIfCurrent(adUnitKey, generation,
+                    () => _platform._onAdRevenuePaid?.Invoke(adUnitKey, info, revenue));
             }
         }
 
@@ -841,120 +841,120 @@ namespace Daro.Internal
         // DaroBannerCallbackProxy.
         private sealed class DaroLightPopupCallbackProxy : AndroidJavaProxy
         {
-            private readonly string              _adUnitId;
+            private readonly string              _adUnitKey;
             private readonly DaroAndroidPlatform _platform;
 
-            internal DaroLightPopupCallbackProxy(string adUnitId, DaroAndroidPlatform platform)
+            internal DaroLightPopupCallbackProxy(string adUnitKey, DaroAndroidPlatform platform)
                 : base("so.daro.unity.IDaroLightPopupCallback")
             {
-                _adUnitId = adUnitId;
+                _adUnitKey = adUnitKey;
                 _platform = platform;
             }
 
             // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 기억하면 다음 광고를
             // 미리 로드하는 동안 지금 광고의 콜백이 다음 광고의 귀속으로 찍힌다.
-            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
-                new DaroAdInfo(DaroAdFormat.LightPopup, adUnitId, latencyMs, mediationPlatform, adNetwork);
+            private DaroAdInfo MakeInfo(string adUnitKey, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.LightPopup, adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
-            public void onAdLoaded(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdLoaded(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdLoaded?.Invoke(adUnitId, info));
+                    _platform._onAdLoaded?.Invoke(adUnitKey, info));
             }
 
             public void onAdFailedToLoad(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
-                    errorMessage, adUnitId, errorCode);
+                    errorMessage, adUnitKey, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToLoad?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToLoad?.Invoke(adUnitKey, err));
             }
 
-            public void onAdShown(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdShown(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdShown?.Invoke(adUnitId, info));
+                    _platform._onAdShown?.Invoke(adUnitKey, info));
             }
 
             // errorCode is always -1 from Kotlin (DaroAdDisplayFailError has
             // no int code). Stored as rawCode for diagnostic continuity even
             // though it conveys no extra info on Android.
             public void onAdFailedToShow(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_platform._disposed) return;
                 var err = new DaroAdDisplayError(
                     DaroAdErrorCodeMapper.ToDisplayErrorCode(errorCode),
                     errorMessage, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdFailedToShow?.Invoke(adUnitId, err));
+                    _platform._onAdFailedToShow?.Invoke(adUnitKey, err));
             }
 
-            public void onAdDismissed(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdDismissed(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdDismissed?.Invoke(adUnitId, info));
+                    _platform._onAdDismissed?.Invoke(adUnitKey, info));
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdClicked(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdClicked?.Invoke(adUnitId, info));
+                    _platform._onAdClicked?.Invoke(adUnitKey, info));
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdImpression(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdImpression?.Invoke(adUnitId, info));
+                    _platform._onAdImpression?.Invoke(adUnitKey, info));
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string adUnitKey, long valueMicros, string currencyCode, int precisionType,
                 string? mediationPlatform, string? adNetwork)
             {
                 if (_platform._disposed) return;
-                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
+                var info    = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
-                    _platform._onAdRevenuePaid?.Invoke(adUnitId, info, revenue));
+                    _platform._onAdRevenuePaid?.Invoke(adUnitKey, info, revenue));
             }
         }
 
         // ── Light Popup ad operations ────────────────────────────────────
         // Cannot use the generic CreateAdObject helper — Kotlin ctor takes
-        // 36 params beyond adUnitId (9×4 ARGB ints + closeButtonText),
+        // 36 params beyond adUnitKey (9×4 ARGB ints + closeButtonText),
         // and the proxy needs interface name IDaroLightPopupCallback rather than
         // IDaroAdCallback.
-        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options)
+        public void CreateLightPopup(string adUnitKey, DaroLightPopupAdOptions? options)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitId}'");
+            DaroLog.Verbose("LightPopup", $"Platform[Android].CreateLightPopup adUnit='{adUnitKey}'");
             // Native-first dispose ordering for any stale instance.
-            DestroyAdObject(adUnitId);
+            DestroyAdObject(adUnitKey);
 
-            var proxy = new DaroLightPopupCallbackProxy(adUnitId, this);
+            var proxy = new DaroLightPopupCallbackProxy(adUnitKey, this);
             bool useNativeDefaults = options == null;
             options ??= new DaroLightPopupAdOptions();
 
-            // JNI ctor: adUnitId + 9 colors × 4 channels (A,R,G,B order
+            // JNI ctor: adUnitKey + 9 colors × 4 channels (A,R,G,B order
             // per field) + closeButtonText + useNativeDefaults. Color32 byte
             // (0–255 unsigned) cast to int for JNI — no sign-extension risk because
             // C# `byte` is unsigned, so `(int)(byte)0xB2 == 178`, never negative.
             var adObj = new AndroidJavaObject(
                 "so.daro.unity.DaroUnityLightPopupAd",
-                adUnitId,
+                adUnitKey,
                 (int)options.BackgroundColor.a,            (int)options.BackgroundColor.r,            (int)options.BackgroundColor.g,            (int)options.BackgroundColor.b,
                 (int)options.ContainerColor.a,             (int)options.ContainerColor.r,             (int)options.ContainerColor.g,             (int)options.ContainerColor.b,
                 (int)options.AdMarkLabelTextColor.a,       (int)options.AdMarkLabelTextColor.r,       (int)options.AdMarkLabelTextColor.g,       (int)options.AdMarkLabelTextColor.b,
@@ -968,48 +968,48 @@ namespace Daro.Internal
                 useNativeDefaults
             );
 
-            _proxies[adUnitId]   = proxy;
-            _adObjects[adUnitId] = adObj;
+            _proxies[adUnitKey]   = proxy;
+            _adObjects[adUnitKey] = adObj;
         }
 
-        public void LoadLightPopup(string adUnitId)
+        public void LoadLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Android].LoadLightPopup adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)} proxy={_proxies.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
-            if (!_proxies.TryGetValue(adUnitId, out var proxy)) return;
+            DaroLog.Verbose("LightPopup", $"Platform[Android].LoadLightPopup adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)} proxy={_proxies.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
             adObj.Call("load", _activity, proxy);
         }
 
-        public bool IsLightPopupReady(string adUnitId)
+        public bool IsLightPopupReady(string adUnitKey)
         {
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return false;
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return false;
             return adObj.Call<bool>("isReady");
         }
 
         // DaroLightPopupAdImpl.show(activity: Activity) strictly requires Activity
         // (not just Context) for the underlying Dialog(activity) construction.
-        public void ShowLightPopup(string adUnitId)
+        public void ShowLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Android].ShowLightPopup adUnit='{adUnitId}' adObj={_adObjects.ContainsKey(adUnitId)}");
-            if (!_adObjects.TryGetValue(adUnitId, out var adObj)) return;
+            DaroLog.Verbose("LightPopup", $"Platform[Android].ShowLightPopup adUnit='{adUnitKey}' adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
             adObj.Call("show", _activity);
         }
 
-        public void DestroyLightPopup(string adUnitId)
+        public void DestroyLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Android].DestroyLightPopup adUnit='{adUnitId}'");
-            DestroyAdObject(adUnitId);
+            DaroLog.Verbose("LightPopup", $"Platform[Android].DestroyLightPopup adUnit='{adUnitKey}'");
+            DestroyAdObject(adUnitKey);
         }
 
         // ── Native ad (instance-owned) ──────────────────────────────
         // Each DaroNativeAd gets its own DaroAndroidNativeAdHandle (per-instance
         // AndroidJavaObject + AndroidJavaProxy). Native ad does NOT use
-        // _adObjects / _proxies dicts — multi-instance for the same adUnitId
+        // _adObjects / _proxies dicts — multi-instance for the same adUnitKey
         // is supported.
-        public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
+        public INativeAdHandle CreateNativeAdHandle(string adUnitKey, INativeAdEventSink sink)
         {
-            DaroLog.Verbose("Native", $"Platform[Android].CreateNativeAdHandle adUnit='{adUnitId}'");
-            return new DaroAndroidNativeAdHandle(adUnitId, sink, _activity);
+            DaroLog.Verbose("Native", $"Platform[Android].CreateNativeAdHandle adUnit='{adUnitKey}'");
+            return new DaroAndroidNativeAdHandle(adUnitKey, sink, _activity);
         }
     }
 }

@@ -12,7 +12,7 @@ namespace Daro
     /// events, mirroring <see cref="DaroInterstitialAd"/>.
     /// </summary>
     /// <remarks>
-    /// One instance per <c>adUnitId</c>; duplicate construction replaces the
+    /// One instance per <c>adUnitKey</c>; duplicate construction replaces the
     /// prior instance (platform layer destroys + recreates the native handle,
     /// registry overwrites the mapping).
     ///
@@ -23,7 +23,7 @@ namespace Daro
     /// </remarks>
     public sealed class DaroLightPopupAd : IDisposable
     {
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         public event Action<DaroAdInfo>?         OnAdLoaded;
         public event Action<DaroAdLoadError>?    OnAdFailedToLoad;
@@ -55,32 +55,32 @@ namespace Daro
         private long _registryGeneration;
 
         /// <summary>
-        /// Construct a Light Popup ad instance bound to <paramref name="adUnitId"/>.
+        /// Construct a Light Popup ad instance bound to <paramref name="adUnitKey"/>.
         /// </summary>
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
         public DaroLightPopupAd(
-            string adUnitId,
+            string adUnitKey,
             DaroLightPopupAdOptions? options = null)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
 
             // Keep null so native SDKs retain their current default appearance.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
                 DaroAdFormat.LightPopup,
-                AdUnitId,
+                AdUnitKey,
                 this,
                 () => DaroPlatform.Current.CreateLightPopup(
-                    AdUnitId, options));
-            DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitId}' optionsProvided={options != null}");
+                    AdUnitKey, options));
+            DaroLog.Verbose("LightPopup", $"ctor adUnit='{AdUnitKey}' optionsProvided={options != null}");
         }
 
         /// <summary>
@@ -93,15 +93,15 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroLightPopupAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("LightPopup",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
-            DaroLog.Verbose("LightPopup", $"Load adUnit='{AdUnitId}'");
-            DaroPlatform.Current.LoadLightPopup(AdUnitId);
+            DaroLog.Verbose("LightPopup", $"Load adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.LoadLightPopup(AdUnitKey);
         }
 
         /// <summary>
@@ -112,7 +112,7 @@ namespace Daro
         public bool IsReady()
         {
             if (_disposed) return false;
-            return DaroPlatform.Current.IsLightPopupReady(AdUnitId);
+            return DaroPlatform.Current.IsLightPopupReady(AdUnitKey);
         }
 
         /// <summary>
@@ -131,11 +131,11 @@ namespace Daro
 
             if (!IsReady())
             {
-                throw new InvalidOperationException($"Ad not ready: {AdUnitId}");
+                throw new InvalidOperationException($"Ad not ready: {AdUnitKey}");
             }
 
-            DaroLog.Verbose("LightPopup", $"Show adUnit='{AdUnitId}'");
-            DaroPlatform.Current.ShowLightPopup(AdUnitId);
+            DaroLog.Verbose("LightPopup", $"Show adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.ShowLightPopup(AdUnitKey);
         }
 
         /// <summary>
@@ -165,7 +165,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("LightPopup", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("LightPopup", $"Dispose adUnit='{AdUnitKey}'");
 
                 // Null the event backing fields to release consumer delegate
                 // refs. Handlers that are already captured by an in-flight
@@ -186,15 +186,15 @@ namespace Daro
                 DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
                     DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
                         DaroAdFormat.LightPopup,
-                        AdUnitId,
+                        AdUnitKey,
                         this,
                         _registryGeneration,
-                        () => platform.DestroyLightPopup(AdUnitId)));
+                        () => platform.DestroyLightPopup(AdUnitKey)));
             }
             catch (Exception e)
             {
                 DaroLog.Warn("LightPopup",
-                    $"DestroyLightPopup({AdUnitId}) threw during Dispose: {e}");
+                    $"DestroyLightPopup({AdUnitKey}) threw during Dispose: {e}");
             }
         }
 
@@ -207,56 +207,56 @@ namespace Daro
         internal void FireOnAdLoaded(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+            DaroLog.Verbose("LightPopup", $"FireOnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, info);
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("LightPopup", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
         internal void FireOnAdShown(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdShown adUnit='{AdUnitId}'");
+            DaroLog.Verbose("LightPopup", $"FireOnAdShown adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdShown, info);
         }
 
         internal void FireOnAdFailedToShow(DaroAdDisplayError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdFailedToShow adUnit='{AdUnitId}' code={error.Code}");
+            DaroLog.Verbose("LightPopup", $"FireOnAdFailedToShow adUnit='{AdUnitKey}' code={error.Code}");
             SafeEventInvoker.Invoke(OnAdFailedToShow, error);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("LightPopup", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("LightPopup", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("LightPopup", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 
         internal void FireOnAdDismissed(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("LightPopup", $"FireOnAdDismissed adUnit='{AdUnitId}'");
+            DaroLog.Verbose("LightPopup", $"FireOnAdDismissed adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
         }
     }

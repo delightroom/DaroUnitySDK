@@ -15,7 +15,7 @@ namespace Daro
         /// <summary>
         /// Null for init-phase or otherwise unit-agnostic failures.
         /// </summary>
-        public string? AdUnitId { get; }
+        public string? AdUnitKey { get; }
 
         /// <summary>
         /// Raw native error code (DaroSDK <c>DaroError.Code.rawValue</c>).
@@ -26,11 +26,11 @@ namespace Daro
         /// </summary>
         public int RawCode { get; }
 
-        internal DaroAdLoadError(DaroAdLoadErrorCode code, string message, string? adUnitId, int rawCode = 0)
+        internal DaroAdLoadError(DaroAdLoadErrorCode code, string message, string? adUnitKey, int rawCode = 0)
         {
             Code     = code;
             Message  = message;
-            AdUnitId = adUnitId;
+            AdUnitKey = adUnitKey;
             RawCode  = rawCode;
         }
     }

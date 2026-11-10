@@ -19,11 +19,11 @@ namespace Daro.Internal
         private DaroBannerSize     _size;
         private DaroBannerPosition _position;
         private bool               _visible;
-        private string             _adUnitId = "";
+        private string             _adUnitKey = "";
 
-        public void Configure(string adUnitId, DaroBannerSize size, DaroBannerPosition position)
+        public void Configure(string adUnitKey, DaroBannerSize size, DaroBannerPosition position)
         {
-            _adUnitId = adUnitId;
+            _adUnitKey = adUnitKey;
             _size     = size;
             _position = position;
         }
@@ -63,7 +63,7 @@ namespace Daro.Internal
             var (w, h) = SizeToPixels(_size);
             var (x, y) = PositionToCoords(_position, w, h);
             GUI.Box(new Rect(x, y, w, h),
-                $"DaroBannerAd (mock)\n{_adUnitId}\n{_size} @ {_position}");
+                $"DaroBannerAd (mock)\n{_adUnitKey}\n{_size} @ {_position}");
         }
 
         private static (int w, int h) SizeToPixels(DaroBannerSize size) => size switch

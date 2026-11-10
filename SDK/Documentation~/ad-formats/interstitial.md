@@ -10,12 +10,12 @@ using UnityEngine;
 
 public sealed class InterstitialHost : MonoBehaviour
 {
-    [SerializeField] private string _adUnitId = "your-interstitial-ad-unit-id";
+    [SerializeField] private string _adUnitKey = "your-interstitial-ad-unit-id";
     private DaroInterstitialAd _ad;
 
     private void OnEnable()
     {
-        _ad = new DaroInterstitialAd(_adUnitId);
+        _ad = new DaroInterstitialAd(_adUnitKey);
 
         _ad.OnAdLoaded       += OnLoaded;
         _ad.OnAdFailedToLoad += OnLoadFailed;

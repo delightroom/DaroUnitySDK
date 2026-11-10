@@ -35,7 +35,7 @@ namespace Daro.Internal
     /// </remarks>
     internal sealed class DaroAndroidNativeAdHandle : INativeAdHandle
     {
-        private readonly string             _adUnitId;
+        private readonly string             _adUnitKey;
         private readonly INativeAdEventSink _sink;
         private readonly AndroidJavaObject? _activity;
 
@@ -46,21 +46,21 @@ namespace Daro.Internal
         private volatile bool _disposed;
 
         internal DaroAndroidNativeAdHandle(
-            string adUnitId,
+            string adUnitKey,
             INativeAdEventSink sink,
             AndroidJavaObject? activity)
         {
-            _adUnitId = adUnitId;
+            _adUnitKey = adUnitKey;
             _sink     = sink;
             _activity = activity;
 
-            _adObject = new AndroidJavaObject("so.daro.unity.DaroUnityNativeAd", adUnitId);
+            _adObject = new AndroidJavaObject("so.daro.unity.DaroUnityNativeAd", adUnitKey);
             _proxy    = new CallbackProxy(this);
         }
 
         public void Load(int iconWidth, int iconHeight)
         {
-            DaroLog.Verbose("Native", $"Handle[Android].Load adUnit='{_adUnitId}' icon={iconWidth}x{iconHeight} disposed={_disposed} adObj={_adObject != null}");
+            DaroLog.Verbose("Native", $"Handle[Android].Load adUnit='{_adUnitKey}' icon={iconWidth}x{iconHeight} disposed={_disposed} adObj={_adObject != null}");
             if (_disposed || _adObject == null || _proxy == null) return;
 
             if (_activity == null)
@@ -71,7 +71,7 @@ namespace Daro.Internal
                 var err = new DaroAdLoadError(
                     DaroAdLoadErrorCode.NotInitialized,
                     "Activity not available — call DaroSdk.InitializeAsync() before constructing DaroNativeAd.",
-                    _adUnitId, rawCode: -1);
+                    _adUnitKey, rawCode: -1);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_disposed) return;
@@ -109,21 +109,21 @@ namespace Daro.Internal
 
         public void NotifyVisible()
         {
-            DaroLog.Verbose("Native", $"Handle[Android].NotifyVisible adUnit='{_adUnitId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[Android].NotifyVisible adUnit='{_adUnitKey}' disposed={_disposed}");
             if (_disposed || _adObject == null) return;
             _adObject.Call("notifyVisible");
         }
 
         public void NotifyHidden()
         {
-            DaroLog.Verbose("Native", $"Handle[Android].NotifyHidden adUnit='{_adUnitId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[Android].NotifyHidden adUnit='{_adUnitKey}' disposed={_disposed}");
             if (_disposed || _adObject == null) return;
             _adObject.Call("notifyHidden");
         }
 
         public void NotifyClicked()
         {
-            DaroLog.Verbose("Native", $"Handle[Android].NotifyClicked adUnit='{_adUnitId}' disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[Android].NotifyClicked adUnit='{_adUnitKey}' disposed={_disposed}");
             if (_disposed || _adObject == null || _proxy == null) return;
             _adObject.Call("notifyClicked", _proxy);
         }
@@ -155,7 +155,7 @@ namespace Daro.Internal
         {
             if (_disposed) return;
             _disposed = true;   // Layer 2 armed — proxy callbacks short-circuit.
-            DaroLog.Verbose("Native", $"Handle[Android].Dispose adUnit='{_adUnitId}'");
+            DaroLog.Verbose("Native", $"Handle[Android].Dispose adUnit='{_adUnitKey}'");
 
             try
             {
@@ -165,7 +165,7 @@ namespace Daro.Internal
             catch (Exception e)
             {
                 DaroLog.Warn("Native",
-                    $"DaroAndroidNativeAdHandle({_adUnitId}) destroy threw: {e}");
+                    $"DaroAndroidNativeAdHandle({_adUnitKey}) destroy threw: {e}");
             }
 
             _adObject = null;
@@ -232,11 +232,11 @@ namespace Daro.Internal
 
             // 귀속은 이벤트마다 Kotlin 이 실어 온다. 여기서 기억하지 않는다 — 네이티브는 onAdLoaded 가
             // 아이콘 폴링 뒤에 와서 impression 이 먼저 도착할 수 있고, 그때 기억한 값은 없거나 이전 광고 것이다.
-            private DaroAdInfo MakeInfo(string adUnitId, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
-                new DaroAdInfo(DaroAdFormat.Native, adUnitId, latencyMs, mediationPlatform, adNetwork);
+            private DaroAdInfo MakeInfo(string adUnitKey, int? latencyMs, string? mediationPlatform, string? adNetwork) =>
+                new DaroAdInfo(DaroAdFormat.Native, adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
             public void onAdLoaded(
-                string adUnitId,
+                string adUnitKey,
                 string title, string body, string callToAction,
                 byte[] iconPngBytes,
                 string assetTypes,
@@ -246,7 +246,7 @@ namespace Daro.Internal
                 if (_parent._disposed) return;
 
                 // Build DaroAdInfo on this (worker) thread — pure data, no Unity API.
-                var adInfo = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var adInfo = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
 
                 // Texture2D construction is main-thread-only — defer to Enqueue.
                 MainThreadDispatcher.Enqueue(() =>
@@ -269,12 +269,12 @@ namespace Daro.Internal
             }
 
             public void onAdFailedToLoad(
-                string adUnitId, int errorCode, string errorMessage, int latencyMs)
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
             {
                 if (_parent._disposed) return;
                 var err = new DaroAdLoadError(
                     DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
-                    errorMessage, adUnitId, errorCode);
+                    errorMessage, adUnitKey, errorCode);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
@@ -282,10 +282,10 @@ namespace Daro.Internal
                 });
             }
 
-            public void onAdImpression(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdImpression(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
@@ -293,10 +293,10 @@ namespace Daro.Internal
                 });
             }
 
-            public void onAdClicked(string adUnitId, int latencyMs, string? mediationPlatform, string? adNetwork)
+            public void onAdClicked(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info = MakeInfo(adUnitId, latencyMs, mediationPlatform, adNetwork);
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (_parent._disposed) return;
@@ -305,11 +305,11 @@ namespace Daro.Internal
             }
 
             public void onAdRevenuePaid(
-                string adUnitId, long valueMicros, string currencyCode, int precisionType,
+                string adUnitKey, long valueMicros, string currencyCode, int precisionType,
                 string? mediationPlatform, string? adNetwork)
             {
                 if (_parent._disposed) return;
-                var info    = MakeInfo(adUnitId, null, mediationPlatform, adNetwork);
+                var info    = MakeInfo(adUnitKey, null, mediationPlatform, adNetwork);
                 var revenue = DaroRevenueInfo.FromMicros(valueMicros, currencyCode, precisionType);
                 MainThreadDispatcher.Enqueue(() =>
                 {

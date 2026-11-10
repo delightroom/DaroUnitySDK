@@ -101,12 +101,12 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
 #pragma mark - Delegate @interfaces (paired — LoaderDelegate's didLoad creates AdDelegate)
 
 @interface DaroUnityLightPopupLoaderDelegate : NSObject <DaroObjCLightPopupAdLoaderDelegate>
-@property (nonatomic, copy) NSString*                  adUnitId;
+@property (nonatomic, copy) NSString*                  adUnitKey;
 @property (nonatomic, weak) DaroUnityLightPopupEntry*  entry;
 @end
 
 @interface DaroUnityLightPopupAdDelegate : NSObject <DaroObjCLightPopupAdDelegate>
-@property (nonatomic, copy) NSString*                  adUnitId;
+@property (nonatomic, copy) NSString*                  adUnitKey;
 @property (nonatomic, weak) DaroUnityLightPopupEntry*  entry;
 @end
 
@@ -117,7 +117,7 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
 - (void)lightPopupAdLoaderDidLoad:(DaroObjCLightPopupAdLoader*)loader
                                ad:(DaroObjCLightPopupAd*)ad
                            adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"loader.didLoad adUnit='%@'", self.adUnitId);
+    DaroLogD(@"LightPopup", @"loader.didLoad adUnit='%@'", self.adUnitKey);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.loader != loader) return;
 
@@ -126,7 +126,7 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
     if (e.configuration) [ad setConfiguration:e.configuration];
 
     DaroUnityLightPopupAdDelegate* adDel = [DaroUnityLightPopupAdDelegate new];
-    adDel.adUnitId = self.adUnitId;
+    adDel.adUnitKey = self.adUnitKey;
     adDel.entry    = e;
     ad.delegate    = adDel;
     e.adDelegate   = adDel;
@@ -137,45 +137,45 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
     // ILRD: 통합 브리지는 onPaidEvent 를 광고에 둔다(로더에는 없다). 로드마다
     // 새 광고 객체가 오므로 여기서 per-loaded-ad 로 건다. 귀속은 엔트리가 댄다 —
     // 수익 콜백이 받는 것은 DaroObjCAdRevenue 하나뿐이다.
-    DaroUnityWireRevenue(ad, e, self.adUnitId, 5);
+    DaroUnityWireRevenue(ad, e, self.adUnitKey, 5);
 
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adLoaded\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 - (void)lightPopupAdLoader:(DaroObjCLightPopupAdLoader*)loader
           didFailWithError:(NSError*)error {
     DaroLogW(@"LightPopup", @"loader.didFailWithError adUnit='%@' code=%ld msg='%@'",
-             self.adUnitId, (long)error.code, error.localizedDescription);
+             self.adUnitKey, (long)error.code, error.localizedDescription);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.loader != loader) return;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToLoad\",\"adFormat\":5,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 - (void)lightPopupAdLoaderDidClick:(DaroObjCLightPopupAdLoader*)loader
                             adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"loader.didClick adUnit='%@'", self.adUnitId);
+    DaroLogD(@"LightPopup", @"loader.didClick adUnit='%@'", self.adUnitKey);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.loader != loader) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adClicked\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 - (void)lightPopupAdLoaderDidRecordImpression:(DaroObjCLightPopupAdLoader*)loader
                                        adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"loader.didRecordImpression adUnit='%@'", self.adUnitId);
+    DaroLogD(@"LightPopup", @"loader.didRecordImpression adUnit='%@'", self.adUnitKey);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.loader != loader) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adImpression\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 @end
@@ -186,18 +186,18 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
 
 - (void)lightPopupAdDidShow:(DaroObjCLightPopupAd*)ad
                      adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"ad.didShow adUnit='%@'", self.adUnitId);
+    DaroLogD(@"LightPopup", @"ad.didShow adUnit='%@'", self.adUnitKey);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.ad != ad) return;
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adShown\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 - (void)lightPopupAdDidDismiss:(DaroObjCLightPopupAd*)ad
                         adInfo:(DaroObjCAdInfo*)adInfo {
-    DaroLogD(@"LightPopup", @"ad.didDismiss adUnit='%@'", self.adUnitId);
+    DaroLogD(@"LightPopup", @"ad.didDismiss adUnit='%@'", self.adUnitKey);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.ad != ad) return;
     // Clear ad ref — dismissed ad is consumed (parallel to Android ad=null after dismiss).
@@ -207,14 +207,14 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
     e.lastAdInfo = adInfo;
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adDismissed\",\"adFormat\":5%@}", AdInfoFields(adInfo)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 - (void)lightPopupAd:(DaroObjCLightPopupAd*)ad
        didFailToShow:(NSError*)error
               adInfo:(DaroObjCAdInfo*)adInfo {
     DaroLogW(@"LightPopup", @"ad.didFailToShow adUnit='%@' code=%ld msg='%@'",
-             self.adUnitId, (long)error.code, error.localizedDescription);
+             self.adUnitKey, (long)error.code, error.localizedDescription);
     DaroUnityLightPopupEntry* e = self.entry;
     if (!e || e.destroyed || e.ad != ad) return;
     e.showing = NO;
@@ -222,7 +222,7 @@ static void ReleasePresentation(DaroUnityLightPopupEntry* entry) {
     NSString* json = [NSString stringWithFormat:
         @"{\"event\":\"adFailedToShow\",\"adFormat\":5,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
         (long)error.code, EscapeJson(error.localizedDescription)];
-    DaroDispatch(self.adUnitId, json);
+    DaroDispatch(self.adUnitKey, json);
 }
 
 @end
@@ -262,7 +262,7 @@ static DaroObjCLightPopupConfiguration* BuildConfig(
 extern "C" {
 
 void DaroUnity_CreateLightPopup(
-    const char* adUnitId,
+    const char* adUnitKey,
     float bgR,        float bgG,        float bgB,        float bgA,
     float containerR, float containerG, float containerB, float containerA,
     float adMarkTextR,float adMarkTextG,float adMarkTextB,float adMarkTextA,
@@ -274,8 +274,8 @@ void DaroUnity_CreateLightPopup(
     float ctaTextR,   float ctaTextG,   float ctaTextB,   float ctaTextA,
     const char* closeButtonText, int useNativeDefaults)
 {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"LightPopup", @"CreateLightPopup adUnit='%@'", unit);
 
 
@@ -305,11 +305,11 @@ void DaroUnity_CreateLightPopup(
         s_lightPopups[unit] = nil;
 
         DaroObjCLightPopupAdLoader* loader =
-            [[DaroObjCLightPopupAdLoader alloc] initWithUnitId:unit];
+            [[DaroObjCLightPopupAdLoader alloc] initWithAdUnitKey:unit];
 
         DaroUnityLightPopupLoaderDelegate* loaderDel =
             [DaroUnityLightPopupLoaderDelegate new];
-        loaderDel.adUnitId = unit;
+        loaderDel.adUnitKey = unit;
 
         DaroUnityLightPopupEntry* entry = [DaroUnityLightPopupEntry new];
         entry.loader         = loader;
@@ -323,9 +323,9 @@ void DaroUnity_CreateLightPopup(
     });
 }
 
-void DaroUnity_LoadLightPopup(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_LoadLightPopup(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"LightPopup", @"LoadLightPopup adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
@@ -338,9 +338,9 @@ void DaroUnity_LoadLightPopup(const char* adUnitId) {
         entry.adDelegate = nil;
 
         entry.loader.delegate = nil;
-        DaroObjCLightPopupAdLoader* loader = [[DaroObjCLightPopupAdLoader alloc] initWithUnitId:unit];
+        DaroObjCLightPopupAdLoader* loader = [[DaroObjCLightPopupAdLoader alloc] initWithAdUnitKey:unit];
         DaroUnityLightPopupLoaderDelegate* delegate = [DaroUnityLightPopupLoaderDelegate new];
-        delegate.adUnitId = unit;
+        delegate.adUnitKey = unit;
         delegate.entry = entry;
         entry.loader = loader;
         entry.loaderDelegate = delegate;
@@ -351,9 +351,9 @@ void DaroUnity_LoadLightPopup(const char* adUnitId) {
     });
 }
 
-bool DaroUnity_IsLightPopupReady(const char* adUnitId) {
-    if (!adUnitId) return false;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+bool DaroUnity_IsLightPopupReady(const char* adUnitKey) {
+    if (!adUnitKey) return false;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     __block BOOL ready = NO;
     dispatch_sync(s_adQueue, ^{
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
@@ -362,9 +362,9 @@ bool DaroUnity_IsLightPopupReady(const char* adUnitId) {
     return (bool)ready;
 }
 
-void DaroUnity_ShowLightPopup(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_ShowLightPopup(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"LightPopup", @"ShowLightPopup adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroUnityLightPopupEntry* entry = s_lightPopups[unit];
@@ -386,9 +386,9 @@ void DaroUnity_ShowLightPopup(const char* adUnitId) {
     });
 }
 
-void DaroUnity_DestroyLightPopup(const char* adUnitId) {
-    if (!adUnitId) return;
-    NSString* unit = [NSString stringWithUTF8String:adUnitId];
+void DaroUnity_DestroyLightPopup(const char* adUnitKey) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     DaroLogD(@"LightPopup", @"DestroyLightPopup adUnit='%@'", unit);
     // Layer-1: set destroyed synchronously BEFORE async cleanup so any
     // concurrently-executing delegate callback observes the flag before

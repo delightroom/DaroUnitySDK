@@ -4,7 +4,7 @@ namespace Daro
 {
     /// <summary>
     /// Reported to consumers via <c>OnAdFailedToShow</c>.
-    /// No AdUnitId — display errors are always delivered alongside a
+    /// No AdUnitKey — display errors are always delivered alongside a
     /// <see cref="DaroAdInfo"/> that already carries the unit id.
     /// Constructor is <c>internal</c> — only the SDK's platform layer
     /// should mint these.

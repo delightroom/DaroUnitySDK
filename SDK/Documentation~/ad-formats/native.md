@@ -6,7 +6,7 @@ Two integration paths:
 - **Slot path** — drop a `DaroNativeAdView` MonoBehaviour on your prefab, wire its inspector slots to legacy uGUI widgets, and let it auto-bind. Recommended.
 - **Raw path** — read `DaroNativeAd.Info` (a `DaroNativeAdInfo` POCO) and render it through any UI you like (TextMeshPro, custom widgets, UI Toolkit).
 
-Native is the only format with **multi-instance** support: N independent `DaroNativeAd` instances sharing the same `adUnitId` is a normal pattern for list / feed UIs.
+Native is the only format with **multi-instance** support: N independent `DaroNativeAd` instances sharing the same `adUnitKey` is a normal pattern for list / feed UIs.
 
 ## Asset availability
 
@@ -43,7 +43,7 @@ using UnityEngine;
 
 public sealed class NativeAdHost : MonoBehaviour
 {
-    [SerializeField] private string           _adUnitId = "your-native-ad-unit-id";
+    [SerializeField] private string           _adUnitKey = "your-native-ad-unit-id";
     [SerializeField] private DaroNativeAdView _view;
 
     private DaroNativeAd _ad;
@@ -55,7 +55,7 @@ public sealed class NativeAdHost : MonoBehaviour
         // OnDisable already fired and we should not create a new ad now.
         if (!isActiveAndEnabled) return;
 
-        _ad = new DaroNativeAd(_adUnitId);
+        _ad = new DaroNativeAd(_adUnitKey);
 
         _ad.OnAdLoaded       += info =>
         {
@@ -127,7 +127,7 @@ _ad.Load();
 
 ## Lifecycle and event order
 
-1. `new DaroNativeAd(adUnitId)` → handle constructed, no network call yet.
+1. `new DaroNativeAd(adUnitKey)` → handle constructed, no network call yet.
 2. (`_ad.IconSize = ...;`) — required on raw path, automatic on slot path.
 3. `_ad.Load()` → mediation responds:
    - Success → `OnAdLoaded` (main thread). `Info` populated, `IsReady` becomes `true`.
@@ -154,7 +154,7 @@ On Android, the mediation layer's internal image loader (Glide) reads the icon v
 Unlike Banner / Interstitial (where a duplicate construct replaces the prior instance), Native is **instance-owned**:
 
 ```csharp
-// All three are independent ads, even though they share the adUnitId.
+// All three are independent ads, even though they share the adUnitKey.
 var ad1 = new DaroNativeAd(adUnit);
 var ad2 = new DaroNativeAd(adUnit);
 var ad3 = new DaroNativeAd(adUnit);

@@ -8,8 +8,8 @@ namespace Daro.Internal
     /// <summary>
     /// Platform abstraction for DaroSDK. Implemented by
     /// <c>DaroIOSPlatform</c>, <c>DaroAndroidPlatform</c>, and
-    /// <c>DaroEditorPlatform</c>. Keyed by <c>adUnitId</c> — each
-    /// implementation holds its own internal adUnitId → native handle
+    /// <c>DaroEditorPlatform</c>. Keyed by <c>adUnitKey</c> — each
+    /// implementation holds its own internal adUnitKey → native handle
     /// dictionary; <c>IntPtr</c> never appears in this interface.
     /// Event callbacks are set once by <c>DaroSdk</c> and fire on the
     /// Unity main thread.
@@ -32,66 +32,66 @@ namespace Daro.Internal
         void SetLogLevel(DaroLogLevel level);
 
         // ── Instance lifecycle ────────────────────────────────────────────
-        void CreateInterstitial(string adUnitId);
-        void CreateRewarded(string adUnitId);
-        void CreateAppOpen(string adUnitId);
+        void CreateInterstitial(string adUnitKey);
+        void CreateRewarded(string adUnitKey);
+        void CreateAppOpen(string adUnitKey);
 
         // ── Ad operations ─────────────────────────────────────────────────
-        void LoadInterstitial(string adUnitId);
-        void LoadRewarded(string adUnitId);
-        void LoadAppOpen(string adUnitId);
+        void LoadInterstitial(string adUnitKey);
+        void LoadRewarded(string adUnitKey);
+        void LoadAppOpen(string adUnitKey);
 
-        bool IsInterstitialReady(string adUnitId);
-        bool IsRewardedReady(string adUnitId);
-        bool IsAppOpenReady(string adUnitId);
+        bool IsInterstitialReady(string adUnitKey);
+        bool IsRewardedReady(string adUnitKey);
+        bool IsAppOpenReady(string adUnitKey);
 
-        void ShowInterstitial(string adUnitId);
-        void ShowRewarded(string adUnitId);
-        void ShowAppOpen(string adUnitId);
+        void ShowInterstitial(string adUnitKey);
+        void ShowRewarded(string adUnitKey);
+        void ShowAppOpen(string adUnitKey);
 
-        void DestroyInterstitial(string adUnitId);
-        void DestroyRewarded(string adUnitId);
-        void DestroyAppOpen(string adUnitId);
+        void DestroyInterstitial(string adUnitKey);
+        void DestroyRewarded(string adUnitKey);
+        void DestroyAppOpen(string adUnitKey);
 
-        void SetRewardedCustomData(string adUnitId, string customData);
+        void SetRewardedCustomData(string adUnitKey, string customData);
 
         // ── Banner ad operations (always-on overlay) ──────────────────────
         // Size baked at Load (DaroBannerAdView 가 ctor 시점에 size 고정).
         // Position 은 Show 후에도 변경 가능.
-        void CreateBanner(string adUnitId);
-        void LoadBanner(string adUnitId, DaroBannerSize size);
-        void ShowBanner(string adUnitId);
-        void HideBanner(string adUnitId);
-        void DestroyBanner(string adUnitId);
-        void SetBannerPosition(string adUnitId, DaroBannerPosition position);
+        void CreateBanner(string adUnitKey);
+        void LoadBanner(string adUnitKey, DaroBannerSize size);
+        void ShowBanner(string adUnitKey);
+        void HideBanner(string adUnitKey);
+        void DestroyBanner(string adUnitKey);
+        void SetBannerPosition(string adUnitKey, DaroBannerPosition position);
 
         // Banner footprint — the laid-out native banner view's actual on-screen
         // rect in Unity screen px (bottom-left origin, Screen.safeArea
         // convention). Returns false (rect = default) if not yet laid out / not
-        // shown / unknown adUnitId. Backs DaroBannerAd.GetScreenRect.
-        bool TryGetBannerScreenRect(string adUnitId, out Rect rect);
+        // shown / unknown adUnitKey. Backs DaroBannerAd.GetScreenRect.
+        bool TryGetBannerScreenRect(string adUnitKey, out Rect rect);
 
         // ── Light Popup ad operations ─────────────────────────────────────
         // Options baked at Create time (immutable per instance). Mirrors the v1 fullscreen
         // 5-method mold (Create / Load / IsReady / Show / Destroy).
-        void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options);
-        void LoadLightPopup(string adUnitId);
-        bool IsLightPopupReady(string adUnitId);
-        void ShowLightPopup(string adUnitId);
-        void DestroyLightPopup(string adUnitId);
+        void CreateLightPopup(string adUnitKey, DaroLightPopupAdOptions? options);
+        void LoadLightPopup(string adUnitKey);
+        bool IsLightPopupReady(string adUnitKey);
+        void ShowLightPopup(string adUnitKey);
+        void DestroyLightPopup(string adUnitKey);
 
         // ── Native ad (instance-owned) ──────────────────────────────
-        // Native ad uses a *per-instance handle* instead of the adUnitId-keyed
+        // Native ad uses a *per-instance handle* instead of the adUnitKey-keyed
         // dict pattern of Interstitial / Rewarded / AppOpen / Banner. This
-        // permits multi-instance for the same adUnitId (list UI use case).
+        // permits multi-instance for the same adUnitKey (list UI use case).
         // Each handle owns its own native loader + callback proxy; routing
         // is per-instance via the supplied INativeAdEventSink. No platform
         // event slots required for native — the sink replaces them.
 
-        INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink);
+        INativeAdHandle CreateNativeAdHandle(string adUnitKey, INativeAdEventSink sink);
 
         // ── Event callbacks (set once by DaroSdk; fire on main thread) ────
-        // string adUnitId routes to the correct ad instance.
+        // string adUnitKey routes to the correct ad instance.
         Action<string, DaroAdInfo>?                 OnAdLoaded       { set; }
         Action<string, DaroAdLoadError>?            OnAdFailedToLoad { set; }
         Action<string, DaroAdInfo>?                 OnAdShown        { set; }

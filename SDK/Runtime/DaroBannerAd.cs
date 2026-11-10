@@ -12,7 +12,7 @@ namespace Daro
     /// auto-refresh internally.
     /// </summary>
     /// <remarks>
-    /// <para>One instance per <c>adUnitId</c>; duplicate construction destroys +
+    /// <para>One instance per <c>adUnitKey</c>; duplicate construction destroys +
     /// replaces the prior instance (matching the Interstitial replace rule).
     /// The first instance becomes a stale C# object — caller must not retain it.</para>
     ///
@@ -45,7 +45,7 @@ namespace Daro
     public sealed class DaroBannerAd : IDisposable
     {
         // ── Identity ─────────────────────────────────────────────────────
-        public string             AdUnitId  { get; }
+        public string             AdUnitKey  { get; }
         public DaroBannerSize     Size      { get; }
         public DaroBannerPosition Position  { get; private set; }
 
@@ -93,30 +93,30 @@ namespace Daro
         private bool _hiddenReportable;
 
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
         public DaroBannerAd(
-            string adUnitId,
+            string adUnitKey,
             DaroBannerSize size = DaroBannerSize.Standard,
             DaroBannerPosition position = DaroBannerPosition.BottomCenter)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
             Size      = size;
             Position  = position;
 
             // Platform handles native create + the "replace prior instance" rule;
             // registry serializes same-adUnit create/destroy.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
-                DaroAdFormat.Banner, AdUnitId, this,
-                () => DaroPlatform.Current.CreateBanner(AdUnitId));
-            DaroLog.Verbose("Banner", $"ctor adUnit='{AdUnitId}' size={Size} position={Position}");
+                DaroAdFormat.Banner, AdUnitKey, this,
+                () => DaroPlatform.Current.CreateBanner(AdUnitKey));
+            DaroLog.Verbose("Banner", $"ctor adUnit='{AdUnitKey}' size={Size} position={Position}");
         }
 
         /// <summary>
@@ -129,18 +129,18 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("Banner",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
-            DaroLog.Verbose("Banner", $"Load adUnit='{AdUnitId}' size={Size}");
+            DaroLog.Verbose("Banner", $"Load adUnit='{AdUnitKey}' size={Size}");
             _loaded = false;
             _visibleIntent = true;
             _shownReported = false;
-            DaroPlatform.Current.LoadBanner(AdUnitId, Size);
+            DaroPlatform.Current.LoadBanner(AdUnitKey, Size);
         }
 
         /// <summary>
@@ -160,18 +160,18 @@ namespace Daro
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
             if (!_loaded)
-                throw new InvalidOperationException($"Banner ad not ready: {AdUnitId}");
+                throw new InvalidOperationException($"Banner ad not ready: {AdUnitKey}");
 
-            DaroLog.Verbose("Banner", $"Show adUnit='{AdUnitId}' position={Position}");
+            DaroLog.Verbose("Banner", $"Show adUnit='{AdUnitKey}' position={Position}");
             if (_visibleIntent)
             {
-                DaroLog.Verbose("Banner", $"Show no-op adUnit='{AdUnitId}' already visible");
+                DaroLog.Verbose("Banner", $"Show no-op adUnit='{AdUnitKey}' already visible");
                 if (!_dispatchingLoad) FireOnAdShownIfNeeded();
                 return;
             }
 
             _visibleIntent = true;
-            DaroPlatform.Current.ShowBanner(AdUnitId);
+            DaroPlatform.Current.ShowBanner(AdUnitKey);
             if (!_dispatchingLoad) FireOnAdShownIfNeeded();
         }
 
@@ -184,10 +184,10 @@ namespace Daro
         public void Hide()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
-            DaroLog.Verbose("Banner", $"Hide adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Banner", $"Hide adUnit='{AdUnitKey}'");
             _visibleIntent = false;
             _shownReported = false;
-            DaroPlatform.Current.HideBanner(AdUnitId);
+            DaroPlatform.Current.HideBanner(AdUnitKey);
         }
 
         /// <summary>
@@ -198,9 +198,9 @@ namespace Daro
         public void SetPosition(DaroBannerPosition position)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
-            DaroLog.Verbose("Banner", $"SetPosition adUnit='{AdUnitId}' position={position}");
+            DaroLog.Verbose("Banner", $"SetPosition adUnit='{AdUnitKey}' position={position}");
             Position = position;
-            DaroPlatform.Current.SetBannerPosition(AdUnitId, position);
+            DaroPlatform.Current.SetBannerPosition(AdUnitKey, position);
         }
 
         /// <summary>
@@ -235,7 +235,7 @@ namespace Daro
         {
             if (_disposed) return null;
             if (!_visibleIntent) return null;
-            return DaroPlatform.Current.TryGetBannerScreenRect(AdUnitId, out var rect)
+            return DaroPlatform.Current.TryGetBannerScreenRect(AdUnitKey, out var rect)
                 ? rect
                 : (Rect?)null;
         }
@@ -268,7 +268,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("Banner", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("Banner", $"Dispose adUnit='{AdUnitKey}'");
 
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
@@ -287,8 +287,8 @@ namespace Daro
             {
                 DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
                     DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                        DaroAdFormat.Banner, AdUnitId, this, _registryGeneration,
-                        () => platform.DestroyBanner(AdUnitId)));
+                        DaroAdFormat.Banner, AdUnitKey, this, _registryGeneration,
+                        () => platform.DestroyBanner(AdUnitKey)));
             }
             catch (Exception e)
             {
@@ -299,7 +299,7 @@ namespace Daro
                 // finalizer-safe — guarantee preserved by delegation.
                 if (DaroSdk.LogLevel >= DaroLogLevel.Warn)
                     DaroLog.WarnFinalizerSafe(
-                        $"[Daro:Banner] DestroyBanner({AdUnitId}) threw during Dispose: {e}");
+                        $"[Daro:Banner] DestroyBanner({AdUnitKey}) threw during Dispose: {e}");
             }
         }
 
@@ -318,10 +318,10 @@ namespace Daro
             if (suppressHiddenReloadEvent)
             {
                 DaroLog.Verbose("Banner",
-                    $"Suppress hidden refresh OnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+                    $"Suppress hidden refresh OnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
                 return;
             }
-            DaroLog.Verbose("Banner", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+            DaroLog.Verbose("Banner", $"FireOnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
             _dispatchingLoad = true;
             try
             {
@@ -343,7 +343,7 @@ namespace Daro
             _shownReported = false;
             _dispatchingLoad = false;
             _hiddenReportable = false;
-            DaroLog.Verbose("Banner", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("Banner", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
@@ -353,30 +353,30 @@ namespace Daro
 
             _shownReported = true;
             _hiddenReportable = true;
-            DaroLog.Verbose("Banner", $"FireOnAdShown adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Banner", $"FireOnAdShown adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdShown,
-                new DaroAdInfo(DaroAdFormat.Banner, AdUnitId, latency: null,
+                new DaroAdInfo(DaroAdFormat.Banner, AdUnitKey, latency: null,
                     _lastLoadedInfo?.MediationPlatform, _lastLoadedInfo?.AdNetwork));
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed || !_loaded || !_visibleIntent) return;
-            DaroLog.Verbose("Banner", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Banner", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed || !_loaded || !_visibleIntent) return;
-            DaroLog.Verbose("Banner", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Banner", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed || !_loaded) return;
-            DaroLog.Verbose("Banner", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("Banner", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
 
@@ -384,7 +384,7 @@ namespace Daro
         {
             if (_disposed || !_hiddenReportable || _visibleIntent) return;
             _hiddenReportable = false;
-            DaroLog.Verbose("Banner", $"FireOnAdHidden adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Banner", $"FireOnAdHidden adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdHidden, info);
         }
     }

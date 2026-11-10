@@ -8,13 +8,13 @@ namespace Daro
 {
     /// <summary>
     /// Interstitial ad instance.
-    /// One instance per <c>adUnitId</c>; duplicate construction replaces the
+    /// One instance per <c>adUnitKey</c>; duplicate construction replaces the
     /// prior instance (platform layer destroys + recreates the native handle,
     /// registry overwrites the mapping).
     /// </summary>
     public sealed class DaroInterstitialAd : IDisposable
     {
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         public event Action<DaroAdInfo>?         OnAdLoaded;
         public event Action<DaroAdLoadError>?    OnAdFailedToLoad;
@@ -46,29 +46,29 @@ namespace Daro
         private long _registryGeneration;
 
         /// <summary>
-        /// Construct an interstitial ad instance bound to <paramref name="adUnitId"/>.
+        /// Construct an interstitial ad instance bound to <paramref name="adUnitKey"/>.
         /// </summary>
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroInterstitialAd(string adUnitId)
+        public DaroInterstitialAd(string adUnitKey)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
 
             // Platform handles native create + the "replace prior instance"
             // rule; registry serializes same-adUnit create/destroy so
             // stale finalizers cannot destroy the new platform state.
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
-                DaroAdFormat.Interstitial, AdUnitId, this,
-                () => DaroPlatform.Current.CreateInterstitial(AdUnitId));
-            DaroLog.Verbose("Interstitial", $"ctor adUnit='{AdUnitId}'");
+                DaroAdFormat.Interstitial, AdUnitKey, this,
+                () => DaroPlatform.Current.CreateInterstitial(AdUnitKey));
+            DaroLog.Verbose("Interstitial", $"ctor adUnit='{AdUnitKey}'");
         }
 
         /// <summary>
@@ -83,15 +83,15 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroInterstitialAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("Interstitial",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
-            DaroLog.Verbose("Interstitial", $"Load adUnit='{AdUnitId}'");
-            DaroPlatform.Current.LoadInterstitial(AdUnitId);
+            DaroLog.Verbose("Interstitial", $"Load adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.LoadInterstitial(AdUnitKey);
         }
 
         /// <summary>
@@ -102,7 +102,7 @@ namespace Daro
         public bool IsReady()
         {
             if (_disposed) return false;
-            return DaroPlatform.Current.IsInterstitialReady(AdUnitId);
+            return DaroPlatform.Current.IsInterstitialReady(AdUnitKey);
         }
 
         /// <summary>
@@ -121,11 +121,11 @@ namespace Daro
 
             if (!IsReady())
             {
-                throw new InvalidOperationException($"Ad not ready: {AdUnitId}");
+                throw new InvalidOperationException($"Ad not ready: {AdUnitKey}");
             }
 
-            DaroLog.Verbose("Interstitial", $"Show adUnit='{AdUnitId}'");
-            DaroPlatform.Current.ShowInterstitial(AdUnitId);
+            DaroLog.Verbose("Interstitial", $"Show adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.ShowInterstitial(AdUnitKey);
         }
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("Interstitial", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("Interstitial", $"Dispose adUnit='{AdUnitKey}'");
 
                 // Null the event backing fields to release consumer delegate
                 // refs. Handlers that are already captured by an in-flight
@@ -177,8 +177,8 @@ namespace Daro
             {
                 DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
                     DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                        DaroAdFormat.Interstitial, AdUnitId, this, _registryGeneration,
-                        () => platform.DestroyInterstitial(AdUnitId)));
+                        DaroAdFormat.Interstitial, AdUnitKey, this, _registryGeneration,
+                        () => platform.DestroyInterstitial(AdUnitKey)));
             }
             catch (Exception e)
             {
@@ -189,7 +189,7 @@ namespace Daro
                 // finalizer-safe — guarantee preserved by delegation.
                 if (DaroSdk.LogLevel >= DaroLogLevel.Warn)
                     DaroLog.WarnFinalizerSafe(
-                        $"[Daro:Interstitial] DestroyInterstitial({AdUnitId}) threw during Dispose: {e}");
+                        $"[Daro:Interstitial] DestroyInterstitial({AdUnitKey}) threw during Dispose: {e}");
             }
         }
 
@@ -202,56 +202,56 @@ namespace Daro
         internal void FireOnAdLoaded(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+            DaroLog.Verbose("Interstitial", $"FireOnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, info);
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("Interstitial", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
         internal void FireOnAdShown(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdShown adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Interstitial", $"FireOnAdShown adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdShown, info);
         }
 
         internal void FireOnAdFailedToShow(DaroAdDisplayError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdFailedToShow adUnit='{AdUnitId}' code={error.Code}");
+            DaroLog.Verbose("Interstitial", $"FireOnAdFailedToShow adUnit='{AdUnitKey}' code={error.Code}");
             SafeEventInvoker.Invoke(OnAdFailedToShow, error);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Interstitial", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Interstitial", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdDismissed(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdDismissed adUnit='{AdUnitId}'");
+            DaroLog.Verbose("Interstitial", $"FireOnAdDismissed adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed) return;
-            DaroLog.Verbose("Interstitial", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("Interstitial", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }

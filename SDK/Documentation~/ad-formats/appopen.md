@@ -11,12 +11,12 @@ using UnityEngine;
 
 public sealed class AppOpenHost : MonoBehaviour
 {
-    [SerializeField] private string _adUnitId = "your-appopen-ad-unit-id";
+    [SerializeField] private string _adUnitKey = "your-appopen-ad-unit-id";
     private DaroAppOpenAd _ad;
 
     private void OnEnable()
     {
-        _ad = new DaroAppOpenAd(_adUnitId);
+        _ad = new DaroAppOpenAd(_adUnitKey);
 
         _ad.OnAdLoaded       += info => Debug.Log("appopen loaded");
         _ad.OnAdFailedToLoad += err  => Debug.LogWarning($"load failed: {err.Message}");

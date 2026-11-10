@@ -13,7 +13,7 @@ namespace Daro.Internal
     /// <remarks>
     /// <para>Multi-instance: each <c>DaroNativeAd</c> creates its own handle, with
     /// its own coroutine + own mock asset. N concurrent handles for the same
-    /// <c>adUnitId</c> all run independently — no shared state.</para>
+    /// <c>adUnitKey</c> all run independently — no shared state.</para>
     ///
     /// <para>Settings snapshot pattern (mirrors <c>DaroEditorPlatform.LoadCoroutine</c>):
     /// settings are captured at coroutine start so mid-delay Inspector tweaks don't
@@ -26,7 +26,7 @@ namespace Daro.Internal
     /// </remarks>
     internal sealed class DaroEditorNativeAdHandle : INativeAdHandle
     {
-        private readonly string             _adUnitId;
+        private readonly string             _adUnitKey;
         private readonly INativeAdEventSink _sink;
         private readonly DaroEditorSettings _settings;
         private bool _disposed;
@@ -37,11 +37,11 @@ namespace Daro.Internal
         internal int ClearCtaScreenRectCallCount { get; private set; }
 
         internal DaroEditorNativeAdHandle(
-            string adUnitId,
+            string adUnitKey,
             INativeAdEventSink sink,
             DaroEditorSettings settings)
         {
-            _adUnitId = adUnitId;
+            _adUnitKey = adUnitKey;
             _sink     = sink;
             _settings = settings;
         }
@@ -82,7 +82,7 @@ namespace Daro.Internal
             // iconWidth/iconHeight ignored in mock — Editor doesn't run MAX/Glide
             // sizing logic; mock asset is hard-coded 64×64 magenta. Real
             // dimension flow exercised on device via DaroAndroidNativeAdHandle.
-            DaroLog.Verbose("Native", $"Handle[Editor].Load adUnit='{_adUnitId}' icon={iconWidth}x{iconHeight} disposed={_disposed}");
+            DaroLog.Verbose("Native", $"Handle[Editor].Load adUnit='{_adUnitKey}' icon={iconWidth}x{iconHeight} disposed={_disposed}");
             if (_disposed) return;
             MainThreadDispatcher.EnsureCreated();
             MainThreadDispatcher.RunCoroutine(SimulateLoad());
@@ -109,8 +109,8 @@ namespace Daro.Internal
 
                 // -1 sentinel → null latency; positive → millis as-is.
                 double? latency = latencyMs < 0 ? (double?)null : latencyMs;
-                var adInfo     = new DaroAdInfo(DaroAdFormat.Native, _adUnitId, latency);
-                var nativeInfo = BuildMockNativeAdInfo(_adUnitId);
+                var adInfo     = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency);
+                var nativeInfo = BuildMockNativeAdInfo(_adUnitKey);
 
                 MainThreadDispatcher.Enqueue(() =>
                 {
@@ -121,7 +121,7 @@ namespace Daro.Internal
             else
             {
                 var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
-                var err    = new DaroAdLoadError(mapped, errorMessage, _adUnitId, errorCode);
+                var err    = new DaroAdLoadError(mapped, errorMessage, _adUnitKey, errorCode);
 
                 MainThreadDispatcher.Enqueue(() =>
                 {
@@ -133,13 +133,13 @@ namespace Daro.Internal
 
         public void NotifyVisible()
         {
-            DaroLog.Verbose("Native", $"Handle[Editor].NotifyVisible adUnit='{_adUnitId}' disposed={_disposed} loaded={_loaded}");
+            DaroLog.Verbose("Native", $"Handle[Editor].NotifyVisible adUnit='{_adUnitKey}' disposed={_disposed} loaded={_loaded}");
             if (_disposed || !_loaded) return;
             // Mock impression: fire only when a load has succeeded; matches
             // device behavior where MAX revenue listener requires a loaded ad.
             // Revenue follows the impression — device contract reports revenue
             // at didPayRevenue (= impression) time.
-            var info    = new DaroAdInfo(DaroAdFormat.Native, _adUnitId, latency: null);
+            var info    = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency: null);
             var revenue = DaroRevenueInfo.FromMicros(
                 _settings.revenueValueMicros,
                 _settings.revenueCurrencyCode ?? "USD",
@@ -154,15 +154,15 @@ namespace Daro.Internal
 
         public void NotifyHidden()
         {
-            DaroLog.Verbose("Native", $"Handle[Editor].NotifyHidden adUnit='{_adUnitId}' (mock no-op)");
+            DaroLog.Verbose("Native", $"Handle[Editor].NotifyHidden adUnit='{_adUnitKey}' (mock no-op)");
             // Mock: no-op — visibility-hidden doesn't affect impression accounting.
         }
 
         public void NotifyClicked()
         {
-            DaroLog.Verbose("Native", $"Handle[Editor].NotifyClicked adUnit='{_adUnitId}' disposed={_disposed} loaded={_loaded}");
+            DaroLog.Verbose("Native", $"Handle[Editor].NotifyClicked adUnit='{_adUnitKey}' disposed={_disposed} loaded={_loaded}");
             if (_disposed || !_loaded) return;
-            var info = new DaroAdInfo(DaroAdFormat.Native, _adUnitId, latency: null);
+            var info = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency: null);
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (_disposed) return;
@@ -177,25 +177,25 @@ namespace Daro.Internal
         {
             _ctaRectCalls.Add(new CtaRectCall(rect, touchEnabled));
             DaroLog.Verbose("Native",
-                $"Handle[Editor].SetCtaScreenRect adUnit='{_adUnitId}' rect={rect} touchEnabled={touchEnabled} (mock no-op)");
+                $"Handle[Editor].SetCtaScreenRect adUnit='{_adUnitKey}' rect={rect} touchEnabled={touchEnabled} (mock no-op)");
         }
 
         public void ClearCtaScreenRect()
         {
             ClearCtaScreenRectCallCount += 1;
             DaroLog.Verbose("Native",
-                $"Handle[Editor].ClearCtaScreenRect adUnit='{_adUnitId}' (mock no-op)");
+                $"Handle[Editor].ClearCtaScreenRect adUnit='{_adUnitKey}' (mock no-op)");
         }
 
         public void Dispose()
         {
-            DaroLog.Verbose("Native", $"Handle[Editor].Dispose adUnit='{_adUnitId}'");
+            DaroLog.Verbose("Native", $"Handle[Editor].Dispose adUnit='{_adUnitKey}'");
             // Coroutine self-cancels at next yield resume via the _disposed gate.
             // No explicit StopCoroutine — keeps cleanup contention-free.
             _disposed = true;
         }
 
-        private static DaroNativeAdInfo BuildMockNativeAdInfo(string adUnitId)
+        private static DaroNativeAdInfo BuildMockNativeAdInfo(string adUnitKey)
         {
             // 64×64 magenta — obviously not a real ad; visible in Editor for verification.
             // Texture2D.Destroy in DaroNativeAd.Dispose handles cleanup.
@@ -206,7 +206,7 @@ namespace Daro.Internal
             icon.Apply();
 
             return new DaroNativeAdInfo(
-                title:        $"[Mock Ad] {adUnitId}",
+                title:        $"[Mock Ad] {adUnitKey}",
                 body:         "This is an Editor mock native ad.",
                 callToAction: "Learn More",
                 icon:         icon,

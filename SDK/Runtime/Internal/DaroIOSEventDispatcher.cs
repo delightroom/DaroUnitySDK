@@ -15,16 +15,16 @@ namespace Daro.Internal
     /// </remarks>
     internal interface IDaroIosEventSink
     {
-        void Loaded(string adUnitId, DaroAdInfo info);
-        void FailedToLoad(string adUnitId, DaroAdLoadError error);
-        void Shown(string adUnitId, DaroAdInfo info);
-        void FailedToShow(string adUnitId, DaroAdDisplayError error);
-        void Clicked(string adUnitId, DaroAdInfo info);
-        void Impression(string adUnitId, DaroAdInfo info);
-        void Hidden(string adUnitId, DaroAdInfo info);
-        void Dismissed(string adUnitId, DaroAdInfo info);
-        void EarnedReward(string adUnitId, DaroAdInfo info, DaroRewardItem reward);
-        void RevenuePaid(string adUnitId, DaroAdInfo info, DaroRevenueInfo revenue);
+        void Loaded(string adUnitKey, DaroAdInfo info);
+        void FailedToLoad(string adUnitKey, DaroAdLoadError error);
+        void Shown(string adUnitKey, DaroAdInfo info);
+        void FailedToShow(string adUnitKey, DaroAdDisplayError error);
+        void Clicked(string adUnitKey, DaroAdInfo info);
+        void Impression(string adUnitKey, DaroAdInfo info);
+        void Hidden(string adUnitKey, DaroAdInfo info);
+        void Dismissed(string adUnitKey, DaroAdInfo info);
+        void EarnedReward(string adUnitKey, DaroAdInfo info, DaroRewardItem reward);
+        void RevenuePaid(string adUnitKey, DaroAdInfo info, DaroRevenueInfo revenue);
         void SdkInitialized();
         void SdkInitFailed(DaroSdkInitException ex);
     }
@@ -40,7 +40,7 @@ namespace Daro.Internal
     /// <para>Behavior contract (verified by <c>DaroIOSEventDispatcherTests</c>):</para>
     /// <list type="bullet">
     ///   <item>Unknown event names → silent drop (forward-compat with future shim additions).</item>
-    ///   <item>Event for adUnitId that <see cref="DaroAdInstanceRegistry"/> does not have →
+    ///   <item>Event for adUnitKey that <see cref="DaroAdInstanceRegistry"/> does not have →
     ///         silent drop (handles in-flight callbacks after <c>Destroy</c>).</item>
     ///   <item><c>__sdk__</c> sentinel → <see cref="IDaroIosEventSink.SdkInitialized"/> /
     ///         <see cref="IDaroIosEventSink.SdkInitFailed"/>; never goes through registry check.</item>
@@ -49,26 +49,26 @@ namespace Daro.Internal
     /// </remarks>
     internal static class DaroIOSEventDispatcher
     {
-        internal const string SdkSentinelAdUnitId = "__sdk__";
+        internal const string SdkSentinelAdUnitKey = "__sdk__";
 
         /// <summary>
         /// Parse <paramref name="eventJson"/> and forward into the sink.
         /// Never throws — malformed payloads / unknown events / unregistered
-        /// adUnitIds all degrade to silent drop.
+        /// adUnitKeys all degrade to silent drop.
         /// </summary>
         /// <summary>
         /// shim JSON 한 건에서 <see cref="DaroAdInfo"/> 를 만든다 — 이 디스패처 8곳과
         /// <c>DaroIOSNativeAdHandle</c> 4곳이 같은 키를 읽는다. 키가 늘거나 이름이 바뀌면 여기 한 곳이다.
         /// <c>mediationPlatform</c> · <c>adNetwork</c> 는 없으면 null.
         /// </summary>
-        internal static DaroAdInfo ReadAdInfo(string eventJson, DaroAdFormat format, string adUnitId) =>
+        internal static DaroAdInfo ReadAdInfo(string eventJson, DaroAdFormat format, string adUnitKey) =>
             new DaroAdInfo(
-                format, adUnitId,
+                format, adUnitKey,
                 DaroJsonHelpers.GetJsonDouble(eventJson, "latency"),
                 DaroJsonHelpers.GetJsonString(eventJson, "mediationPlatform"),
                 DaroJsonHelpers.GetJsonString(eventJson, "adNetwork"));
 
-        internal static void Dispatch(string adUnitId, string eventJson, IDaroIosEventSink sink)
+        internal static void Dispatch(string adUnitKey, string eventJson, IDaroIosEventSink sink)
         {
             if (sink == null) return;
             if (eventJson == null) return;
@@ -77,7 +77,7 @@ namespace Daro.Internal
             if (evt == null) return;
 
             // SDK lifecycle sentinel — bypasses registry routing.
-            if (adUnitId == SdkSentinelAdUnitId)
+            if (adUnitKey == SdkSentinelAdUnitKey)
             {
                 if (evt == "sdkInitialized")
                 {
@@ -110,28 +110,28 @@ namespace Daro.Internal
             var adFormat = (DaroAdFormat)adFormatInt;
 
             // Registry gate — dropped instances no-op.
-            if (DaroAdInstanceRegistry.Find<object>(adFormat, adUnitId) == null) return;
+            if (DaroAdInstanceRegistry.Find<object>(adFormat, adUnitKey) == null) return;
 
             switch (evt)
             {
                 case "adLoaded":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Loaded(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Loaded(adUnitKey, info));
                     break;
                 }
                 case "adFailedToLoad":
                 {
                     var raw  = DaroJsonHelpers.GetJsonInt(eventJson, "errorCode");
                     var msg  = DaroJsonHelpers.GetJsonString(eventJson, "errorMessage") ?? string.Empty;
-                    var err  = new DaroAdLoadError(DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitId, raw);
-                    Safely(() => sink.FailedToLoad(adUnitId, err));
+                    var err  = new DaroAdLoadError(DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitKey, raw);
+                    Safely(() => sink.FailedToLoad(adUnitKey, err));
                     break;
                 }
                 case "adShown":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Shown(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Shown(adUnitKey, info));
                     break;
                 }
                 case "adFailedToShow":
@@ -139,50 +139,50 @@ namespace Daro.Internal
                     var raw  = DaroJsonHelpers.GetJsonInt(eventJson, "errorCode");
                     var msg  = DaroJsonHelpers.GetJsonString(eventJson, "errorMessage") ?? string.Empty;
                     var err  = new DaroAdDisplayError(DaroAdErrorCodeMapper.ToDisplayErrorCode(raw), msg, raw);
-                    Safely(() => sink.FailedToShow(adUnitId, err));
+                    Safely(() => sink.FailedToShow(adUnitKey, err));
                     break;
                 }
                 case "adClicked":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Clicked(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Clicked(adUnitKey, info));
                     break;
                 }
                 case "adImpression":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Impression(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Impression(adUnitKey, info));
                     break;
                 }
                 case "adHidden":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Hidden(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Hidden(adUnitKey, info));
                     break;
                 }
                 case "adDismissed":
                 {
-                    var info = ReadAdInfo(eventJson, adFormat, adUnitId);
-                    Safely(() => sink.Dismissed(adUnitId, info));
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Dismissed(adUnitKey, info));
                     break;
                 }
                 case "earnedReward":
                 {
-                    var info   = ReadAdInfo(eventJson, adFormat, adUnitId);
+                    var info   = ReadAdInfo(eventJson, adFormat, adUnitKey);
                     var amount = DaroJsonHelpers.GetJsonInt(eventJson, "rewardAmount");
                     var type   = DaroJsonHelpers.GetJsonString(eventJson, "rewardType") ?? string.Empty;
                     var reward = new DaroRewardItem(amount, type);
-                    Safely(() => sink.EarnedReward(adUnitId, info, reward));
+                    Safely(() => sink.EarnedReward(adUnitKey, info, reward));
                     break;
                 }
                 case "adRevenuePaid":
                 {
-                    var info      = ReadAdInfo(eventJson, adFormat, adUnitId);
+                    var info      = ReadAdInfo(eventJson, adFormat, adUnitKey);
                     var micros    = DaroJsonHelpers.GetJsonLong(eventJson, "valueMicros");
                     var currency  = DaroJsonHelpers.GetJsonString(eventJson, "currencyCode") ?? "USD";
                     var precision = DaroJsonHelpers.GetJsonInt(eventJson, "precisionType");
                     var revenue   = DaroRevenueInfo.FromMicros(micros, currency, precision);
-                    Safely(() => sink.RevenuePaid(adUnitId, info, revenue));
+                    Safely(() => sink.RevenuePaid(adUnitKey, info, revenue));
                     break;
                 }
                 // unknown event → silent drop

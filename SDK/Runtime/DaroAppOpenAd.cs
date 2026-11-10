@@ -14,7 +14,7 @@ namespace Daro
     /// </summary>
     public sealed class DaroAppOpenAd : IDisposable
     {
-        public string  AdUnitId  { get; }
+        public string  AdUnitKey  { get; }
 
         public event Action<DaroAdInfo>?         OnAdLoaded;
         public event Action<DaroAdLoadError>?    OnAdFailedToLoad;
@@ -38,26 +38,26 @@ namespace Daro
         internal bool IsDisposed => _disposed;
 
         /// <summary>
-        /// Construct an app open ad instance bound to <paramref name="adUnitId"/>.
+        /// Construct an app open ad instance bound to <paramref name="adUnitKey"/>.
         /// </summary>
         /// <exception cref="ArgumentException">
-        /// Thrown if <paramref name="adUnitId"/> is null, empty, or whitespace.
+        /// Thrown if <paramref name="adUnitKey"/> is null, empty, or whitespace.
         /// </exception>
-        public DaroAppOpenAd(string adUnitId)
+        public DaroAppOpenAd(string adUnitKey)
         {
-            if (string.IsNullOrWhiteSpace(adUnitId))
+            if (string.IsNullOrWhiteSpace(adUnitKey))
             {
                 throw new ArgumentException(
-                    "adUnitId must be a non-empty, non-whitespace string.",
-                    nameof(adUnitId));
+                    "adUnitKey must be a non-empty, non-whitespace string.",
+                    nameof(adUnitKey));
             }
 
-            AdUnitId  = adUnitId;
+            AdUnitKey  = adUnitKey;
 
             _registryGeneration = DaroAdInstanceRegistry.CreateAndRegister(
-                DaroAdFormat.AppOpen, AdUnitId, this,
-                () => DaroPlatform.Current.CreateAppOpen(AdUnitId));
-            DaroLog.Verbose("AppOpen", $"ctor adUnit='{AdUnitId}'");
+                DaroAdFormat.AppOpen, AdUnitKey, this,
+                () => DaroPlatform.Current.CreateAppOpen(AdUnitKey));
+            DaroLog.Verbose("AppOpen", $"ctor adUnit='{AdUnitKey}'");
         }
 
         /// <summary>
@@ -69,15 +69,15 @@ namespace Daro
         public void Load()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DaroAppOpenAd));
-            if (!AdLoadPreconditions.TryCheck(AdUnitId, out var preconditionError))
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
             {
                 DaroLog.Warn("AppOpen",
-                    $"Load short-circuited adUnit='{AdUnitId}' code={preconditionError!.Code} ({preconditionError.Message})");
+                    $"Load short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
                 FireOnAdFailedToLoad(preconditionError);
                 return;
             }
-            DaroLog.Verbose("AppOpen", $"Load adUnit='{AdUnitId}'");
-            DaroPlatform.Current.LoadAppOpen(AdUnitId);
+            DaroLog.Verbose("AppOpen", $"Load adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.LoadAppOpen(AdUnitKey);
         }
 
         /// <summary>
@@ -87,7 +87,7 @@ namespace Daro
         public bool IsReady()
         {
             if (_disposed) return false;
-            return DaroPlatform.Current.IsAppOpenReady(AdUnitId);
+            return DaroPlatform.Current.IsAppOpenReady(AdUnitKey);
         }
 
         /// <summary>
@@ -105,11 +105,11 @@ namespace Daro
 
             if (!IsReady())
             {
-                throw new InvalidOperationException($"Ad not ready: {AdUnitId}");
+                throw new InvalidOperationException($"Ad not ready: {AdUnitKey}");
             }
 
-            DaroLog.Verbose("AppOpen", $"Show adUnit='{AdUnitId}'");
-            DaroPlatform.Current.ShowAppOpen(AdUnitId);
+            DaroLog.Verbose("AppOpen", $"Show adUnit='{AdUnitKey}'");
+            DaroPlatform.Current.ShowAppOpen(AdUnitKey);
         }
 
         /// <summary>
@@ -133,7 +133,7 @@ namespace Daro
 
             if (disposing)
             {
-                DaroLog.Verbose("AppOpen", $"Dispose adUnit='{AdUnitId}'");
+                DaroLog.Verbose("AppOpen", $"Dispose adUnit='{AdUnitKey}'");
 
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
@@ -149,13 +149,13 @@ namespace Daro
             {
                 DaroFinalizerRelease.RunPlatformRelease(disposing, platform =>
                     DaroAdInstanceRegistry.ReleasePlatformHandleIfCurrent(
-                        DaroAdFormat.AppOpen, AdUnitId, this, _registryGeneration,
-                        () => platform.DestroyAppOpen(AdUnitId)));
+                        DaroAdFormat.AppOpen, AdUnitKey, this, _registryGeneration,
+                        () => platform.DestroyAppOpen(AdUnitKey)));
             }
             catch (Exception e)
             {
                 DaroLog.Warn("AppOpen",
-                    $"DestroyAppOpen({AdUnitId}) threw during Dispose: {e}");
+                    $"DestroyAppOpen({AdUnitKey}) threw during Dispose: {e}");
             }
         }
 
@@ -164,56 +164,56 @@ namespace Daro
         internal void FireOnAdLoaded(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdLoaded adUnit='{AdUnitId}' latency={info.Latency}");
+            DaroLog.Verbose("AppOpen", $"FireOnAdLoaded adUnit='{AdUnitKey}' latency={info.Latency}");
             SafeEventInvoker.Invoke(OnAdLoaded, info);
         }
 
         internal void FireOnAdFailedToLoad(DaroAdLoadError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdFailedToLoad adUnit='{AdUnitId}' code={error.Code} raw={error.RawCode}");
+            DaroLog.Verbose("AppOpen", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
         }
 
         internal void FireOnAdShown(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdShown adUnit='{AdUnitId}'");
+            DaroLog.Verbose("AppOpen", $"FireOnAdShown adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdShown, info);
         }
 
         internal void FireOnAdFailedToShow(DaroAdDisplayError error)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdFailedToShow adUnit='{AdUnitId}' code={error.Code}");
+            DaroLog.Verbose("AppOpen", $"FireOnAdFailedToShow adUnit='{AdUnitKey}' code={error.Code}");
             SafeEventInvoker.Invoke(OnAdFailedToShow, error);
         }
 
         internal void FireOnAdClicked(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdClicked adUnit='{AdUnitId}'");
+            DaroLog.Verbose("AppOpen", $"FireOnAdClicked adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdClicked, info);
         }
 
         internal void FireOnAdImpression(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdImpression adUnit='{AdUnitId}'");
+            DaroLog.Verbose("AppOpen", $"FireOnAdImpression adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdImpression, info);
         }
 
         internal void FireOnAdDismissed(DaroAdInfo info)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdDismissed adUnit='{AdUnitId}'");
+            DaroLog.Verbose("AppOpen", $"FireOnAdDismissed adUnit='{AdUnitKey}'");
             SafeEventInvoker.Invoke(OnAdDismissed, info);
         }
 
         internal void FireOnAdRevenuePaid(DaroAdInfo info, DaroRevenueInfo revenue)
         {
             if (_disposed) return;
-            DaroLog.Verbose("AppOpen", $"FireOnAdRevenuePaid adUnit='{AdUnitId}' value={revenue.Value} {revenue.CurrencyCode}");
+            DaroLog.Verbose("AppOpen", $"FireOnAdRevenuePaid adUnit='{AdUnitKey}' value={revenue.Value} {revenue.CurrencyCode}");
             SafeEventInvoker.Invoke(OnAdRevenuePaid, info, revenue);
         }
     }

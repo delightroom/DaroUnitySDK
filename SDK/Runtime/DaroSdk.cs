@@ -217,7 +217,7 @@ namespace Daro
             // Wire platform → consumer event plumbing. The IDaroPlatform
             // event setters are set-once by contract, so doing it here — inside
             // the first InitializeAsync call — is exactly the right moment. The
-            // closures route by (format, adUnitId) → instance via the registry;
+            // closures route by (format, adUnitKey) → instance via the registry;
             // each firing method on the instance re-checks `_disposed` at drain
             // time.
             WirePlatformEvents();
@@ -434,9 +434,9 @@ namespace Daro
         {
             var platform = DaroPlatform.Current;
 
-            platform.OnAdLoaded = (adUnitId, info) =>
+            platform.OnAdLoaded = (adUnitKey, info) =>
             {
-                RoutePentaInfo(adUnitId, info,
+                RoutePentaInfo(adUnitKey, info,
                     i  => i.FireOnAdLoaded(info),
                     r  => r.FireOnAdLoaded(info),
                     a  => a.FireOnAdLoaded(info),
@@ -444,28 +444,28 @@ namespace Daro
                     lp => lp.FireOnAdLoaded(info));
             };
 
-            platform.OnAdFailedToLoad = (adUnitId, error) =>
+            platform.OnAdFailedToLoad = (adUnitKey, error) =>
             {
-                RoutePentaLoadError(adUnitId, error);
+                RoutePentaLoadError(adUnitKey, error);
             };
 
-            platform.OnAdShown = (adUnitId, info) =>
+            platform.OnAdShown = (adUnitKey, info) =>
             {
-                RouteFullscreenInfo(adUnitId, info,
+                RouteFullscreenInfo(adUnitKey, info,
                     i  => i.FireOnAdShown(info),
                     r  => r.FireOnAdShown(info),
                     a  => a.FireOnAdShown(info),
                     lp => lp.FireOnAdShown(info));
             };
 
-            platform.OnAdFailedToShow = (adUnitId, error) =>
+            platform.OnAdFailedToShow = (adUnitKey, error) =>
             {
-                RouteFullscreenDisplayError(adUnitId, error);
+                RouteFullscreenDisplayError(adUnitKey, error);
             };
 
-            platform.OnAdClicked = (adUnitId, info) =>
+            platform.OnAdClicked = (adUnitKey, info) =>
             {
-                RoutePentaInfo(adUnitId, info,
+                RoutePentaInfo(adUnitKey, info,
                     i  => i.FireOnAdClicked(info),
                     r  => r.FireOnAdClicked(info),
                     a  => a.FireOnAdClicked(info),
@@ -473,9 +473,9 @@ namespace Daro
                     lp => lp.FireOnAdClicked(info));
             };
 
-            platform.OnAdImpression = (adUnitId, info) =>
+            platform.OnAdImpression = (adUnitKey, info) =>
             {
-                RoutePentaInfo(adUnitId, info,
+                RoutePentaInfo(adUnitKey, info,
                     i  => i.FireOnAdImpression(info),
                     r  => r.FireOnAdImpression(info),
                     a  => a.FireOnAdImpression(info),
@@ -483,42 +483,42 @@ namespace Daro
                     lp => lp.FireOnAdImpression(info));
             };
 
-            platform.OnAdDismissed = (adUnitId, info) =>
+            platform.OnAdDismissed = (adUnitKey, info) =>
             {
-                RouteFullscreenInfo(adUnitId, info,
+                RouteFullscreenInfo(adUnitKey, info,
                     i  => i.FireOnAdDismissed(info),
                     r  => r.FireOnAdDismissed(info),
                     a  => a.FireOnAdDismissed(info),
                     lp => lp.FireOnAdDismissed(info));
             };
 
-            platform.OnEarnedReward = (adUnitId, info, reward) =>
+            platform.OnEarnedReward = (adUnitKey, info, reward) =>
             {
                 // OnEarnedReward is rewarded-only; no interstitial/appopen branch.
                 var rewarded = DaroAdInstanceRegistry.Find<DaroRewardedAd>(
-                    DaroAdFormat.Rewarded, adUnitId);
+                    DaroAdFormat.Rewarded, adUnitKey);
                 if (rewarded == null)
                 {
-                    DaroLog.Verbose("Sdk", $"OnEarnedReward adUnit='{adUnitId}' → no Rewarded instance (registry miss)");
+                    DaroLog.Verbose("Sdk", $"OnEarnedReward adUnit='{adUnitKey}' → no Rewarded instance (registry miss)");
                     return;
                 }
-                DaroLog.Verbose("Sdk", $"OnEarnedReward adUnit='{adUnitId}' reward={reward.Amount} '{reward.RewardType}' → Rewarded");
+                DaroLog.Verbose("Sdk", $"OnEarnedReward adUnit='{adUnitKey}' reward={reward.Amount} '{reward.RewardType}' → Rewarded");
                 rewarded.FireOnEarnedReward(info, reward);
             };
 
-            platform.OnAdHidden = (adUnitId, info) =>
+            platform.OnAdHidden = (adUnitKey, info) =>
             {
                 // OnAdHidden is banner-only; fired from platform impl after Hide
                 // completes (no native callback exists for banner hide).
                 var banner = DaroAdInstanceRegistry.Find<DaroBannerAd>(
-                    DaroAdFormat.Banner, adUnitId);
-                DaroLog.Verbose("Sdk", $"OnAdHidden adUnit='{adUnitId}' → Banner (match={banner != null})");
+                    DaroAdFormat.Banner, adUnitKey);
+                DaroLog.Verbose("Sdk", $"OnAdHidden adUnit='{adUnitKey}' → Banner (match={banner != null})");
                 banner?.FireOnAdHidden(info);
             };
 
-            platform.OnAdRevenuePaid = (adUnitId, info, revenue) =>
+            platform.OnAdRevenuePaid = (adUnitKey, info, revenue) =>
             {
-                RoutePentaInfo(adUnitId, info,
+                RoutePentaInfo(adUnitKey, info,
                     i  => i.FireOnAdRevenuePaid(info, revenue),
                     r  => r.FireOnAdRevenuePaid(info, revenue),
                     a  => a.FireOnAdRevenuePaid(info, revenue),
@@ -531,10 +531,10 @@ namespace Daro
 
         // ── Routing helpers ──────────────────────────────────────────────────
         //
-        // The platform layer emits adUnitId-keyed callbacks without a format
-        // discriminator. Since adUnitId is, in principle, not unique across
+        // The platform layer emits adUnitKey-keyed callbacks without a format
+        // discriminator. Since adUnitKey is, in principle, not unique across
         // formats, we try each format's registry in turn. In practice a
-        // given adUnitId belongs to exactly one format — the registry lookup
+        // given adUnitKey belongs to exactly one format — the registry lookup
         // returns null for the others and each returns-early cleanly.
         //
         // Penta = all 5 formats (Interstitial / Rewarded / AppOpen / Banner /
@@ -546,7 +546,7 @@ namespace Daro
         // Banner Show fires sync from the facade; Banner has no Dismissed concept.
 
         private static void RoutePentaInfo(
-            string adUnitId,
+            string adUnitKey,
             DaroAdInfo info,
             Action<DaroInterstitialAd> onInterstitial,
             Action<DaroRewardedAd>     onRewarded,
@@ -555,55 +555,55 @@ namespace Daro
             Action<DaroLightPopupAd>   onLightPopup)
         {
             var i = DaroAdInstanceRegistry.Find<DaroInterstitialAd>(
-                DaroAdFormat.Interstitial, adUnitId);
-            if (i != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → Interstitial"); onInterstitial(i); return; }
+                DaroAdFormat.Interstitial, adUnitKey);
+            if (i != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → Interstitial"); onInterstitial(i); return; }
 
             var r = DaroAdInstanceRegistry.Find<DaroRewardedAd>(
-                DaroAdFormat.Rewarded, adUnitId);
-            if (r != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → Rewarded"); onRewarded(r); return; }
+                DaroAdFormat.Rewarded, adUnitKey);
+            if (r != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → Rewarded"); onRewarded(r); return; }
 
             var a = DaroAdInstanceRegistry.Find<DaroAppOpenAd>(
-                DaroAdFormat.AppOpen, adUnitId);
-            if (a != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → AppOpen"); onAppOpen(a); return; }
+                DaroAdFormat.AppOpen, adUnitKey);
+            if (a != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → AppOpen"); onAppOpen(a); return; }
 
             var b = DaroAdInstanceRegistry.Find<DaroBannerAd>(
-                DaroAdFormat.Banner, adUnitId);
-            if (b != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → Banner"); onBanner(b); return; }
+                DaroAdFormat.Banner, adUnitKey);
+            if (b != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → Banner"); onBanner(b); return; }
 
             var lp = DaroAdInstanceRegistry.Find<DaroLightPopupAd>(
-                DaroAdFormat.LightPopup, adUnitId);
-            if (lp != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → LightPopup"); onLightPopup(lp); return; }
+                DaroAdFormat.LightPopup, adUnitKey);
+            if (lp != null) { DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → LightPopup"); onLightPopup(lp); return; }
 
-            DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitId}' → no match (registry miss)");
+            DaroLog.Verbose("Sdk", $"RoutePentaInfo adUnit='{adUnitKey}' → no match (registry miss)");
         }
 
-        private static void RoutePentaLoadError(string adUnitId, DaroAdLoadError error)
+        private static void RoutePentaLoadError(string adUnitKey, DaroAdLoadError error)
         {
             var i = DaroAdInstanceRegistry.Find<DaroInterstitialAd>(
-                DaroAdFormat.Interstitial, adUnitId);
-            if (i != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → Interstitial"); i.FireOnAdFailedToLoad(error); return; }
+                DaroAdFormat.Interstitial, adUnitKey);
+            if (i != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → Interstitial"); i.FireOnAdFailedToLoad(error); return; }
 
             var r = DaroAdInstanceRegistry.Find<DaroRewardedAd>(
-                DaroAdFormat.Rewarded, adUnitId);
-            if (r != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → Rewarded"); r.FireOnAdFailedToLoad(error); return; }
+                DaroAdFormat.Rewarded, adUnitKey);
+            if (r != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → Rewarded"); r.FireOnAdFailedToLoad(error); return; }
 
             var a = DaroAdInstanceRegistry.Find<DaroAppOpenAd>(
-                DaroAdFormat.AppOpen, adUnitId);
-            if (a != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → AppOpen"); a.FireOnAdFailedToLoad(error); return; }
+                DaroAdFormat.AppOpen, adUnitKey);
+            if (a != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → AppOpen"); a.FireOnAdFailedToLoad(error); return; }
 
             var b = DaroAdInstanceRegistry.Find<DaroBannerAd>(
-                DaroAdFormat.Banner, adUnitId);
-            if (b != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → Banner"); b.FireOnAdFailedToLoad(error); return; }
+                DaroAdFormat.Banner, adUnitKey);
+            if (b != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → Banner"); b.FireOnAdFailedToLoad(error); return; }
 
             var lp = DaroAdInstanceRegistry.Find<DaroLightPopupAd>(
-                DaroAdFormat.LightPopup, adUnitId);
-            if (lp != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → LightPopup"); lp.FireOnAdFailedToLoad(error); return; }
+                DaroAdFormat.LightPopup, adUnitKey);
+            if (lp != null) { DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → LightPopup"); lp.FireOnAdFailedToLoad(error); return; }
 
-            DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitId}' code={error.Code} → no match (registry miss)");
+            DaroLog.Verbose("Sdk", $"RoutePentaLoadError adUnit='{adUnitKey}' code={error.Code} → no match (registry miss)");
         }
 
         private static void RouteFullscreenInfo(
-            string adUnitId,
+            string adUnitKey,
             DaroAdInfo info,
             Action<DaroInterstitialAd> onInterstitial,
             Action<DaroRewardedAd>     onRewarded,
@@ -611,43 +611,43 @@ namespace Daro
             Action<DaroLightPopupAd>   onLightPopup)
         {
             var i = DaroAdInstanceRegistry.Find<DaroInterstitialAd>(
-                DaroAdFormat.Interstitial, adUnitId);
-            if (i != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitId}' → Interstitial"); onInterstitial(i); return; }
+                DaroAdFormat.Interstitial, adUnitKey);
+            if (i != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitKey}' → Interstitial"); onInterstitial(i); return; }
 
             var r = DaroAdInstanceRegistry.Find<DaroRewardedAd>(
-                DaroAdFormat.Rewarded, adUnitId);
-            if (r != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitId}' → Rewarded"); onRewarded(r); return; }
+                DaroAdFormat.Rewarded, adUnitKey);
+            if (r != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitKey}' → Rewarded"); onRewarded(r); return; }
 
             var a = DaroAdInstanceRegistry.Find<DaroAppOpenAd>(
-                DaroAdFormat.AppOpen, adUnitId);
-            if (a != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitId}' → AppOpen"); onAppOpen(a); return; }
+                DaroAdFormat.AppOpen, adUnitKey);
+            if (a != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitKey}' → AppOpen"); onAppOpen(a); return; }
 
             var lp = DaroAdInstanceRegistry.Find<DaroLightPopupAd>(
-                DaroAdFormat.LightPopup, adUnitId);
-            if (lp != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitId}' → LightPopup"); onLightPopup(lp); return; }
+                DaroAdFormat.LightPopup, adUnitKey);
+            if (lp != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitKey}' → LightPopup"); onLightPopup(lp); return; }
 
-            DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitId}' → no match (registry miss)");
+            DaroLog.Verbose("Sdk", $"RouteFullscreenInfo adUnit='{adUnitKey}' → no match (registry miss)");
         }
 
-        private static void RouteFullscreenDisplayError(string adUnitId, DaroAdDisplayError error)
+        private static void RouteFullscreenDisplayError(string adUnitKey, DaroAdDisplayError error)
         {
             var i = DaroAdInstanceRegistry.Find<DaroInterstitialAd>(
-                DaroAdFormat.Interstitial, adUnitId);
-            if (i != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitId}' code={error.Code} → Interstitial"); i.FireOnAdFailedToShow(error); return; }
+                DaroAdFormat.Interstitial, adUnitKey);
+            if (i != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitKey}' code={error.Code} → Interstitial"); i.FireOnAdFailedToShow(error); return; }
 
             var r = DaroAdInstanceRegistry.Find<DaroRewardedAd>(
-                DaroAdFormat.Rewarded, adUnitId);
-            if (r != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitId}' code={error.Code} → Rewarded"); r.FireOnAdFailedToShow(error); return; }
+                DaroAdFormat.Rewarded, adUnitKey);
+            if (r != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitKey}' code={error.Code} → Rewarded"); r.FireOnAdFailedToShow(error); return; }
 
             var a = DaroAdInstanceRegistry.Find<DaroAppOpenAd>(
-                DaroAdFormat.AppOpen, adUnitId);
-            if (a != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitId}' code={error.Code} → AppOpen"); a.FireOnAdFailedToShow(error); return; }
+                DaroAdFormat.AppOpen, adUnitKey);
+            if (a != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitKey}' code={error.Code} → AppOpen"); a.FireOnAdFailedToShow(error); return; }
 
             var lp = DaroAdInstanceRegistry.Find<DaroLightPopupAd>(
-                DaroAdFormat.LightPopup, adUnitId);
-            if (lp != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitId}' code={error.Code} → LightPopup"); lp.FireOnAdFailedToShow(error); return; }
+                DaroAdFormat.LightPopup, adUnitKey);
+            if (lp != null) { DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitKey}' code={error.Code} → LightPopup"); lp.FireOnAdFailedToShow(error); return; }
 
-            DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitId}' code={error.Code} → no match (registry miss)");
+            DaroLog.Verbose("Sdk", $"RouteFullscreenDisplayError adUnit='{adUnitKey}' code={error.Code} → no match (registry miss)");
         }
     }
 }

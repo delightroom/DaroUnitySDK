@@ -159,86 +159,86 @@ namespace Daro.Internal
 
         // ── IDaroPlatform: Per-format CRUD (fans into shared helpers) ───────
 
-        public void CreateInterstitial(string adUnitId)
+        public void CreateInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Editor].CreateInterstitial adUnit='{adUnitId}'");
-            CreateUnit(adUnitId, DaroAdFormat.Interstitial);
+            DaroLog.Verbose("Interstitial", $"Platform[Editor].CreateInterstitial adUnit='{adUnitKey}'");
+            CreateUnit(adUnitKey, DaroAdFormat.Interstitial);
         }
 
-        public void CreateRewarded(string adUnitId)
+        public void CreateRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].CreateRewarded adUnit='{adUnitId}'");
-            CreateUnit(adUnitId, DaroAdFormat.Rewarded);
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].CreateRewarded adUnit='{adUnitKey}'");
+            CreateUnit(adUnitKey, DaroAdFormat.Rewarded);
         }
 
-        public void CreateAppOpen(string adUnitId)
+        public void CreateAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Editor].CreateAppOpen adUnit='{adUnitId}'");
-            CreateUnit(adUnitId, DaroAdFormat.AppOpen);
+            DaroLog.Verbose("AppOpen", $"Platform[Editor].CreateAppOpen adUnit='{adUnitKey}'");
+            CreateUnit(adUnitKey, DaroAdFormat.AppOpen);
         }
 
-        public void LoadInterstitial(string adUnitId)
+        public void LoadInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Editor].LoadInterstitial adUnit='{adUnitId}'");
-            LoadUnit(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Editor].LoadInterstitial adUnit='{adUnitKey}'");
+            LoadUnit(adUnitKey);
         }
 
-        public void LoadRewarded(string adUnitId)
+        public void LoadRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].LoadRewarded adUnit='{adUnitId}'");
-            LoadUnit(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].LoadRewarded adUnit='{adUnitKey}'");
+            LoadUnit(adUnitKey);
         }
 
-        public void LoadAppOpen(string adUnitId)
+        public void LoadAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Editor].LoadAppOpen adUnit='{adUnitId}'");
-            LoadUnit(adUnitId);
+            DaroLog.Verbose("AppOpen", $"Platform[Editor].LoadAppOpen adUnit='{adUnitKey}'");
+            LoadUnit(adUnitKey);
         }
 
         // IsReady* family is polled frequently — no Verbose to avoid spam.
-        public bool IsInterstitialReady(string adUnitId) => IsUnitReady(adUnitId);
-        public bool IsRewardedReady(string adUnitId)     => IsUnitReady(adUnitId);
-        public bool IsAppOpenReady(string adUnitId)      => IsUnitReady(adUnitId);
+        public bool IsInterstitialReady(string adUnitKey) => IsUnitReady(adUnitKey);
+        public bool IsRewardedReady(string adUnitKey)     => IsUnitReady(adUnitKey);
+        public bool IsAppOpenReady(string adUnitKey)      => IsUnitReady(adUnitKey);
 
-        public void ShowInterstitial(string adUnitId)
+        public void ShowInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Editor].ShowInterstitial adUnit='{adUnitId}'");
-            ShowUnit(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Editor].ShowInterstitial adUnit='{adUnitKey}'");
+            ShowUnit(adUnitKey);
         }
 
-        public void ShowRewarded(string adUnitId)
+        public void ShowRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].ShowRewarded adUnit='{adUnitId}'");
-            ShowUnit(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].ShowRewarded adUnit='{adUnitKey}'");
+            ShowUnit(adUnitKey);
         }
 
-        public void ShowAppOpen(string adUnitId)
+        public void ShowAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Editor].ShowAppOpen adUnit='{adUnitId}'");
-            ShowUnit(adUnitId);
+            DaroLog.Verbose("AppOpen", $"Platform[Editor].ShowAppOpen adUnit='{adUnitKey}'");
+            ShowUnit(adUnitKey);
         }
 
-        public void DestroyInterstitial(string adUnitId)
+        public void DestroyInterstitial(string adUnitKey)
         {
-            DaroLog.Verbose("Interstitial", $"Platform[Editor].DestroyInterstitial adUnit='{adUnitId}'");
-            DestroyUnit(adUnitId);
+            DaroLog.Verbose("Interstitial", $"Platform[Editor].DestroyInterstitial adUnit='{adUnitKey}'");
+            DestroyUnit(adUnitKey);
         }
 
-        public void DestroyRewarded(string adUnitId)
+        public void DestroyRewarded(string adUnitKey)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].DestroyRewarded adUnit='{adUnitId}'");
-            DestroyUnit(adUnitId);
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].DestroyRewarded adUnit='{adUnitKey}'");
+            DestroyUnit(adUnitKey);
         }
 
-        public void DestroyAppOpen(string adUnitId)
+        public void DestroyAppOpen(string adUnitKey)
         {
-            DaroLog.Verbose("AppOpen", $"Platform[Editor].DestroyAppOpen adUnit='{adUnitId}'");
-            DestroyUnit(adUnitId);
+            DaroLog.Verbose("AppOpen", $"Platform[Editor].DestroyAppOpen adUnit='{adUnitKey}'");
+            DestroyUnit(adUnitKey);
         }
 
-        public void SetRewardedCustomData(string adUnitId, string customData)
+        public void SetRewardedCustomData(string adUnitKey, string customData)
         {
-            DaroLog.Verbose("Rewarded", $"Platform[Editor].SetRewardedCustomData adUnit='{adUnitId}' len={customData.Length} (mock no-op)");
+            DaroLog.Verbose("Rewarded", $"Platform[Editor].SetRewardedCustomData adUnit='{adUnitKey}' len={customData.Length} (mock no-op)");
             /* no-op in Editor mock — consumer set was acknowledged */
         }
 
@@ -279,27 +279,27 @@ namespace Daro.Internal
         private readonly Dictionary<string, GameObject> _bannerViews = new();
 #endif
 
-        public void CreateBanner(string adUnitId)
+        public void CreateBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].CreateBanner adUnit='{adUnitId}'");
-            CreateUnit(adUnitId, DaroAdFormat.Banner);
+            DaroLog.Verbose("Banner", $"Platform[Editor].CreateBanner adUnit='{adUnitKey}'");
+            CreateUnit(adUnitKey, DaroAdFormat.Banner);
         }
 
-        public void LoadBanner(string adUnitId, DaroBannerSize size)
+        public void LoadBanner(string adUnitKey, DaroBannerSize size)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].LoadBanner adUnit='{adUnitId}' size={size} unit={_units.ContainsKey(adUnitId)}");
-            if (_units.TryGetValue(adUnitId, out var state))
+            DaroLog.Verbose("Banner", $"Platform[Editor].LoadBanner adUnit='{adUnitKey}' size={size} unit={_units.ContainsKey(adUnitKey)}");
+            if (_units.TryGetValue(adUnitKey, out var state))
             {
                 state.BannerSize = size;
                 state.Visible = true;
             }
-            LoadUnit(adUnitId);
+            LoadUnit(adUnitKey);
         }
 
-        public void ShowBanner(string adUnitId)
+        public void ShowBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].ShowBanner adUnit='{adUnitId}' unit={_units.ContainsKey(adUnitId)}");
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            DaroLog.Verbose("Banner", $"Platform[Editor].ShowBanner adUnit='{adUnitKey}' unit={_units.ContainsKey(adUnitKey)}");
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             if (state.Destroyed || !state.Loaded) return;
             if (state.Visible) return;
             state.Visible = true;
@@ -312,9 +312,9 @@ namespace Daro.Internal
             // OnAdImpression here as the platform-side signal that the overlay
             // is live. Revenue follows the impression — mirrors the device
             // contract where didPayRevenue is the impression signal.
-            var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
+            var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitKey, latency: null);
             var revenue = BuildMockRevenue();
-            var captureId = adUnitId;
+            var captureId = adUnitKey;
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed || !state.Visible) return;
@@ -323,17 +323,17 @@ namespace Daro.Internal
             });
         }
 
-        public void HideBanner(string adUnitId)
+        public void HideBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].HideBanner adUnit='{adUnitId}' unit={_units.ContainsKey(adUnitId)}");
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            DaroLog.Verbose("Banner", $"Platform[Editor].HideBanner adUnit='{adUnitKey}' unit={_units.ContainsKey(adUnitKey)}");
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             if (state.Destroyed) return;
             var wasDisplayed = state.BannerDisplayed;
             state.Visible = false;
             state.BannerDisplayed = false;
 
 #if UNITY_EDITOR
-            if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
+            if (_bannerViews.TryGetValue(adUnitKey, out var go) && go != null)
             {
                 go.GetComponent<DaroEditorBannerView>()?.Hide();
             }
@@ -341,8 +341,8 @@ namespace Daro.Internal
 
             if (!wasDisplayed) return;
 
-            var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitId, latency: null);
-            var captureId = adUnitId;
+            var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitKey, latency: null);
+            var captureId = adUnitKey;
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed) return;
@@ -350,28 +350,28 @@ namespace Daro.Internal
             });
         }
 
-        public void DestroyBanner(string adUnitId)
+        public void DestroyBanner(string adUnitKey)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].DestroyBanner adUnit='{adUnitId}'");
+            DaroLog.Verbose("Banner", $"Platform[Editor].DestroyBanner adUnit='{adUnitKey}'");
 #if UNITY_EDITOR
-            if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
+            if (_bannerViews.TryGetValue(adUnitKey, out var go) && go != null)
             {
                 UnityEngine.Object.Destroy(go);
-                _bannerViews.Remove(adUnitId);
+                _bannerViews.Remove(adUnitKey);
             }
 #endif
-            DestroyUnit(adUnitId);
+            DestroyUnit(adUnitKey);
         }
 
-        public void SetBannerPosition(string adUnitId, DaroBannerPosition position)
+        public void SetBannerPosition(string adUnitKey, DaroBannerPosition position)
         {
-            DaroLog.Verbose("Banner", $"Platform[Editor].SetBannerPosition adUnit='{adUnitId}' position={position} unit={_units.ContainsKey(adUnitId)}");
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            DaroLog.Verbose("Banner", $"Platform[Editor].SetBannerPosition adUnit='{adUnitKey}' position={position} unit={_units.ContainsKey(adUnitKey)}");
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             if (state.Destroyed) return;
             state.BannerPosition = position;
 
 #if UNITY_EDITOR
-            if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
+            if (_bannerViews.TryGetValue(adUnitKey, out var go) && go != null)
             {
                 go.GetComponent<DaroEditorBannerView>()?.SetPosition(position);
             }
@@ -381,11 +381,11 @@ namespace Daro.Internal
         // Non-authoritative mock footprint — only while the mock banner is
         // visible (Load/Show display, not Hidden). Device platforms return the real
         // measured rect; the editor returns a nominal-size rect from Screen.safeArea.
-        public bool TryGetBannerScreenRect(string adUnitId, out Rect rect)
+        public bool TryGetBannerScreenRect(string adUnitKey, out Rect rect)
         {
             rect = default;
 #if UNITY_EDITOR
-            if (_bannerViews.TryGetValue(adUnitId, out var go) && go != null)
+            if (_bannerViews.TryGetValue(adUnitKey, out var go) && go != null)
             {
                 var view = go.GetComponent<DaroEditorBannerView>();
                 if (view != null && view.IsVisible)
@@ -401,19 +401,19 @@ namespace Daro.Internal
 #if UNITY_EDITOR
         private DaroEditorBannerView EnsureBannerView(PerUnitState state)
         {
-            if (_bannerViews.TryGetValue(state.AdUnitId, out var existing) && existing != null)
+            if (_bannerViews.TryGetValue(state.AdUnitKey, out var existing) && existing != null)
             {
                 return existing.GetComponent<DaroEditorBannerView>();
             }
 
-            var go = new GameObject($"DaroEditorBannerView[{state.AdUnitId}]")
+            var go = new GameObject($"DaroEditorBannerView[{state.AdUnitKey}]")
             {
                 hideFlags = HideFlags.HideAndDontSave,
             };
             UnityEngine.Object.DontDestroyOnLoad(go);
             var view = go.AddComponent<DaroEditorBannerView>();
-            view.Configure(state.AdUnitId, state.BannerSize, state.BannerPosition);
-            _bannerViews[state.AdUnitId] = go;
+            view.Configure(state.AdUnitKey, state.BannerSize, state.BannerPosition);
+            _bannerViews[state.AdUnitKey] = go;
             return view;
         }
 #endif
@@ -425,30 +425,30 @@ namespace Daro.Internal
         // Color options silently ignored (visual fidelity not
         // worth IMGUI cost when format is fullscreen modal).
 
-        public void CreateLightPopup(string adUnitId, DaroLightPopupAdOptions? options)
+        public void CreateLightPopup(string adUnitKey, DaroLightPopupAdOptions? options)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Editor].CreateLightPopup adUnit='{adUnitId}'");
-            CreateUnit(adUnitId, DaroAdFormat.LightPopup);
+            DaroLog.Verbose("LightPopup", $"Platform[Editor].CreateLightPopup adUnit='{adUnitKey}'");
+            CreateUnit(adUnitKey, DaroAdFormat.LightPopup);
         }
 
-        public void LoadLightPopup(string adUnitId)
+        public void LoadLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Editor].LoadLightPopup adUnit='{adUnitId}'");
-            LoadUnit(adUnitId);
+            DaroLog.Verbose("LightPopup", $"Platform[Editor].LoadLightPopup adUnit='{adUnitKey}'");
+            LoadUnit(adUnitKey);
         }
 
-        public bool IsLightPopupReady(string adUnitId) => IsUnitReady(adUnitId);
+        public bool IsLightPopupReady(string adUnitKey) => IsUnitReady(adUnitKey);
 
-        public void ShowLightPopup(string adUnitId)
+        public void ShowLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Editor].ShowLightPopup adUnit='{adUnitId}'");
-            ShowUnit(adUnitId);
+            DaroLog.Verbose("LightPopup", $"Platform[Editor].ShowLightPopup adUnit='{adUnitKey}'");
+            ShowUnit(adUnitKey);
         }
 
-        public void DestroyLightPopup(string adUnitId)
+        public void DestroyLightPopup(string adUnitKey)
         {
-            DaroLog.Verbose("LightPopup", $"Platform[Editor].DestroyLightPopup adUnit='{adUnitId}'");
-            DestroyUnit(adUnitId);
+            DaroLog.Verbose("LightPopup", $"Platform[Editor].DestroyLightPopup adUnit='{adUnitKey}'");
+            DestroyUnit(adUnitKey);
         }
 
         // ── Unit state ──────────────────────────────────────────────────────
@@ -459,7 +459,7 @@ namespace Daro.Internal
         /// </summary>
         private sealed class PerUnitState
         {
-            public readonly string      AdUnitId;
+            public readonly string      AdUnitKey;
             public readonly DaroAdFormat Format;
             public bool                 Loaded;
             public bool                 Showing;
@@ -472,28 +472,28 @@ namespace Daro.Internal
             public DaroBannerSize       BannerSize;
             public DaroBannerPosition   BannerPosition;
 
-            public PerUnitState(string adUnitId, DaroAdFormat format)
+            public PerUnitState(string adUnitKey, DaroAdFormat format)
             {
-                AdUnitId  = adUnitId;
+                AdUnitKey  = adUnitKey;
                 Format    = format;
             }
         }
 
-        private void CreateUnit(string adUnitId, DaroAdFormat format)
+        private void CreateUnit(string adUnitKey, DaroAdFormat format)
         {
             // Duplicate-construction-replaces rule: destroy existing first.
-            if (_units.TryGetValue(adUnitId, out var existing))
+            if (_units.TryGetValue(adUnitKey, out var existing))
             {
                 existing.Destroyed = true;
-                _units.Remove(adUnitId);
+                _units.Remove(adUnitKey);
             }
 
-            _units[adUnitId] = new PerUnitState(adUnitId, format);
+            _units[adUnitKey] = new PerUnitState(adUnitKey, format);
         }
 
-        private void LoadUnit(string adUnitId)
+        private void LoadUnit(string adUnitKey)
         {
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             if (state.Destroyed) return;
             state.Loaded = false;
 
@@ -534,7 +534,7 @@ namespace Daro.Internal
                 // latency semantics: -1 → null, positive → millis as-is
                 // (matching Daro cross-platform contract).
                 double? latency = latencyMs < 0 ? (double?)null : latencyMs;
-                var info = new DaroAdInfo(state.Format, state.AdUnitId, latency);
+                var info = new DaroAdInfo(state.Format, state.AdUnitKey, latency);
 
                 if (state.Format == DaroAdFormat.Banner && state.Visible)
                 {
@@ -544,17 +544,17 @@ namespace Daro.Internal
                     state.BannerDisplayed = true;
                 }
 
-                var adUnitId = state.AdUnitId;
+                var adUnitKey = state.AdUnitKey;
                 var revenue = BuildMockRevenue();
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed) return;
-                    _onAdLoaded?.Invoke(adUnitId, info);
+                    _onAdLoaded?.Invoke(adUnitKey, info);
                     if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
                     if (state.Format == DaroAdFormat.Banner && state.Visible && state.Loaded)
                     {
-                        _onAdImpression?.Invoke(adUnitId, info);
-                        _onAdRevenuePaid?.Invoke(adUnitId, info, revenue);
+                        _onAdImpression?.Invoke(adUnitKey, info);
+                        _onAdRevenuePaid?.Invoke(adUnitKey, info, revenue);
                     }
                 });
             }
@@ -566,7 +566,7 @@ namespace Daro.Internal
                     state.Visible = false;
                     state.BannerDisplayed = false;
 #if UNITY_EDITOR
-                    if (_bannerViews.TryGetValue(state.AdUnitId, out var go) && go != null)
+                    if (_bannerViews.TryGetValue(state.AdUnitKey, out var go) && go != null)
                     {
                         go.GetComponent<DaroEditorBannerView>()?.Hide();
                     }
@@ -574,28 +574,28 @@ namespace Daro.Internal
                 }
 
                 var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
-                var err = new DaroAdLoadError(mapped, errorMessage, state.AdUnitId);
+                var err = new DaroAdLoadError(mapped, errorMessage, state.AdUnitKey);
 
-                var adUnitId = state.AdUnitId;
+                var adUnitKey = state.AdUnitKey;
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
-                    _onAdFailedToLoad?.Invoke(adUnitId, err);
+                    _onAdFailedToLoad?.Invoke(adUnitKey, err);
                 });
             }
         }
 
-        private bool IsUnitReady(string adUnitId)
+        private bool IsUnitReady(string adUnitKey)
         {
-            return _units.TryGetValue(adUnitId, out var state)
+            return _units.TryGetValue(adUnitKey, out var state)
                 && !state.Destroyed
                 && state.Loaded
                 && !state.Showing;
         }
 
-        private void ShowUnit(string adUnitId)
+        private void ShowUnit(string adUnitKey)
         {
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             if (state.Destroyed) return;
 
             MainThreadDispatcher.EnsureCreated();
@@ -618,11 +618,11 @@ namespace Daro.Internal
                 var notReady = DaroAdErrorCodeMapper.ToDisplayErrorCode(
                     (int)DaroAdDisplayErrorCode.FullscreenAdNotReady);
                 var notReadyErr = new DaroAdDisplayError(notReady, "Ad not ready (Editor mock)");
-                var adUnitIdNR = state.AdUnitId;
+                var adUnitKeyNR = state.AdUnitKey;
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed) return;
-                    _onAdFailedToShow?.Invoke(adUnitIdNR, notReadyErr);
+                    _onAdFailedToShow?.Invoke(adUnitKeyNR, notReadyErr);
                 });
                 yield break;
             }
@@ -639,12 +639,12 @@ namespace Daro.Internal
             {
                 var mapped = DaroAdErrorCodeMapper.ToDisplayErrorCode(showErrorCode);
                 var err = new DaroAdDisplayError(mapped, showErrorMessage);
-                var adUnitIdF = state.AdUnitId;
+                var adUnitKeyF = state.AdUnitKey;
                 state.Showing = false;
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed) return;
-                    _onAdFailedToShow?.Invoke(adUnitIdF, err);
+                    _onAdFailedToShow?.Invoke(adUnitKeyF, err);
                 });
                 yield break;
             }
@@ -652,15 +652,15 @@ namespace Daro.Internal
             // Success: fire OnAdShown, then wait adDurationSeconds, then OnAdDismissed
             // (and for Rewarded, OnEarnedReward just before OnAdDismissed).
             var shownInfo = BuildShownInfo(state);
-            var adUnitId = state.AdUnitId;
+            var adUnitKey = state.AdUnitKey;
             var revenue  = BuildMockRevenue();
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed) return;
-                _onAdShown?.Invoke(adUnitId, shownInfo);
+                _onAdShown?.Invoke(adUnitKey, shownInfo);
                 // ILRD: device contract reports revenue at impression time
                 // (didPayRevenue ≈ show for fullscreen formats).
-                _onAdRevenuePaid?.Invoke(adUnitId, shownInfo, revenue);
+                _onAdRevenuePaid?.Invoke(adUnitKey, shownInfo, revenue);
             });
 
             if (adDurationSeconds > 0f)
@@ -675,7 +675,7 @@ namespace Daro.Internal
                 MainThreadDispatcher.Enqueue(() =>
                 {
                     if (state.Destroyed) return;
-                    _onEarnedReward?.Invoke(adUnitId, rewardInfo, rewardItem);
+                    _onEarnedReward?.Invoke(adUnitKey, rewardInfo, rewardItem);
                 });
             }
 
@@ -686,7 +686,7 @@ namespace Daro.Internal
             MainThreadDispatcher.Enqueue(() =>
             {
                 if (state.Destroyed) return;
-                _onAdDismissed?.Invoke(adUnitId, dismissInfo);
+                _onAdDismissed?.Invoke(adUnitKey, dismissInfo);
             });
         }
 
@@ -695,14 +695,14 @@ namespace Daro.Internal
             // Latency is a load-phase metric. Post-load AdInfo surfaces null
             // to match native behavior, which does not re-report latency
             // on show/dismiss.
-            return new DaroAdInfo(state.Format, state.AdUnitId, latency: null);
+            return new DaroAdInfo(state.Format, state.AdUnitKey, latency: null);
         }
 
-        private void DestroyUnit(string adUnitId)
+        private void DestroyUnit(string adUnitKey)
         {
-            if (!_units.TryGetValue(adUnitId, out var state)) return;
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
             state.Destroyed = true;
-            _units.Remove(adUnitId);
+            _units.Remove(adUnitKey);
             // No explicit coroutine cancellation call: the Destroyed flag gates every
             // yield-resume point (see LoadCoroutine / ShowCoroutine) and the enqueued
             // event closures, so any in-flight coroutine self-terminates on next step.
@@ -724,13 +724,13 @@ namespace Daro.Internal
         // ── Native ad (instance-owned) ──────────────────────────────
         // Each DaroNativeAd gets its own DaroEditorNativeAdHandle (per-instance
         // coroutine + per-instance mock asset). Multi-instance: N handles with
-        // same adUnitId run independently.
+        // same adUnitKey run independently.
         internal DaroEditorNativeAdHandle? LastNativeAdHandle { get; private set; }
 
-        public INativeAdHandle CreateNativeAdHandle(string adUnitId, INativeAdEventSink sink)
+        public INativeAdHandle CreateNativeAdHandle(string adUnitKey, INativeAdEventSink sink)
         {
-            DaroLog.Verbose("Native", $"Platform[Editor].CreateNativeAdHandle adUnit='{adUnitId}'");
-            var handle = new DaroEditorNativeAdHandle(adUnitId, sink, _settings);
+            DaroLog.Verbose("Native", $"Platform[Editor].CreateNativeAdHandle adUnit='{adUnitKey}'");
+            var handle = new DaroEditorNativeAdHandle(adUnitKey, sink, _settings);
             LastNativeAdHandle = handle;
             return handle;
         }

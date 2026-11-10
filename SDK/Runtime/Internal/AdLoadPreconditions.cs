@@ -27,14 +27,14 @@ namespace Daro.Internal
         /// platform; <c>false</c> when the caller should synthesize an
         /// immediate <c>OnAdFailedToLoad</c> with <paramref name="error"/>.
         /// </summary>
-        internal static bool TryCheck(string adUnitId, out DaroAdLoadError? error)
+        internal static bool TryCheck(string adUnitKey, out DaroAdLoadError? error)
         {
             if (!DaroSdk.IsInitialized)
             {
                 error = new DaroAdLoadError(
                     DaroAdLoadErrorCode.NotInitialized,
                     "Daro SDK is not initialized. Await DaroSdk.InitializeAsync() before Load().",
-                    adUnitId);
+                    adUnitKey);
                 return false;
             }
 
@@ -43,7 +43,7 @@ namespace Daro.Internal
                 error = new DaroAdLoadError(
                     DaroAdLoadErrorCode.NoNetwork,
                     "No network reachable (Application.internetReachability == NotReachable).",
-                    adUnitId);
+                    adUnitKey);
                 return false;
             }
 

@@ -23,7 +23,7 @@ The ad wasn't ready. Common causes:
 
 ### `ObjectDisposedException` on `Load()` / `Show()` / `Hide()`
 
-The instance was disposed. After `Dispose()`, the only safe operations on most ad types are reading immutable properties (`AdUnitId`) and checking readiness (`IsReady()` / `IsReady`, which returns `false`). Lifecycle calls such as `Load()` / `Show()` / `Hide()` throw. Native ad notification calls (`NotifyVisible()` / `NotifyHidden()` / `NotifyClicked()`) are the exception: they no-op after disposal.
+The instance was disposed. After `Dispose()`, the only safe operations on most ad types are reading immutable properties (`AdUnitKey`) and checking readiness (`IsReady()` / `IsReady`, which returns `false`). Lifecycle calls such as `Load()` / `Show()` / `Hide()` throw. Native ad notification calls (`NotifyVisible()` / `NotifyHidden()` / `NotifyClicked()`) are the exception: they no-op after disposal.
 
 Construct a fresh instance to use a new one.
 
@@ -32,8 +32,8 @@ Construct a fresh instance to use a new one.
 Subscribers were registered after `Load()` and got dropped by a fast `OnAdLoaded`. Always register handlers **before** calling `Load()`:
 
 ```csharp
-_ad = new DaroInterstitialAd(adUnitId);
-_ad.OnAdLoaded += info => Debug.Log($"loaded {info.AdUnitId}");            // first
+_ad = new DaroInterstitialAd(adUnitKey);
+_ad.OnAdLoaded += info => Debug.Log($"loaded {info.AdUnitKey}");            // first
 _ad.OnAdFailedToLoad += err => Debug.LogWarning($"load failed: {err.Code}");
 _ad.Load();                        // last
 ```
