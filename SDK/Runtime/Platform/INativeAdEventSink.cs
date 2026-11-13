@@ -19,6 +19,9 @@ namespace Daro.Internal
         void OnAdLoaded(DaroAdInfo adInfo, DaroNativeAdInfo nativeInfo);
         // Only platforms that retain the rendered ad after refresh failure opt in.
         void OnAdFailedToLoad(DaroAdLoadError error, bool keepsCurrentAd = false);
+        /// <summary><see cref="INativeAdHandle.Preload"/> 의 결과. 에셋은 없다 — 에셋은 Load 뒤 OnAdLoaded 로 온다.</summary>
+        void OnAdPreloaded(DaroAdInfo adInfo);
+        void OnAdFailedToPreload(DaroAdLoadError error);
         void OnAdImpression(DaroAdInfo adInfo);
         void OnAdClicked(DaroAdInfo adInfo);
 

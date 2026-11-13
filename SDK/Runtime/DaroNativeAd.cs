@@ -25,6 +25,13 @@ namespace Daro
     /// No <c>OnAdExpired</c>: <c>MaxNativeAdListener</c> has no expiry callback
     /// and daro-m exposes no push signal for it.</para>
     ///
+    /// <para>Preload: <see cref="Preload"/> fetches one ad without creating a
+    /// native view. The next <see cref="Load"/> takes it over once and delivers
+    /// its assets — immediately if ready, after the result if the preload is
+    /// still in flight, or through a normal load if the preload failed or the
+    /// ad sat unused for more than 10 minutes. <see cref="Dispose"/> releases
+    /// an ad that was preloaded but never loaded.</para>
+    ///
     /// <para><see cref="Info"/>'s <c>Texture2D</c> fields (<c>Icon</c>,
     /// <c>MediaImage</c>) are owned by this instance — <see cref="Dispose"/>
     /// destroys them. Publisher must not retain raw <c>Texture2D</c> references
@@ -66,6 +73,19 @@ namespace Daro
         public event Action<ISet<NativeAdAssetType>>? OnNativeAdAssetLoaded;
         public event Action<DaroAdInfo>?      OnAdLoaded;
         public event Action<DaroAdLoadError>? OnAdFailedToLoad;
+
+        /// <summary>
+        /// Fires when <see cref="Preload"/> has an ad ready to hand to the next
+        /// <see cref="Load"/>. No assets yet — <see cref="Info"/> and
+        /// <see cref="IsReady"/> change only at <see cref="OnAdLoaded"/>.
+        /// </summary>
+        public event Action<DaroAdInfo>?      OnAdPreloaded;
+
+        /// <summary>
+        /// Fires when <see cref="Preload"/> fails. <see cref="Load"/> still works —
+        /// it performs a normal load instead of using a preloaded ad.
+        /// </summary>
+        public event Action<DaroAdLoadError>? OnAdFailedToPreload;
         public event Action<DaroAdInfo>?      OnAdImpression;
         public event Action<DaroAdInfo>?      OnAdClicked;
 
@@ -146,8 +166,33 @@ namespace Daro
         }
 
         /// <summary>
-        /// Start loading. Post-init failures fire <see cref="OnAdFailedToLoad"/>
+        /// Fetch one ad ahead of time without creating a native view. The next
+        /// <see cref="Load"/> takes it over once. Calling this again while a
+        /// preload is in flight or a fresh ad is held is ignored; after a
+        /// failure or after the held ad expired (10 minutes) it requests again.
+        /// Does not change <see cref="Info"/> or <see cref="IsReady"/>.
+        /// Pre-init and no-network failures fire <see cref="OnAdFailedToPreload"/>
         /// rather than throwing.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException"/>
+        public void Preload()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DaroNativeAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
+            {
+                DaroLog.Warn("Native",
+                    $"Preload short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToPreload(preconditionError);
+                return;
+            }
+            DaroLog.Verbose("Native", $"Preload adUnit='{AdUnitKey}'");
+            _handle!.Preload();
+        }
+
+        /// <summary>
+        /// Start loading. If <see cref="Preload"/> was called, the preloaded ad
+        /// is used instead of a new request (see the class remarks). Post-init
+        /// failures fire <see cref="OnAdFailedToLoad"/> rather than throwing.
         /// </summary>
         /// <exception cref="ObjectDisposedException"/>
         public void Load()
@@ -498,6 +543,8 @@ namespace Daro
                 OnNativeAdAssetLoaded = null;
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
+                OnAdPreloaded       = null;
+                OnAdFailedToPreload = null;
                 OnAdImpression   = null;
                 OnAdClicked      = null;
                 OnAdRevenuePaid  = null;
@@ -584,6 +631,20 @@ namespace Daro
             DestroyInfoTextures(previousInfo);
         }
 
+        internal void FireOnAdPreloaded(DaroAdInfo info)
+        {
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
+            DaroLog.Verbose("Native", $"FireOnAdPreloaded adUnit='{AdUnitKey}' latency={info.Latency}");
+            SafeEventInvoker.Invoke(OnAdPreloaded, info);
+        }
+
+        internal void FireOnAdFailedToPreload(DaroAdLoadError error)
+        {
+            if (_disposed || DaroAdInstanceRegistry.IsShuttingDown) return;
+            DaroLog.Verbose("Native", $"FireOnAdFailedToPreload adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
+            SafeEventInvoker.Invoke(OnAdFailedToPreload, error);
+        }
+
         private static void DestroyInfoTextures(DaroNativeAdInfo? info)
         {
             if (info?.Icon != null)
@@ -624,6 +685,12 @@ namespace Daro
 
             public void OnAdFailedToLoad(DaroAdLoadError error, bool keepsCurrentAd = false) =>
                 _ad.FireOnAdFailedToLoad(error, keepsCurrentAd);
+
+            public void OnAdPreloaded(DaroAdInfo info) =>
+                _ad.FireOnAdPreloaded(info);
+
+            public void OnAdFailedToPreload(DaroAdLoadError error) =>
+                _ad.FireOnAdFailedToPreload(error);
 
             public void OnAdImpression(DaroAdInfo info) =>
                 _ad.FireOnAdImpression(info);

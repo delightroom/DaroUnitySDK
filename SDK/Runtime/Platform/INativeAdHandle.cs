@@ -27,6 +27,14 @@ namespace Daro.Internal
         /// </summary>
         void Load(int iconWidth, int iconHeight);
 
+        /// <summary>
+        /// 뷰 없이 광고 한 개를 받아 둔다. 다음 <see cref="Load"/> 가 한 번 넘겨받아 에셋을 낸다
+        /// ( 로딩 중이면 결과 대기, 실패·만료면 일반 로드 ). 결과는
+        /// <see cref="INativeAdEventSink.OnAdPreloaded"/> /
+        /// <see cref="INativeAdEventSink.OnAdFailedToPreload"/> 로 간다.
+        /// </summary>
+        void Preload();
+
         bool SupportsNativeMedia { get; }
         void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled);
         void ClearMediaScreenRect();

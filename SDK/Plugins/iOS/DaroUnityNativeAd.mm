@@ -7,8 +7,11 @@
 //  Lifecycle:
 //    Create        → entry slot only, no view yet
 //    Load          → construct hidden host UIView (touch gate off) +
-//                    DaroObjCNativeView (autoLoad=NO) + bound view tree +
-//                    bindNativeViews + loadNativeAd
+//                    DaroObjCNativeView (preload=NO) + bound view tree +
+//                    bindNativeViews + loadNativeAd.
+//                    Preload 로 받아 둔 뷰가 있으면 그 뷰를 쓴다: 계층 밖에서 바인딩을
+//                    끝낸 뒤 host 에 붙이고 ( 부착 = 소비 ) loadNativeAd 는 부르지 않는다
+//    Preload       → DaroObjCNativeView(preload:YES) 를 계층 밖에서 생성 ( 생성 시 요청 )
 //    NotifyVisible → request presentation once loaded and valid CTA geometry exists
 //    NotifyHidden  → hide the entire native subtree and close its touch gate
 //    NotifyClicked → diagnostic log only; real clicks use UIKit overlay touch
@@ -86,6 +89,8 @@ static void DaroUnityNativeAdEmitCallback(int handleId,
 // Load writes this on main, while destroy paths snapshot it on s_adQueue
 // before hopping to main for UIKit teardown.
 @property (atomic, strong, nullable) DaroObjCNativeView*                 nativeView;
+// Preload. 받아 두었고 아직 Load 가 가져가지 않은 뷰. 계층 밖에 있다. main 에서만 쓴다.
+@property (atomic, strong, nullable) DaroObjCNativeView*                 preloadView;
 @property (nonatomic, strong, nullable) DaroUnityNativeAdDelegate*       delegate;
 @property (nonatomic, strong, nullable) DaroUnityNativeAdHost*           host;
 
@@ -405,6 +410,45 @@ static const double kIconPollIntervalSec = 0.2;
     DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
 }
 
+// preload:YES 로 만든 뷰가 부착 전에 받아 둔 광고의 결과. 에셋은 없다 — 에셋과 nativeViewDidLoad: 는
+// Load 가 뷰를 붙여 SDK 가 렌더한 뒤에 온다. 로딩 중에 Load 가 가져간 뷰 ( nativeView ) 의 결과도 받는다.
+- (void)nativeViewDidPreload:(DaroObjCNativeView*)view
+                      adInfo:(DaroObjCAdInfo*)adInfo {
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
+    if ([NSThread isMainThread] == NO) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self nativeViewDidPreload:view adInfo:adInfo];
+        });
+        return;
+    }
+    if (entry.preloadView != view && entry.nativeView != view) return;
+    DaroLogD(@"Native", @"didPreload h=%d", entry.handleId);
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adPreloaded\"%@}", AdInfoFields(adInfo)];
+    DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
+}
+
+// 뷰는 버리지 않는다 — Load 가 붙이면 SDK 가 일반 로드로 폴백한다.
+- (void)nativeView:(DaroObjCNativeView*)view
+didFailToPreloadWithError:(NSError*)error {
+    DaroUnityNativeAdEntry* entry = self.entry;
+    if (!entry || entry.destroyed) return;
+    if ([NSThread isMainThread] == NO) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self nativeView:view didFailToPreloadWithError:error];
+        });
+        return;
+    }
+    if (entry.preloadView != view && entry.nativeView != view) return;
+    DaroLogW(@"Native", @"Preload failed h=%d code=%ld msg='%@'",
+        entry.handleId, (long)error.code, error.localizedDescription);
+    NSString* json = [NSString stringWithFormat:
+        @"{\"event\":\"adFailedToPreload\",\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
+        (long)error.code, EscapeJson(error.localizedDescription)];
+    DaroUnityNativeAdEmitCallback(entry.handleId, json, NULL, 0);
+}
+
 - (void)nativeViewDidClick:(DaroObjCNativeView*)view
                     adInfo:(DaroObjCAdInfo*)adInfo {
     DaroUnityNativeAdEntry* entry = self.entry;
@@ -689,6 +733,40 @@ static void DaroUnityNativeAdLogCtaOverlayEcho(DaroUnityNativeAdEntry* entry,
 }
 #endif
 
+#pragma mark - Native view factory
+
+// Load ( preload:NO ) 와 Preload ( preload:YES ) 가 같은 배선으로 뷰를 만든다. main 에서만 부른다.
+// preload:NO 는 명시 loadNativeAd 전까지 요청하지 않는다 ( 옛 autoLoad:NO 와 같다 ) — 그래서
+// addSubview 가 bindNativeViews 보다 먼저 로드를 시작하지 않는다.
+// preload:YES 는 생성 시 요청하고 처음 window 에 붙을 때 한 번 소비한다.
+static DaroObjCNativeView* DaroUnityNativeAdMakeView(DaroUnityNativeAdEntry* entry, BOOL preload) {
+    DaroObjCNativeView* nativeView = entry.adChoicesPosition
+        ? [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey preload:preload
+            preferredAdChoicesPosition:(DaroAdChoicesPosition)entry.adChoicesPosition.integerValue]
+        : [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey preload:preload];
+    nativeView.delegate = entry.delegate;
+    // ILRD is a billing datapoint and does not mutate entry state, so
+    // keep it handle-routed even if the originating view was reloaded.
+    int handleId = entry.handleId;
+    nativeView.onPaidEvent = ^(DaroObjCAdRevenue* revenue) {
+        // Revenue callbacks are the remaining path that can
+        // originate off-main, so they intentionally rely on
+        // DaroUnityNativeAdEmitCallback's main-queue marshal.
+        //
+        // 미디에이션 귀속은 싣지 않는다. onPaidEvent 는 DaroObjCAdRevenue
+        // 하나만 받는데(SDK 의 DaroAdRevenue 자체가 그렇다), 네이티브는
+        // didPayRevenue 가 renderAd 중에 동기로 터져 adInfo 를 나르는
+        // 콜백들보다 앞선다 — nativeViewDidRecordImpression 주석에
+        // 실측으로 적혀 있다. 기억해 둔 값을 실으면 직전 사이클의
+        // 네트워크를 새 노출에 적게 된다.
+        NSString* json = [NSString stringWithFormat:
+            @"{\"event\":\"adRevenuePaid\"%@}",
+            RevenueFields(revenue.valueMicros, revenue.currencyCode, revenue.precision)];
+        DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
+    };
+    return nativeView;
+}
+
 #pragma mark - extern C surface (matches [DllImport] in DaroIOSNativeAdHandle.cs)
 
 extern "C" {
@@ -716,6 +794,27 @@ void DaroUnity_NativeAd_Create(int handleId, const char* adUnitKey) {
         entry.delegate = delegate;
 
         s_nativeAds[key] = entry;
+    });
+}
+
+// 뷰 없이 ( 계층 밖에서 ) 네이티브 광고 한 개를 받아 둔다. 이미 받아 둔 뷰가 있으면 부착 전
+// loadNativeAd 로 다시 요청한다 — 로딩 중이거나 TTL 안이면 SDK 가 무시하고, 만료·실패면 다시 받는다.
+void DaroUnity_NativeAd_Preload(int handleId) {
+    NSNumber* key = @(handleId);
+    dispatch_async(s_adQueue, ^{
+        DaroUnityNativeAdEntry* entry = s_nativeAds[key];
+        if (!entry || entry.destroyed) return;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (entry.destroyed) return;
+            DaroObjCNativeView* existing = entry.preloadView;
+            if (existing) {
+                [existing loadNativeAd];
+                return;
+            }
+            entry.preloadView = DaroUnityNativeAdMakeView(entry, YES);
+            DaroLogD(@"Native", @"Preload h=%d", entry.handleId);
+        });
     });
 }
 
@@ -786,40 +885,27 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
                 entry.iconImageView.alpha = 0;
             }
 
-            // autoLoad=NO. Without this, addSubview(host) below would
-            // auto-fire loadNativeAd via DaroObjCNativeView's didMoveToSuperview
-            // (DaroObjCNativeView.swift:106-118) — racing past bindNativeViews.
-            DaroObjCNativeView* nativeView = entry.adChoicesPosition
-                ? [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey autoLoad:NO
-                    preferredAdChoicesPosition:(DaroAdChoicesPosition)entry.adChoicesPosition.integerValue]
-                : [[DaroObjCNativeView alloc] initWithAdUnitKey:entry.adUnitKey autoLoad:NO];
-            nativeView.delegate = entry.delegate;
-            // ILRD is a billing datapoint and does not mutate entry state, so
-            // keep it handle-routed even if the originating view was reloaded.
-            int handleId = entry.handleId;
-            nativeView.onPaidEvent = ^(DaroObjCAdRevenue* revenue) {
-                // Revenue callbacks are the remaining path that can
-                // originate off-main, so they intentionally rely on
-                // DaroUnityNativeAdEmitCallback's main-queue marshal.
-                //
-                // 미디에이션 귀속은 싣지 않는다. onPaidEvent 는 DaroObjCAdRevenue
-                // 하나만 받는데(SDK 의 DaroAdRevenue 자체가 그렇다), 네이티브는
-                // didPayRevenue 가 renderAd 중에 동기로 터져 adInfo 를 나르는
-                // 콜백들보다 앞선다 — 위 nativeViewDidRecordImpression 주석에
-                // 실측으로 적혀 있다. 기억해 둔 값을 실으면 직전 사이클의
-                // 네트워크를 새 노출에 적게 된다.
-                NSString* json = [NSString stringWithFormat:
-                    @"{\"event\":\"adRevenuePaid\"%@}",
-                    RevenueFields(revenue.valueMicros, revenue.currencyCode, revenue.precision)];
-                DaroUnityNativeAdEmitCallback(handleId, json, NULL, 0);
-            };
+            // 받아 둔 뷰가 있으면 그 뷰가 이번 Load 의 뷰다 ( 한 번만 넘긴다 ).
+            DaroObjCNativeView* preloadedView = entry.preloadView;
+            entry.preloadView = nil;
+            BOOL consumesPreload = preloadedView != nil;
+            DaroObjCNativeView* nativeView = consumesPreload
+                ? preloadedView
+                : DaroUnityNativeAdMakeView(entry, NO);
             nativeView.frame = host.bounds;
             entry.nativeView = nativeView;
 
-            [host addSubview:nativeView];   // didMoveToSuperview fires;
-                                            // addInternalNativeView attaches
-                                            // DaroAdNativeView synchronously;
-                                            // autoLoad=NO so no auto-load
+            if (consumesPreload) {
+                // preload 뷰는 window 에 붙는 순간 받아 둔 광고를 저장된 에셋 뷰로 렌더한다.
+                // 그래서 붙이기 전에 내부 뷰를 만들고 ( 계층 밖 ) 아래의 에셋 이동·바인딩을
+                // 끝낸 뒤 맨 마지막에 붙인다. 먼저 붙이면 빈 광고가 된다.
+                [nativeView addInternalNativeView];
+            } else {
+                [host addSubview:nativeView];   // didMoveToSuperview fires;
+                                                // addInternalNativeView attaches
+                                                // DaroAdNativeView synchronously;
+                                                // preload=NO so no auto-load
+            }
 
             // Asset fix: AppLovin's MANativeAdViewBinder uses TAG-based lookup
             // (DaroAdNativeView.swift:64-73) — `renderNativeAdView(_, with:)`
@@ -847,7 +933,14 @@ void DaroUnity_NativeAd_Load(int handleId, int iconWidth, int iconHeight) {
                                                 bodyLabel:entry.bodyLabel
                                          mediaContentView:entry.mediaContentView
                                        callToActionButton:entry.callToActionButton];
-            [nativeView loadNativeAd];
+            if (consumesPreload) {
+                // 부착이 곧 소비다 — 받아 둔 광고면 바로 렌더, 로딩 중이면 결과를 기다리고,
+                // 실패·만료면 SDK 가 일반 로드로 폴백한다. 여기서 loadNativeAd 를 부르면
+                // 받아 둔 광고 위에 새 요청이 겹친다.
+                [host addSubview:nativeView];
+            } else {
+                [nativeView loadNativeAd];
+            }
 
             DaroUnityNativeAdUpdatePresentation(entry);
         });
@@ -1058,8 +1151,13 @@ void DaroUnity_NativeAd_Destroy(int handleId) {
                                   // after this point see YES.
         DaroObjCNativeView*    nativeView = entry.nativeView;
         DaroUnityNativeAdHost* host       = entry.host;
+        // 쓰지 않은 preload 뷰. 해제되면 SDK 의 PreloadSession 도 같이 해제돼 받아 둔 광고를
+        // 놓고, 늦게 오는 결과는 버려진다. 마지막 참조는 아래 main 블록에서 놓는다.
+        DaroObjCNativeView*    preloadView = entry.preloadView;
 
         dispatch_async(dispatch_get_main_queue(), ^{
+            entry.preloadView = nil;
+            (void)preloadView;
             [nativeView removeFromSuperview];
             [host       removeFromSuperview];
             // ARC: nilling entry below releases nativeView →
@@ -1098,6 +1196,8 @@ void DaroUnityNativeAd_DestroyAll(void) {
             entry.destroyed = YES;   // A2: armed before dict ref release
             if (entry.nativeView) [viewsToRemove addObject:entry.nativeView];
             if (entry.host)       [viewsToRemove addObject:entry.host];
+            // 계층에 없어 removeFromSuperview 는 no-op 이다. 마지막 참조를 main 에서 놓으려고 넣는다.
+            if (entry.preloadView) [viewsToRemove addObject:entry.preloadView];
         }
         [s_nativeAds removeAllObjects];
 

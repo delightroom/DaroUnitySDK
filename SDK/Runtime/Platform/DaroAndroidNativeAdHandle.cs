@@ -83,6 +83,30 @@ namespace Daro.Internal
             _adObject.Call("load", _activity, _proxy, iconWidth, iconHeight);
         }
 
+        public void Preload()
+        {
+            DaroLog.Verbose("Native", $"Handle[Android].Preload adUnit='{_adUnitKey}' disposed={_disposed} adObj={_adObject != null}");
+            if (_disposed || _adObject == null || _proxy == null) return;
+
+            if (_activity == null)
+            {
+                // Load 와 같은 처리 — Activity 가 없으면 던지지 않고 실패로 알린다.
+                var err = new DaroAdLoadError(
+                    DaroAdLoadErrorCode.NotInitialized,
+                    "Activity not available — call DaroSdk.InitializeAsync() before constructing DaroNativeAd.",
+                    _adUnitKey, rawCode: -1);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_disposed) return;
+                    _sink.OnAdFailedToPreload(err);
+                });
+                return;
+            }
+
+            // 컨트롤러는 Load 의 뷰와 같은 Activity 로 만든다 — SDK 가 소비 때 인스턴스 일치를 본다.
+            _adObject.Call("preload", _activity, _proxy);
+        }
+
         public bool SupportsNativeMedia => false;
         public void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled) { }
         public void ClearMediaScreenRect() { }
@@ -279,6 +303,31 @@ namespace Daro.Internal
                 {
                     if (_parent._disposed) return;
                     _parent._sink.OnAdFailedToLoad(err, keepsCurrentAd: true);
+                });
+            }
+
+            public void onAdPreloaded(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
+            {
+                if (_parent._disposed) return;
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_parent._disposed) return;
+                    _parent._sink.OnAdPreloaded(info);
+                });
+            }
+
+            public void onAdFailedToPreload(
+                string adUnitKey, int errorCode, string errorMessage, int latencyMs)
+            {
+                if (_parent._disposed) return;
+                var err = new DaroAdLoadError(
+                    DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
+                    errorMessage, adUnitKey, errorCode);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_parent._disposed) return;
+                    _parent._sink.OnAdFailedToPreload(err);
                 });
             }
 

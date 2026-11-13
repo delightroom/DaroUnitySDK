@@ -8,10 +8,16 @@
         1:1 lock rule: one Daro version pins the full sub-network set.
 
         iOS: DaroObjCBridge — 통합 SDK 의 ObjC 표면 래퍼 xcframework.
-             CocoaPods trunk 정식 좌표 2.0.0-rc.12 (임시 `:http =>` /
-             `:podspec =>` 배선 없음). Unity shim 이 ObjC++ 라 Swift-only 인
-             DaroAds 가 아니라 이 브리지를 문다 — DaroAds 를 같이 선언하면
-             중복 설치된다.
+             CocoaPods trunk 좌표 (임시 `:http =>` / `:podspec =>` 배선 없음).
+             Unity shim 이 ObjC++ 라 Swift-only 인 DaroAds 가 아니라 이 브리지를
+             문다 — DaroAds 를 같이 선언하면 중복 설치된다.
+
+             핀 2.0.9-rc.1 은 preload API ( `initWithAdUnitKey:...preload:`,
+             `bannerViewDidPreload:` 등 ) 와 adUnitKey 이름이 함께 든
+             첫 trunk 빌드다. iOS shim 이 둘 다 쓰므로 그보다 낮은 브리지로는
+             컴파일되지 않는다 ( 2.0.6-rc.1 은 preload 만, 2.0.7 / 2.0.8 은 preload
+             없이 발행됐다 ). 배포 때의 실제 버전은 배포 입력
+             `dependency_versions` 가 정한다.
 
              podspec 이 27개를 전이로 물고 온다: Google-Mobile-Ads-SDK +
              AppLovinSDK + 13개 네트워크의 AdMob·MAX 짝 어댑터(Facebook/
@@ -31,7 +37,12 @@
                  AdMob + MAX mediation coexist in the single artifact (no
                  build-time variant; per-request routing is a runtime server
                  policy), and daro-core sources are inlined into the
-                 artifact, so nothing else needs declaring. The legacy
+                 artifact, so nothing else needs declaring. Pin 2.1.0-rc.1
+                 carries both the view-ad preload controllers the Kotlin shim
+                 compiles against and the adUnitKey naming (2.0.8 / 2.0.9
+                 shipped without preload; 2.0.10-rc.1 is the same source under
+                 a superseded version number); keep it in
+                 lockstep with Plugins/Android-src~/build.gradle.kts. The legacy
                  per-mediation artifact (so.daro:daro-m 1.3.x) is the
                  previous generation and must not be mixed with the unified artifact.
 
@@ -58,10 +69,10 @@
                  Consumer app minSdk 23.
     -->
     <iosPods>
-        <iosPod name="DaroObjCBridge" version="2.0.8" />
+        <iosPod name="DaroObjCBridge" version="2.0.9-rc.1" />
     </iosPods>
     <androidPackages>
-        <androidPackage spec="so.daro:daro-sdk:2.0.9">
+        <androidPackage spec="so.daro:daro-sdk:2.1.0-rc.1">
             <repositories>
                 <repository>https://artifacts.applovin.com/android</repository>
                 <repository>https://artifact.bytedance.com/repository/pangle</repository>

@@ -31,6 +31,14 @@ namespace Daro
         /// </summary>
         [Range(-1, 5000)] public int loadLatencyMs = 120;
 
+        /// <summary>
+        /// How long a preloaded banner / native ad stays usable before
+        /// <c>Load()</c> falls back to a normal load. Mirrors the native SDK's
+        /// 10-minute view-ad TTL; lower it to exercise the expiry path.
+        /// </summary>
+        [Header("Preload")]
+        [Range(0f, 600f)] public float preloadTtlSeconds = 600f;
+
         [Header("Ad Display")]
         [Range(0f, 3f)]   public float  showDelaySeconds  = 0.2f;
         [Range(0f, 1f)]   public float  showSuccessRate   = 1.0f;

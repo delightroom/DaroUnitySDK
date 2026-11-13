@@ -59,6 +59,9 @@ namespace Daro.Internal
         // Size baked at Load (DaroBannerAdView 가 ctor 시점에 size 고정).
         // Position 은 Show 후에도 변경 가능.
         void CreateBanner(string adUnitKey);
+        // Preload: 뷰 없이 광고 한 개를 받아 둔다. 다음 LoadBanner 가 한 번 넘겨받는다
+        // ( 로딩 중이면 결과 대기, 실패·만료면 일반 로드 ). TTL·중복 판정은 네이티브 SDK 몫이다.
+        void PreloadBanner(string adUnitKey, DaroBannerSize size);
         void LoadBanner(string adUnitKey, DaroBannerSize size);
         void ShowBanner(string adUnitKey);
         void HideBanner(string adUnitKey);
@@ -104,6 +107,10 @@ namespace Daro.Internal
         // Banner-only — fires after HideBanner completes. native callback 부재이므로
         // platform impl 이 Hide 호출 직후 이 slot 에 직접 enqueue.
         Action<string, DaroAdInfo>?                 OnAdHidden       { set; }
+
+        // Banner-only — PreloadBanner 의 결과. 네이티브 광고는 INativeAdEventSink 로 간다.
+        Action<string, DaroAdInfo>?                 OnAdPreloaded       { set; }
+        Action<string, DaroAdLoadError>?            OnAdFailedToPreload { set; }
 
         // ILRD — per-impression revenue from the mediation layer.
         // Registry-keyed formats only; native ad routes revenue through

@@ -23,6 +23,14 @@ namespace Daro
     /// <c>Hide()</c> removes the view but keeps the ad loaded; subsequent
     /// <c>Show()</c> re-displays without a network round-trip.</para>
     ///
+    /// <para>Preload: <see cref="Preload"/> fetches one ad without creating or
+    /// attaching a native view, so nothing is displayed and no impression can
+    /// occur. The next <see cref="Load"/> takes that ad over once — it shows
+    /// immediately if the ad is ready, waits if the preload is still in
+    /// flight, and falls back to a normal load if the preload failed or the
+    /// ad sat unused for more than 10 minutes. <see cref="Dispose"/> releases
+    /// an ad that was preloaded but never loaded.</para>
+    ///
     /// <para>Ownership: after a successful <see cref="Load"/>, the underlying
     /// native banner view is attached to the host view tree (Android: Activity
     /// decor; iOS: GLView controller) until <see cref="Hide"/> or
@@ -52,6 +60,19 @@ namespace Daro
         // ── Lifecycle events ──────────────────────────────────────────────
         public event Action<DaroAdInfo>?      OnAdLoaded;
         public event Action<DaroAdLoadError>? OnAdFailedToLoad;
+
+        /// <summary>
+        /// Fires when <see cref="Preload"/> has an ad ready to hand to the next
+        /// <see cref="Load"/>. The banner is not displayed yet and
+        /// <see cref="IsReady"/> stays <c>false</c> until <see cref="OnAdLoaded"/>.
+        /// </summary>
+        public event Action<DaroAdInfo>?      OnAdPreloaded;
+
+        /// <summary>
+        /// Fires when <see cref="Preload"/> fails. <see cref="Load"/> still works —
+        /// it performs a normal load instead of using a preloaded ad.
+        /// </summary>
+        public event Action<DaroAdLoadError>? OnAdFailedToPreload;
 
         /// <summary>
         /// Fires after <see cref="Load"/> successfully displays the banner, and
@@ -120,8 +141,35 @@ namespace Daro
         }
 
         /// <summary>
+        /// Fetch one ad ahead of time without displaying anything. The next
+        /// <see cref="Load"/> takes it over once. Calling this again while a
+        /// preload is in flight or a fresh ad is held is ignored; after a
+        /// failure or after the held ad expired (10 minutes) it requests again.
+        /// Results arrive via <see cref="OnAdPreloaded"/> /
+        /// <see cref="OnAdFailedToPreload"/>; pre-init and no-network failures
+        /// fire <see cref="OnAdFailedToPreload"/> rather than throwing.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException"/>
+        public void Preload()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DaroBannerAd));
+            if (!AdLoadPreconditions.TryCheck(AdUnitKey, out var preconditionError))
+            {
+                DaroLog.Warn("Banner",
+                    $"Preload short-circuited adUnit='{AdUnitKey}' code={preconditionError!.Code} ({preconditionError.Message})");
+                FireOnAdFailedToPreload(preconditionError);
+                return;
+            }
+            DaroLog.Verbose("Banner", $"Preload adUnit='{AdUnitKey}' size={Size}");
+            // _loaded / _visibleIntent 는 건드리지 않는다 — 받아 두는 것은 표시 상태와 무관하다.
+            DaroPlatform.Current.PreloadBanner(AdUnitKey, Size);
+        }
+
+        /// <summary>
         /// Start loading and display the banner by default once loading
-        /// succeeds. Size is passed because <c>DaroBannerAdView</c> bakes it
+        /// succeeds. If <see cref="Preload"/> was called, the preloaded ad is
+        /// used instead of a new request (see the class remarks). Size is
+        /// passed because <c>DaroBannerAdView</c> bakes it
         /// into view construction at native side. Post-init failures fire
         /// <see cref="OnAdFailedToLoad"/> rather than throwing.
         /// </summary>
@@ -272,6 +320,8 @@ namespace Daro
 
                 OnAdLoaded       = null;
                 OnAdFailedToLoad = null;
+                OnAdPreloaded       = null;
+                OnAdFailedToPreload = null;
                 OnAdShown        = null;
                 OnAdClicked      = null;
                 OnAdImpression   = null;
@@ -345,6 +395,20 @@ namespace Daro
             _hiddenReportable = false;
             DaroLog.Verbose("Banner", $"FireOnAdFailedToLoad adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
             SafeEventInvoker.Invoke(OnAdFailedToLoad, error);
+        }
+
+        internal void FireOnAdPreloaded(DaroAdInfo info)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Banner", $"FireOnAdPreloaded adUnit='{AdUnitKey}' latency={info.Latency}");
+            SafeEventInvoker.Invoke(OnAdPreloaded, info);
+        }
+
+        internal void FireOnAdFailedToPreload(DaroAdLoadError error)
+        {
+            if (_disposed) return;
+            DaroLog.Verbose("Banner", $"FireOnAdFailedToPreload adUnit='{AdUnitKey}' code={error.Code} raw={error.RawCode}");
+            SafeEventInvoker.Invoke(OnAdFailedToPreload, error);
         }
 
         private void FireOnAdShownIfNeeded()

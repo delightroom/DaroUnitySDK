@@ -7,7 +7,10 @@
 //  Lifecycle:
 //
 //    CreateBanner        → entry slot only, no view yet
-//    LoadBanner(size)    → construct DaroObjCBannerView + addSubview visible + loadAd
+//    PreloadBanner(size) → construct DaroObjCBannerView(preload:YES) detached; the SDK
+//                          requests at construction and holds one ad (TTL 10 min)
+//    LoadBanner(size)    → preload view present: attach it (attach = consume, no loadAd)
+//                          otherwise: construct DaroObjCBannerView + addSubview visible + loadAd
 //    ShowBanner          → addSubview if hidden/detached
 //    HideBanner          → removeFromSuperview
 //    DestroyBanner       → removeFromSuperview + nil entry (ARC releases all)
@@ -45,6 +48,11 @@
 @property (nonatomic, assign) int sizeOrdinal;       // 0=Standard, 1=Mrec
 @property (nonatomic, assign) BOOL visible;          // Load/Show requested + not yet Hidden — gates GetScreenRect
 @property (nonatomic, assign) NSInteger generation;  // increments per Load; drops stale async main work/callbacks
+// Preload. 받아 두었고 아직 LoadBanner 가 가져가지 않은 뷰. 계층 밖에 있다.
+// 가져가면 bannerView / delegate 로 옮기고 여기는 비운다.
+@property (nonatomic, strong, nullable) DaroObjCBannerView* preloadView;
+@property (nonatomic, strong, nullable) DaroUnityBannerDelegate* preloadDelegate;
+@property (nonatomic, assign) int preloadSizeOrdinal;
 @end
 
 @implementation DaroUnityBannerEntry
@@ -76,6 +84,18 @@ static BOOL BannerIsCurrent(NSString* unit,
                    (!requireVisible || entry.visible));
     });
     return current;
+}
+
+// preload 결과용. 받아 둔 뷰와 이미 LoadBanner 가 가져간 뷰 ( 로딩 중 연결 ) 를 모두 인정한다.
+// Caller contract: BannerIsCurrent 와 같다 — s_adQueue 에서 부르지 않는다.
+static BOOL BannerOwnsView(NSString* unit, DaroObjCBannerView* view) {
+    if (!unit || !view) return NO;
+    __block BOOL owns = NO;
+    dispatch_sync(s_adQueue, ^{
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        owns = (entry && (entry.preloadView == view || entry.bannerView == view));
+    });
+    return owns;
 }
 
 static void DaroUnityWireBannerRevenue(DaroObjCBannerView* view,
@@ -173,6 +193,28 @@ static CGRect BannerFrameForPosition(int posOrdinal, CGSize bannerSize, UIView* 
             (long)error.code, EscapeJson(error.localizedDescription)]);
 }
 
+// preload:YES 로 만든 뷰가 부착 전에 받아 둔 광고의 결과. 부착 뒤의 표시는 bannerViewDidLoad: 로 온다.
+- (void)bannerViewDidPreload:(DaroObjCBannerView*)bannerView
+                      adInfo:(DaroObjCAdInfo*)adInfo {
+    if (!BannerOwnsView(self.adUnitKey, bannerView)) return;
+    DaroLogD(@"Banner", @"didPreload adUnit='%@'", self.adUnitKey);
+    DaroDispatch(self.adUnitKey, [NSString stringWithFormat:
+        @"{\"event\":\"adPreloaded\",\"adFormat\":0%@}", AdInfoFields(adInfo)]);
+}
+
+// 뷰는 버리지 않는다 — LoadBanner 가 붙이면 SDK 가 일반 로드로 폴백한다. NSError code 는
+// didFailWithError: 와 같이 DaroObjCBannerView 가 -1 로 고정한다.
+- (void)bannerView:(DaroObjCBannerView*)bannerView
+didFailToPreloadWithError:(NSError*)error {
+    if (!BannerOwnsView(self.adUnitKey, bannerView)) return;
+    DaroLogW(@"Banner", @"Preload failed adUnit='%@' code=%ld msg='%@'",
+        self.adUnitKey, (long)error.code, error.localizedDescription);
+    DaroDispatch(self.adUnitKey,
+        [NSString stringWithFormat:
+            @"{\"event\":\"adFailedToPreload\",\"adFormat\":0,\"errorCode\":%ld,\"errorMessage\":\"%@\"}",
+            (long)error.code, EscapeJson(error.localizedDescription)]);
+}
+
 - (void)bannerViewDidClick:(DaroObjCBannerView*)bannerView
                     adInfo:(DaroObjCAdInfo*)adInfo {
     if (!BannerIsCurrent(self.adUnitKey, bannerView, YES)) return;
@@ -204,9 +246,11 @@ void DaroUnity_CreateBanner(const char* adUnitKey) {
     NSString* unit = [NSString stringWithUTF8String:adUnitKey];
     dispatch_async(s_adQueue, ^{
         DaroObjCBannerView* oldView = s_banners[unit].bannerView;
-        if (oldView) {
+        DaroObjCBannerView* oldPreload = s_banners[unit].preloadView;
+        if (oldView || oldPreload) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [oldView removeFromSuperview];
+                (void)oldPreload;                         // 받아 둔 뷰의 마지막 참조를 main 에서 놓는다
             });
         }
         s_banners[unit] = nil;                            // Replace any prior entry (ARC release)
@@ -215,6 +259,60 @@ void DaroUnity_CreateBanner(const char* adUnitKey) {
         entry.sizeOrdinal     = 0;                        // Standard default; overwritten at LoadBanner
         entry.generation      = NextBannerGeneration();
         s_banners[unit] = entry;
+    });
+}
+
+// 뷰 없이 ( 계층 밖에서 ) 배너 한 개를 받아 둔다. DaroObjCBannerView(preload:YES) 는 생성 시
+// 요청을 내고, 처음 window 에 붙을 때 한 번 소비한다 — 그 부착은 LoadBanner 가 한다.
+// 이미 받아 둔 뷰가 있으면 부착 전 loadAd 로 다시 요청한다: 로딩 중이거나 TTL 안의 광고가
+// 있으면 SDK 가 무시하고, 만료·실패면 다시 받는다.
+void DaroUnity_PreloadBanner(const char* adUnitKey, int sizeOrdinal) {
+    if (!adUnitKey) return;
+    NSString* unit = [NSString stringWithUTF8String:adUnitKey];
+    DaroLogD(@"Banner", @"Preload adUnit='%@' size=%d", unit, sizeOrdinal);
+    dispatch_async(s_adQueue, ^{
+        DaroUnityBannerEntry* entry = s_banners[unit];
+        if (!entry) return;
+
+        // 생성은 main 에서만 하므로, 있는지 확인하고 만드는 것도 main 블록 안에서 한다 —
+        // 연속 호출이 뷰를 두 개 만들지 않게.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __block BOOL current = NO;
+            __block DaroObjCBannerView* existing = nil;
+            __block DaroObjCBannerView* discarded = nil;  // 사이즈가 다른 것 — 이 main 블록에서 놓는다
+            dispatch_sync(s_adQueue, ^{
+                if (s_banners[unit] != entry) return;
+                current = YES;
+                if (entry.preloadView && entry.preloadSizeOrdinal == sizeOrdinal) {
+                    existing = entry.preloadView;
+                } else {
+                    discarded = entry.preloadView;
+                    entry.preloadView = nil;
+                    entry.preloadDelegate = nil;
+                }
+            });
+            discarded = nil;
+            if (!current) return;
+            if (existing) {
+                [existing loadAd];
+                return;
+            }
+
+            DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
+                ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
+            DaroUnityBannerDelegate* delegate = [DaroUnityBannerDelegate new];
+            delegate.adUnitKey = unit;
+            DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
+                initWithAdUnitKey:unit bannerSize:nativeSize preload:YES];
+            view.delegate = delegate;
+            DaroUnityWireBannerRevenue(view, unit);
+            dispatch_sync(s_adQueue, ^{
+                if (s_banners[unit] != entry) return;     // 그사이 해제됨 — 뷰는 이 블록이 끝나며 놓인다
+                entry.preloadView = view;
+                entry.preloadDelegate = delegate;
+                entry.preloadSizeOrdinal = sizeOrdinal;
+            });
+        });
     });
 }
 
@@ -256,14 +354,39 @@ void DaroUnity_LoadBanner(const char* adUnitKey, int sizeOrdinal) {
                 return;
             }
 
-            DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
-                ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
-            DaroUnityBannerDelegate* delegate = [DaroUnityBannerDelegate new];
-            delegate.adUnitKey = unit;
-            DaroObjCBannerView* view = [[DaroObjCBannerView alloc]
-                initWithAdUnitKey:unit bannerSize:nativeSize autoLoad:NO];
-            view.delegate = delegate;
-            DaroUnityWireBannerRevenue(view, unit);
+            // 받아 둔 뷰는 여기 ( main ) 에서 가져간다. PreloadBanner 는 뷰를 main 블록에서 만들어
+            // 넣으므로, 같은 프레임의 Preload → Load 에서 s_adQueue 블록이 먼저 읽으면 아직 비어 있다.
+            // main 큐는 FIFO 라 이 시점에는 앞선 Preload 의 뷰가 들어와 있다.
+            // 사이즈가 다르면 쓰지 않고 버린다 ( 이 블록이 끝나며 main 에서 놓인다 ).
+            __block DaroObjCBannerView* preloadedView = nil;
+            __block DaroUnityBannerDelegate* preloadedDelegate = nil;
+            __block BOOL consumesPreload = NO;
+            dispatch_sync(s_adQueue, ^{
+                DaroUnityBannerEntry* latest = s_banners[unit];
+                if (!latest || latest.generation != generation) return;
+                preloadedView = latest.preloadView;
+                preloadedDelegate = latest.preloadDelegate;
+                consumesPreload = preloadedView && latest.preloadSizeOrdinal == sizeOrdinal;
+                latest.preloadView = nil;
+                latest.preloadDelegate = nil;
+            });
+
+            DaroUnityBannerDelegate* delegate;
+            DaroObjCBannerView* view;
+            if (consumesPreload) {
+                delegate = preloadedDelegate;
+                view = preloadedView;
+            } else {
+                DaroObjCBannerSize nativeSize = (sizeOrdinal == 1)
+                    ? DaroObjCBannerSizeMrec : DaroObjCBannerSizeBanner;
+                delegate = [DaroUnityBannerDelegate new];
+                delegate.adUnitKey = unit;
+                // preload:NO 는 명시 loadAd 전까지 요청하지 않는다 ( 옛 autoLoad:NO 와 같다 ).
+                view = [[DaroObjCBannerView alloc]
+                    initWithAdUnitKey:unit bannerSize:nativeSize preload:NO];
+                view.delegate = delegate;
+                DaroUnityWireBannerRevenue(view, unit);
+            }
             [view setRootViewController:vc];
 
             __block BOOL current = NO;
@@ -288,10 +411,19 @@ void DaroUnity_LoadBanner(const char* adUnitKey, int sizeOrdinal) {
                 view.frame = BannerFrameForPosition(
                     latestPosOrd, BannerSizeForOrdinal(latestSizeOrd), parentView);
                 [parentView addSubview:view];
-                DaroLogD(@"Banner", @"Load.attached adUnit='%@' frame=%@",
-                    unit, NSStringFromCGRect(view.frame));
+                DaroLogD(@"Banner", @"Load.attached adUnit='%@' frame=%@ preload=%d",
+                    unit, NSStringFromCGRect(view.frame), consumesPreload);
+            } else if (consumesPreload) {
+                // Load 직후 Hide 해서 붙이지 않는 경우. 소비는 첫 window 부착이 트리거라, 숨긴 채
+                // 붙였다 바로 떼어 소비만 시킨다 — 그래야 일반 경로처럼 adLoaded 가 오고 그 뒤
+                // Show 가 가능하다. 같은 런루프 턴 안이라 화면에 그려지지 않는다.
+                view.hidden = YES;
+                [vc.view addSubview:view];
+                [view removeFromSuperview];
+                view.hidden = NO;
             }
-            [view loadAd];
+            // 받아 둔 뷰는 부착이 곧 소비다. 여기서 loadAd 를 부르면 받아 둔 광고 위에 새 요청이 겹친다.
+            if (!consumesPreload) [view loadAd];
         });
     });
 }
@@ -378,9 +510,13 @@ void DaroUnity_DestroyBanner(const char* adUnitKey) {
     DaroLogD(@"Banner", @"Destroy adUnit='%@'", unit);
     dispatch_async(s_adQueue, ^{
         DaroObjCBannerView* view = s_banners[unit].bannerView;
-        if (view) {
+        // 쓰지 않은 preload 뷰도 여기서 놓는다. 뷰가 해제되면 SDK 의 PreloadSession 이 같이
+        // 해제돼 받아 둔 광고를 놓고, 늦게 오는 결과는 버려진다.
+        DaroObjCBannerView* preloadView = s_banners[unit].preloadView;
+        if (view || preloadView) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [view removeFromSuperview];
+                (void)preloadView;   // 마지막 참조를 main 에서 놓는다
             });
         }
         s_banners[unit] = nil;       // ARC releases view + delegate together
@@ -506,6 +642,8 @@ void DaroUnityBanner_DestroyAll(void) {
         NSMutableArray<UIView*>* viewsToRemove = [NSMutableArray array];
         for (DaroUnityBannerEntry* entry in s_banners.allValues) {
             if (entry.bannerView) [viewsToRemove addObject:entry.bannerView];
+            // 계층에 없어 removeFromSuperview 는 no-op 이다. 마지막 참조를 main 에서 놓으려고 넣는다.
+            if (entry.preloadView) [viewsToRemove addObject:entry.preloadView];
         }
         [s_banners removeAllObjects];
 

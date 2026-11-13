@@ -46,6 +46,8 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
         private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
+        private Action<string, DaroAdInfo>?                 _onAdPreloaded;
+        private Action<string, DaroAdLoadError>?            _onAdFailedToPreload;
 
         // ── Construction ────────────────────────────────────────────────────
 
@@ -254,6 +256,8 @@ namespace Daro.Internal
         public Action<string, DaroAdInfo, DaroRewardItem>? OnEarnedReward   { set => _onEarnedReward   = value; }
         public Action<string, DaroAdInfo>?                 OnAdHidden       { set => _onAdHidden       = value; }
         public Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
+        public Action<string, DaroAdInfo>?                 OnAdPreloaded       { set => _onAdPreloaded       = value; }
+        public Action<string, DaroAdLoadError>?            OnAdFailedToPreload { set => _onAdFailedToPreload = value; }
 
         /// <summary>
         /// Mock revenue payload from settings — same micros→decimal conversion
@@ -285,6 +289,123 @@ namespace Daro.Internal
             CreateUnit(adUnitKey, DaroAdFormat.Banner);
         }
 
+        // ── Banner preload mock ───────────────────────────────
+        // 기기의 계약을 흉내 낸다: 한 개를 받아 두고, 다음 LoadBanner 가 한 번 넘겨받는다.
+        // 받아 둔 것은 지연 없이, 로딩 중이면 결과를 기다려, 실패·만료면 일반 로드로 간다.
+        // 오버레이는 만들지 않는다 — 노출·수익은 LoadBanner 뒤에만 나간다.
+
+        /// <summary>LoadBanner 가 preload 를 넘겨받은 횟수 ( 받아 둔 것 + 로딩 중 연결 ). 테스트 관찰용.</summary>
+        internal int BannerPreloadConsumeCount { get; private set; }
+
+        public void PreloadBanner(string adUnitKey, DaroBannerSize size)
+        {
+            DaroLog.Verbose("Banner", $"Platform[Editor].PreloadBanner adUnit='{adUnitKey}' size={size} unit={_units.ContainsKey(adUnitKey)}");
+            if (!_units.TryGetValue(adUnitKey, out var state)) return;
+            if (state.Destroyed) return;
+            // 로딩 중이거나 TTL 안의 광고를 들고 있으면 무시한다. 만료·실패·소비 뒤에는 다시 받는다.
+            if (state.PreloadPhase == DaroEditorPreloadPhase.Loading) return;
+            if (state.PreloadPhase == DaroEditorPreloadPhase.Loaded
+                && !IsPreloadExpired(state.PreloadedAtRealtime)) return;
+
+            state.PreloadPhase = DaroEditorPreloadPhase.Loading;
+            MainThreadDispatcher.EnsureCreated();
+            StartCoroutineOnDispatcher(PreloadCoroutine(state, ++state.PreloadGeneration));
+        }
+
+        private bool IsPreloadExpired(float preloadedAtRealtime) =>
+            Time.realtimeSinceStartup - preloadedAtRealtime > _settings.preloadTtlSeconds;
+
+        private IEnumerator PreloadCoroutine(PerUnitState state, int preloadGeneration)
+        {
+            // Snapshot settings so mid-delay changes don't desync one preload cycle.
+            var delay        = _settings.loadDelaySeconds;
+            var successRate  = _settings.loadSuccessRate;
+            var latencyMs    = _settings.loadLatencyMs;
+            var errorCode    = _settings.loadErrorCode;
+            var errorMessage = _settings.loadErrorMessage ?? string.Empty;
+
+            if (delay > 0f)
+                yield return new WaitForSecondsRealtime(delay);
+
+            if (state.Destroyed) yield break;
+
+            var adUnitKey = state.AdUnitKey;
+            // 로딩 중에 LoadBanner 가 가져갔는가 ( 핸드오프 ). 그렇다면 결과를 들고 있지 않고 넘긴다.
+            // 가져간 요청은 PreloadPhase 를 건드리지 않는다 — 그사이 다음 Preload 가 시작됐을 수 있다.
+            var claimed = state.ClaimedPreloadGeneration == preloadGeneration;
+            if (claimed) state.ClaimedPreloadGeneration = 0;
+            else if (state.PreloadGeneration != preloadGeneration) yield break;
+
+            if (DaroEditorMockProbability.RollSuccess(successRate))
+            {
+                if (!claimed)
+                {
+                    state.PreloadPhase        = DaroEditorPreloadPhase.Loaded;
+                    state.PreloadedAtRealtime = Time.realtimeSinceStartup;
+                    state.PreloadLatencyMs    = latencyMs;
+                }
+
+                double? latency = latencyMs < 0 ? (double?)null : latencyMs;
+                var info = new DaroAdInfo(DaroAdFormat.Banner, adUnitKey, latency);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (state.Destroyed) return;
+                    _onAdPreloaded?.Invoke(adUnitKey, info);
+                });
+
+                if (claimed && !IsStaleBannerLoad(state, state.ClaimedLoadGeneration))
+                    CompleteLoadSuccess(state, state.ClaimedLoadGeneration, latencyMs);
+            }
+            else
+            {
+                if (!claimed) state.PreloadPhase = DaroEditorPreloadPhase.Failed;
+
+                var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
+                var err = new DaroAdLoadError(mapped, errorMessage, adUnitKey);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (state.Destroyed) return;
+                    _onAdFailedToPreload?.Invoke(adUnitKey, err);
+                });
+
+                // 가져간 뒤의 실패는 일반 로드로 폴백한다.
+                if (claimed && !IsStaleBannerLoad(state, state.ClaimedLoadGeneration))
+                    StartCoroutineOnDispatcher(LoadCoroutine(state, state.ClaimedLoadGeneration));
+            }
+        }
+
+        // 받아 둔 광고를 한 번 넘긴다. true 면 일반 로드를 건너뛴다.
+        private bool TryConsumeBannerPreload(PerUnitState state)
+        {
+            if (state.Destroyed) return false;
+            switch (state.PreloadPhase)
+            {
+                case DaroEditorPreloadPhase.Loaded:
+                    state.PreloadPhase = DaroEditorPreloadPhase.None;
+                    if (IsPreloadExpired(state.PreloadedAtRealtime)) return false;   // 만료 → 일반 로드
+                    state.Loaded = false;
+                    BannerPreloadConsumeCount++;
+                    MainThreadDispatcher.EnsureCreated();
+                    CompleteLoadSuccess(state, ++state.LoadGeneration, state.PreloadLatencyMs);
+                    return true;
+
+                case DaroEditorPreloadPhase.Loading:
+                    // 결과를 기다린다 — PreloadCoroutine 이 성공이면 로드 완료로, 실패면 일반 로드로 넘긴다.
+                    // 가져간 것은 더 이상 "들고 있는 preload" 가 아니다: 기기처럼 다음 Preload 가 새로 받는다.
+                    state.Loaded                   = false;
+                    state.PreloadPhase             = DaroEditorPreloadPhase.None;
+                    state.ClaimedPreloadGeneration = state.PreloadGeneration;
+                    state.ClaimedLoadGeneration    = ++state.LoadGeneration;
+                    BannerPreloadConsumeCount++;
+                    return true;
+
+                default:
+                    // 없음 / 실패 → 일반 로드. 실패 기록은 한 번 쓰고 지운다.
+                    state.PreloadPhase = DaroEditorPreloadPhase.None;
+                    return false;
+            }
+        }
+
         public void LoadBanner(string adUnitKey, DaroBannerSize size)
         {
             DaroLog.Verbose("Banner", $"Platform[Editor].LoadBanner adUnit='{adUnitKey}' size={size} unit={_units.ContainsKey(adUnitKey)}");
@@ -292,6 +413,7 @@ namespace Daro.Internal
             {
                 state.BannerSize = size;
                 state.Visible = true;
+                if (TryConsumeBannerPreload(state)) return;
             }
             LoadUnit(adUnitKey);
         }
@@ -472,6 +594,14 @@ namespace Daro.Internal
             public DaroBannerSize       BannerSize;
             public DaroBannerPosition   BannerPosition;
 
+            // Banner preload — see PreloadBanner / TryConsumeBannerPreload.
+            public DaroEditorPreloadPhase PreloadPhase;
+            public int                  PreloadGeneration;
+            public float                PreloadedAtRealtime;
+            public int                  PreloadLatencyMs;
+            public int                  ClaimedPreloadGeneration; // LoadBanner 가 가져간 로딩 중 preload ( 0 = 없음 )
+            public int                  ClaimedLoadGeneration;
+
             public PerUnitState(string adUnitKey, DaroAdFormat format)
             {
                 AdUnitKey  = adUnitKey;
@@ -526,63 +656,69 @@ namespace Daro.Internal
 
             if (state.Destroyed || IsStaleBannerLoad(state, generation)) yield break;
 
-            var success = DaroEditorMockProbability.RollSuccess(successRate);
-            if (success)
-            {
-                state.Loaded = true;
-
-                // latency semantics: -1 → null, positive → millis as-is
-                // (matching Daro cross-platform contract).
-                double? latency = latencyMs < 0 ? (double?)null : latencyMs;
-                var info = new DaroAdInfo(state.Format, state.AdUnitKey, latency);
-
-                if (state.Format == DaroAdFormat.Banner && state.Visible)
-                {
-#if UNITY_EDITOR
-                    EnsureBannerView(state).Show();
-#endif
-                    state.BannerDisplayed = true;
-                }
-
-                var adUnitKey = state.AdUnitKey;
-                var revenue = BuildMockRevenue();
-                MainThreadDispatcher.Enqueue(() =>
-                {
-                    if (state.Destroyed) return;
-                    _onAdLoaded?.Invoke(adUnitKey, info);
-                    if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
-                    if (state.Format == DaroAdFormat.Banner && state.Visible && state.Loaded)
-                    {
-                        _onAdImpression?.Invoke(adUnitKey, info);
-                        _onAdRevenuePaid?.Invoke(adUnitKey, info, revenue);
-                    }
-                });
-            }
+            if (DaroEditorMockProbability.RollSuccess(successRate))
+                CompleteLoadSuccess(state, generation, latencyMs);
             else
+                CompleteLoadFailure(state, generation, errorCode, errorMessage);
+        }
+
+        // 로드 성공의 마무리. 일반 로드와 preload 소비 ( 받아 둔 것 / 로딩 중 연결 ) 가 같이 쓴다.
+        private void CompleteLoadSuccess(PerUnitState state, int generation, int latencyMs)
+        {
+            state.Loaded = true;
+
+            // latency semantics: -1 → null, positive → millis as-is
+            // (matching Daro cross-platform contract).
+            double? latency = latencyMs < 0 ? (double?)null : latencyMs;
+            var info = new DaroAdInfo(state.Format, state.AdUnitKey, latency);
+
+            if (state.Format == DaroAdFormat.Banner && state.Visible)
             {
-                state.Loaded = false;
-                if (state.Format == DaroAdFormat.Banner)
-                {
-                    state.Visible = false;
-                    state.BannerDisplayed = false;
 #if UNITY_EDITOR
-                    if (_bannerViews.TryGetValue(state.AdUnitKey, out var go) && go != null)
-                    {
-                        go.GetComponent<DaroEditorBannerView>()?.Hide();
-                    }
+                EnsureBannerView(state).Show();
 #endif
-                }
-
-                var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
-                var err = new DaroAdLoadError(mapped, errorMessage, state.AdUnitKey);
-
-                var adUnitKey = state.AdUnitKey;
-                MainThreadDispatcher.Enqueue(() =>
-                {
-                    if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
-                    _onAdFailedToLoad?.Invoke(adUnitKey, err);
-                });
+                state.BannerDisplayed = true;
             }
+
+            var adUnitKey = state.AdUnitKey;
+            var revenue = BuildMockRevenue();
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                if (state.Destroyed) return;
+                _onAdLoaded?.Invoke(adUnitKey, info);
+                if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
+                if (state.Format == DaroAdFormat.Banner && state.Visible && state.Loaded)
+                {
+                    _onAdImpression?.Invoke(adUnitKey, info);
+                    _onAdRevenuePaid?.Invoke(adUnitKey, info, revenue);
+                }
+            });
+        }
+
+        private void CompleteLoadFailure(PerUnitState state, int generation, int errorCode, string errorMessage)
+        {
+            state.Loaded = false;
+            if (state.Format == DaroAdFormat.Banner)
+            {
+                state.Visible = false;
+                state.BannerDisplayed = false;
+#if UNITY_EDITOR
+                if (_bannerViews.TryGetValue(state.AdUnitKey, out var go) && go != null)
+                {
+                    go.GetComponent<DaroEditorBannerView>()?.Hide();
+                }
+#endif
+            }
+
+            var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
+            var err = new DaroAdLoadError(mapped, errorMessage, state.AdUnitKey);
+
+            var adUnitKey = state.AdUnitKey;
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                if (state.Destroyed || IsStaleBannerLoad(state, generation)) return;
+                _onAdFailedToLoad?.Invoke(adUnitKey, err);
+            });
         }
 
         private bool IsUnitReady(string adUnitKey)
@@ -734,5 +870,14 @@ namespace Daro.Internal
             LastNativeAdHandle = handle;
             return handle;
         }
+    }
+
+    /// <summary>Editor mock 의 preload 한 건 ( 배너 유닛 / 네이티브 핸들 ) 이 어디까지 왔는가.</summary>
+    internal enum DaroEditorPreloadPhase
+    {
+        None,
+        Loading,
+        Loaded,
+        Failed,
     }
 }

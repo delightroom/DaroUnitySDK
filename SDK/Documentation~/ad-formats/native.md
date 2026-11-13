@@ -140,6 +140,25 @@ _ad.Load();
 
 There is no `Show()`, no `OnAdShown`, no `OnAdDismissed`. Publisher controls visibility by activating / deactivating the prefab.
 
+## `Preload()` — fetch ahead, deliver assets later
+
+`Preload()` fetches one native ad without creating a native view. `Info` and `IsReady` do not change. The next `Load()` takes the preloaded ad over and delivers its assets through the usual `OnNativeAdAssetLoaded` / `OnAdLoaded`:
+
+```csharp
+_ad = new DaroNativeAd(adUnitKey);
+_ad.OnAdPreloaded       += info => Debug.Log("Native preloaded");
+_ad.OnAdFailedToPreload += err  => Debug.LogWarning($"Native preload failed: {err.Code}");
+_ad.Preload();
+
+// later, when the slot is about to appear
+_view.LoadFor(_ad);         // or _ad.Load() on the raw path
+```
+
+- Ready ad → delivered right away. Preload still in flight → `Load()` waits for it. Preload failed, or the ad sat unused for more than 10 minutes → `Load()` runs a normal load.
+- A preloaded ad is handed over once; call `Preload()` again to prepare the next `Load()`.
+- Each instance preloads independently, including instances that share an ad unit.
+- `Dispose()` releases an ad that was preloaded but never loaded.
+
 ## Icon size hint — required, not optional
 
 `DaroNativeAd.IconSize` defaults to 200×200. **You must keep it above 0.**

@@ -145,6 +145,7 @@ namespace Daro
         public DaroBannerPosition Position  { get; }   // updated via SetPosition
 
         // --- methods ---
+        public void Preload();                               // async — fetches one ad, displays nothing; the next Load() takes it over
         public void Load();                                  // async — displays banner by default on success
         public bool IsReady();                               // never throws; false after Dispose
         public void Show();                                  // throws InvalidOperationException when !IsReady()
@@ -156,6 +157,8 @@ namespace Daro
         // --- events (6, all main-thread; no OnAdFailedToShow, no OnAdDismissed) ---
         public event Action<DaroAdInfo>      OnAdLoaded;
         public event Action<DaroAdLoadError> OnAdFailedToLoad;
+        public event Action<DaroAdInfo>      OnAdPreloaded;        // Preload() has an ad ready for the next Load()
+        public event Action<DaroAdLoadError> OnAdFailedToPreload;  // Preload() failed; Load() falls back to a normal load
         public event Action<DaroAdInfo>      OnAdShown;        // Load success display or Show after Hide
         public event Action<DaroAdInfo>      OnAdClicked;
         public event Action<DaroAdInfo>      OnAdImpression;
@@ -209,6 +212,7 @@ namespace Daro
         public bool              IsReady   { get; }          // property (not method) — false after Dispose
 
         // --- methods ---
+        public void Preload();               // fetches one ad without assets; the next Load() takes it over
         public void Load();                  // honors IconSize; result via OnAdLoaded / OnAdFailedToLoad
         public void NotifyVisible();         // impression signal; no-op after Dispose
         public void NotifyHidden();          // no-op after Dispose
@@ -222,6 +226,8 @@ namespace Daro
         public event Action<ISet<NativeAdAssetType>> OnNativeAdAssetLoaded;
         public event Action<DaroAdInfo>      OnAdLoaded;
         public event Action<DaroAdLoadError> OnAdFailedToLoad;
+        public event Action<DaroAdInfo>      OnAdPreloaded;        // Preload() has an ad ready for the next Load()
+        public event Action<DaroAdLoadError> OnAdFailedToPreload;  // Preload() failed; Load() falls back to a normal load
         public event Action<DaroAdInfo>      OnAdImpression;
         public event Action<DaroAdInfo>      OnAdClicked;
     }

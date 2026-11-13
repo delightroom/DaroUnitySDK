@@ -25,6 +25,8 @@ namespace Daro.Internal
         void Dismissed(string adUnitKey, DaroAdInfo info);
         void EarnedReward(string adUnitKey, DaroAdInfo info, DaroRewardItem reward);
         void RevenuePaid(string adUnitKey, DaroAdInfo info, DaroRevenueInfo revenue);
+        void Preloaded(string adUnitKey, DaroAdInfo info);
+        void FailedToPreload(string adUnitKey, DaroAdLoadError error);
         void SdkInitialized();
         void SdkInitFailed(DaroSdkInitException ex);
     }
@@ -183,6 +185,20 @@ namespace Daro.Internal
                     var precision = DaroJsonHelpers.GetJsonInt(eventJson, "precisionType");
                     var revenue   = DaroRevenueInfo.FromMicros(micros, currency, precision);
                     Safely(() => sink.RevenuePaid(adUnitKey, info, revenue));
+                    break;
+                }
+                case "adPreloaded":
+                {
+                    var info = ReadAdInfo(eventJson, adFormat, adUnitKey);
+                    Safely(() => sink.Preloaded(adUnitKey, info));
+                    break;
+                }
+                case "adFailedToPreload":
+                {
+                    var raw  = DaroJsonHelpers.GetJsonInt(eventJson, "errorCode");
+                    var msg  = DaroJsonHelpers.GetJsonString(eventJson, "errorMessage") ?? string.Empty;
+                    var err  = new DaroAdLoadError(DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitKey, raw);
+                    Safely(() => sink.FailedToPreload(adUnitKey, err));
                     break;
                 }
                 // unknown event → silent drop

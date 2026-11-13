@@ -62,6 +62,8 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
         private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
+        private Action<string, DaroAdInfo>?                 _onAdPreloaded;
+        private Action<string, DaroAdLoadError>?            _onAdFailedToPreload;
 
         // ── Layer 2 platform-level disposed guard ────────────────────────────
         // Distinct from the Kotlin Layer 1 (`@Volatile destroyed` per ad class).
@@ -81,6 +83,8 @@ namespace Daro.Internal
         Action<string, DaroAdInfo, DaroRewardItem>? IDaroPlatform.OnEarnedReward   { set => _onEarnedReward   = value; }
         Action<string, DaroAdInfo>?                 IDaroPlatform.OnAdHidden       { set => _onAdHidden       = value; }
         Action<string, DaroAdInfo, DaroRevenueInfo>? IDaroPlatform.OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
+        Action<string, DaroAdInfo>?                 IDaroPlatform.OnAdPreloaded       { set => _onAdPreloaded       = value; }
+        Action<string, DaroAdLoadError>?            IDaroPlatform.OnAdFailedToPreload { set => _onAdFailedToPreload = value; }
 
         // ── Banner ad operations ─────────────────────────────────────────────
 
@@ -89,6 +93,17 @@ namespace Daro.Internal
             DaroLog.Verbose("Banner", $"Platform[Android].CreateBanner adUnit='{adUnitKey}'");
             CreateAdObject(adUnitKey, DaroAdFormat.Banner,
                 "so.daro.unity.DaroUnityBannerAd");
+        }
+
+        public void PreloadBanner(string adUnitKey, DaroBannerSize size)
+        {
+            DaroLog.Verbose("Banner", $"Platform.PreloadBanner adUnit='{adUnitKey}' size={size} adObj={_adObjects.ContainsKey(adUnitKey)}");
+            if (!_adObjects.TryGetValue(adUnitKey, out var adObj)) return;
+            if (!_proxies.TryGetValue(adUnitKey, out var proxy)) return;
+            // Kotlin shim: preload(activity, bannerSizeOrdinal, callback). generation 을 올리지
+            // 않는다 — 표시 중인 배너의 콜백을 무효화하면 안 되고, preload 결과는 프록시
+            // 동일성으로만 거른다. 컨트롤러는 뷰와 같은 Activity ( Unity 의 단일 Activity ) 로 만든다.
+            adObj.Call("preload", _activity, (int)size, proxy);
         }
 
         public void LoadBanner(string adUnitKey, DaroBannerSize size)
@@ -428,6 +443,15 @@ namespace Daro.Internal
             {
                 NextBannerGeneration(adUnitKey);
             }
+        }
+
+        // Preload 결과용. Load 의 generation 은 보지 않는다 — 로딩 중에 Load 가 광고를 가져간
+        // 경우에도 ( 핸드오프 ) OnAdPreloaded 가 나가야 한다. 객체 교체·해제는 프록시가 바뀌어 걸린다.
+        private bool IsCurrentBannerProxy(string adUnitKey, DaroBannerCallbackProxy proxy)
+        {
+            return !_disposed
+                && _proxies.TryGetValue(adUnitKey, out var currentProxy)
+                && ReferenceEquals(currentProxy, proxy);
         }
 
         private bool IsCurrentBannerCallback(
@@ -799,6 +823,30 @@ namespace Daro.Internal
                     errorMessage, adUnitKey, errorCode);
                 EnqueueIfCurrent(adUnitKey, generation,
                     () => _platform._onAdFailedToLoad?.Invoke(adUnitKey, err));
+            }
+
+            public void onAdPreloaded(string adUnitKey, int latencyMs, string? mediationPlatform, string? adNetwork)
+            {
+                if (_platform._disposed) return;
+                var info = MakeInfo(adUnitKey, latencyMs, mediationPlatform, adNetwork);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (!_platform.IsCurrentBannerProxy(adUnitKey, this)) return;
+                    _platform._onAdPreloaded?.Invoke(adUnitKey, info);
+                });
+            }
+
+            public void onAdFailedToPreload(string adUnitKey, int errorCode, string errorMessage, int latencyMs)
+            {
+                if (_platform._disposed) return;
+                var err = new DaroAdLoadError(
+                    DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode),
+                    errorMessage, adUnitKey, errorCode);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (!_platform.IsCurrentBannerProxy(adUnitKey, this)) return;
+                    _platform._onAdFailedToPreload?.Invoke(adUnitKey, err);
+                });
             }
 
             public void onAdImpression(string adUnitKey, int generation, int latencyMs, string? mediationPlatform, string? adNetwork)

@@ -516,6 +516,23 @@ namespace Daro
                 banner?.FireOnAdHidden(info);
             };
 
+            // Preload 결과는 배너 전용 슬롯이다 ( 네이티브는 INativeAdEventSink 로 직접 간다 ).
+            platform.OnAdPreloaded = (adUnitKey, info) =>
+            {
+                var banner = DaroAdInstanceRegistry.Find<DaroBannerAd>(
+                    DaroAdFormat.Banner, adUnitKey);
+                DaroLog.Verbose("Sdk", $"OnAdPreloaded adUnit='{adUnitKey}' → Banner (match={banner != null})");
+                banner?.FireOnAdPreloaded(info);
+            };
+
+            platform.OnAdFailedToPreload = (adUnitKey, error) =>
+            {
+                var banner = DaroAdInstanceRegistry.Find<DaroBannerAd>(
+                    DaroAdFormat.Banner, adUnitKey);
+                DaroLog.Verbose("Sdk", $"OnAdFailedToPreload adUnit='{adUnitKey}' code={error.Code} → Banner (match={banner != null})");
+                banner?.FireOnAdFailedToPreload(error);
+            };
+
             platform.OnAdRevenuePaid = (adUnitKey, info, revenue) =>
             {
                 RoutePentaInfo(adUnitKey, info,
@@ -526,7 +543,7 @@ namespace Daro
                     lp => lp.FireOnAdRevenuePaid(info, revenue));
             };
 
-            DaroLog.Verbose("Sdk", "WirePlatformEvents complete — 10 event slots installed");
+            DaroLog.Verbose("Sdk", "WirePlatformEvents complete — 12 event slots installed");
         }
 
         // ── Routing helpers ──────────────────────────────────────────────────

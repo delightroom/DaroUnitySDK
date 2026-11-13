@@ -68,6 +68,33 @@ public sealed class BannerHost : MonoBehaviour
 
 `OnAdShown` fires once after a successful `Load()` displays the banner, and again after each `Hide()` → `Show()` re-display. Banner has no native show callback, so the SDK synthesizes this event.
 
+## `Preload()` — fetch ahead, display later
+
+`Preload()` fetches one banner without creating or attaching the native overlay. Nothing is displayed and no impression can occur. The next `Load()` takes the preloaded ad over instead of making a new request:
+
+```csharp
+_banner = new DaroBannerAd(adUnitKey, DaroBannerSize.Standard, DaroBannerPosition.BottomCenter);
+_banner.OnAdPreloaded       += info => Debug.Log("Banner preloaded");
+_banner.OnAdFailedToPreload += err  => Debug.LogWarning($"Banner preload failed: {err.Code}");
+_banner.Preload();          // e.g. while a loading screen is up
+
+// later, when the banner should appear
+_banner.Load();             // shows the preloaded ad → OnAdLoaded, OnAdShown
+```
+
+| Situation at `Load()` | What happens |
+|---|---|
+| A preloaded ad is ready | It is displayed right away. |
+| The preload is still in flight | `Load()` waits for that result — `OnAdPreloaded` then `OnAdLoaded`. |
+| The preload failed (`OnAdFailedToPreload`) | `Load()` runs a normal load and reports its own `OnAdLoaded` / `OnAdFailedToLoad`. |
+| The ad sat unused for more than 10 minutes | It is discarded and `Load()` runs a normal load. |
+| `Preload()` was never called | `Load()` behaves exactly as before. |
+
+- A preloaded ad is handed over **once**. A second `Load()` is a normal load; call `Preload()` again to prepare the next one.
+- Calling `Preload()` again while one is in flight, or while a fresh ad is held, is ignored.
+- `IsReady()` stays `false` after `OnAdPreloaded` — it turns `true` at `OnAdLoaded`, so `Show()` rules are unchanged.
+- `Dispose()` releases an ad that was preloaded but never loaded. Dispose the banner when its screen goes away even if you only preloaded.
+
 ## `Hide()` vs `Dispose()` — also different things
 
 | Call | What it does |

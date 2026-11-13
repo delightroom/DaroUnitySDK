@@ -31,6 +31,16 @@ namespace Daro.Internal
         private readonly DaroEditorSettings _settings;
         private bool _disposed;
         private bool _loaded;
+
+        // Preload mock — 한 개를 받아 두고 다음 Load 가 한 번 넘겨받는다 ( DaroEditorPlatform 의 배너와 같은 규칙 ).
+        private DaroEditorPreloadPhase _preloadPhase;
+        private int   _preloadGeneration;
+        private float _preloadedAtRealtime;
+        private int   _preloadLatencyMs;
+        private int   _claimedPreloadGeneration;   // Load 가 가져간 로딩 중 preload ( 0 = 없음 )
+
+        /// <summary>Load 가 preload 를 넘겨받은 횟수 ( 받아 둔 것 + 로딩 중 연결 ). 테스트 관찰용.</summary>
+        internal int PreloadConsumeCount { get; private set; }
         private readonly List<CtaRectCall> _ctaRectCalls = new();
 
         internal IReadOnlyList<CtaRectCall> CtaRectCalls => _ctaRectCalls;
@@ -85,7 +95,119 @@ namespace Daro.Internal
             DaroLog.Verbose("Native", $"Handle[Editor].Load adUnit='{_adUnitKey}' icon={iconWidth}x{iconHeight} disposed={_disposed}");
             if (_disposed) return;
             MainThreadDispatcher.EnsureCreated();
+
+            switch (_preloadPhase)
+            {
+                case DaroEditorPreloadPhase.Loaded:
+                    _preloadPhase = DaroEditorPreloadPhase.None;
+                    if (IsPreloadExpired()) break;          // 만료 → 일반 로드
+                    PreloadConsumeCount++;
+                    DeliverLoaded(_preloadLatencyMs);       // 받아 둔 것은 지연 없이 넘긴다
+                    return;
+
+                case DaroEditorPreloadPhase.Loading:
+                    // 결과를 기다린다 — SimulatePreload 가 성공이면 에셋을 내고, 실패면 일반 로드로 넘긴다.
+                    // 가져간 것은 더 이상 "들고 있는 preload" 가 아니다: 기기처럼 다음 Preload 가 새로 받는다.
+                    _preloadPhase             = DaroEditorPreloadPhase.None;
+                    _claimedPreloadGeneration = _preloadGeneration;
+                    PreloadConsumeCount++;
+                    return;
+
+                default:
+                    _preloadPhase = DaroEditorPreloadPhase.None;   // 실패 기록은 한 번 쓰고 지운다
+                    break;
+            }
+
             MainThreadDispatcher.RunCoroutine(SimulateLoad());
+        }
+
+        public void Preload()
+        {
+            DaroLog.Verbose("Native", $"Handle[Editor].Preload adUnit='{_adUnitKey}' disposed={_disposed} phase={_preloadPhase}");
+            if (_disposed) return;
+            // 로딩 중이거나 TTL 안의 광고를 들고 있으면 무시한다. 만료·실패·소비 뒤에는 다시 받는다.
+            if (_preloadPhase == DaroEditorPreloadPhase.Loading) return;
+            if (_preloadPhase == DaroEditorPreloadPhase.Loaded && !IsPreloadExpired()) return;
+
+            _preloadPhase = DaroEditorPreloadPhase.Loading;
+            MainThreadDispatcher.EnsureCreated();
+            MainThreadDispatcher.RunCoroutine(SimulatePreload(++_preloadGeneration));
+        }
+
+        private bool IsPreloadExpired() =>
+            Time.realtimeSinceStartup - _preloadedAtRealtime > _settings.preloadTtlSeconds;
+
+        private IEnumerator SimulatePreload(int preloadGeneration)
+        {
+            // Snapshot settings so mid-delay Inspector tweaks don't desync this run.
+            var delay        = _settings.loadDelaySeconds;
+            var successRate  = _settings.loadSuccessRate;
+            var latencyMs    = _settings.loadLatencyMs;
+            var errorCode    = _settings.loadErrorCode;
+            var errorMessage = _settings.loadErrorMessage ?? string.Empty;
+
+            if (delay > 0f)
+                yield return new WaitForSecondsRealtime(delay);
+
+            if (_disposed) yield break;
+
+            // 로딩 중에 Load 가 가져갔는가 ( 핸드오프 ). 그렇다면 결과를 들고 있지 않고 넘긴다.
+            // 가져간 요청은 _preloadPhase 를 건드리지 않는다 — 그사이 다음 Preload 가 시작됐을 수 있다.
+            var claimed = _claimedPreloadGeneration == preloadGeneration;
+            if (claimed) _claimedPreloadGeneration = 0;
+            else if (_preloadGeneration != preloadGeneration) yield break;
+
+            if (DaroEditorMockProbability.RollSuccess(successRate))
+            {
+                if (!claimed)
+                {
+                    _preloadPhase        = DaroEditorPreloadPhase.Loaded;
+                    _preloadedAtRealtime = Time.realtimeSinceStartup;
+                    _preloadLatencyMs    = latencyMs;
+                }
+
+                double? latency = latencyMs < 0 ? (double?)null : latencyMs;
+                var adInfo = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_disposed) return;
+                    _sink.OnAdPreloaded(adInfo);
+                });
+
+                if (claimed) DeliverLoaded(latencyMs);
+            }
+            else
+            {
+                if (!claimed) _preloadPhase = DaroEditorPreloadPhase.Failed;
+
+                var mapped = DaroAdErrorCodeMapper.ToLoadErrorCode(errorCode);
+                var err    = new DaroAdLoadError(mapped, errorMessage, _adUnitKey, errorCode);
+                MainThreadDispatcher.Enqueue(() =>
+                {
+                    if (_disposed) return;
+                    _sink.OnAdFailedToPreload(err);
+                });
+
+                // 가져간 뒤의 실패는 일반 로드로 폴백한다.
+                if (claimed) MainThreadDispatcher.RunCoroutine(SimulateLoad());
+            }
+        }
+
+        // 로드 성공의 마무리. 일반 로드와 preload 소비가 같이 쓴다.
+        private void DeliverLoaded(int latencyMs)
+        {
+            _loaded = true;
+
+            // -1 sentinel → null latency; positive → millis as-is.
+            double? latency = latencyMs < 0 ? (double?)null : latencyMs;
+            var adInfo     = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency);
+            var nativeInfo = BuildMockNativeAdInfo(_adUnitKey);
+
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                if (_disposed) return;
+                _sink.OnAdLoaded(adInfo, nativeInfo);
+            });
         }
 
         private IEnumerator SimulateLoad()
@@ -105,18 +227,7 @@ namespace Daro.Internal
             var success = DaroEditorMockProbability.RollSuccess(successRate);
             if (success)
             {
-                _loaded = true;
-
-                // -1 sentinel → null latency; positive → millis as-is.
-                double? latency = latencyMs < 0 ? (double?)null : latencyMs;
-                var adInfo     = new DaroAdInfo(DaroAdFormat.Native, _adUnitKey, latency);
-                var nativeInfo = BuildMockNativeAdInfo(_adUnitKey);
-
-                MainThreadDispatcher.Enqueue(() =>
-                {
-                    if (_disposed) return;
-                    _sink.OnAdLoaded(adInfo, nativeInfo);
-                });
+                DeliverLoaded(latencyMs);
             }
             else
             {

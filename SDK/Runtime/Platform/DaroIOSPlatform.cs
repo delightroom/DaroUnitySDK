@@ -43,6 +43,8 @@ namespace Daro.Internal
         private Action<string, DaroAdInfo, DaroRewardItem>? _onEarnedReward;
         private Action<string, DaroAdInfo>?                 _onAdHidden;
         private Action<string, DaroAdInfo, DaroRevenueInfo>? _onAdRevenuePaid;
+        private Action<string, DaroAdInfo>?                 _onAdPreloaded;
+        private Action<string, DaroAdLoadError>?            _onAdFailedToPreload;
 
         // ── Static state for [MonoPInvokeCallback] dispatch ──────────────
         // The static handler can only access static state — the instance is
@@ -219,6 +221,8 @@ namespace Daro.Internal
         public Action<string, DaroAdInfo, DaroRewardItem>? OnEarnedReward   { set => _onEarnedReward   = value; }
         public Action<string, DaroAdInfo>?                 OnAdHidden       { set => _onAdHidden       = value; }
         public Action<string, DaroAdInfo, DaroRevenueInfo>? OnAdRevenuePaid { set => _onAdRevenuePaid  = value; }
+        public Action<string, DaroAdInfo>?                 OnAdPreloaded       { set => _onAdPreloaded       = value; }
+        public Action<string, DaroAdLoadError>?            OnAdFailedToPreload { set => _onAdFailedToPreload = value; }
 
         // ── Banner (native-view-overlay-on-GL-surface) ───────────────────
         //
@@ -231,6 +235,12 @@ namespace Daro.Internal
         {
             DaroLog.Verbose("Banner", $"Platform[iOS].CreateBanner adUnit='{adUnitKey}'");
             DaroUnity_CreateBanner(adUnitKey);
+        }
+
+        public void PreloadBanner(string adUnitKey, DaroBannerSize size)
+        {
+            DaroLog.Verbose("Banner", $"Platform[iOS].PreloadBanner adUnit='{adUnitKey}' size={size}");
+            DaroUnity_PreloadBanner(adUnitKey, (int)size);
         }
 
         public void LoadBanner(string adUnitKey, DaroBannerSize size)
@@ -301,6 +311,10 @@ namespace Daro.Internal
             _onEarnedReward?.Invoke(adUnitKey, info, reward);
         void IDaroIosEventSink.RevenuePaid(string adUnitKey, DaroAdInfo info, DaroRevenueInfo revenue) =>
             _onAdRevenuePaid?.Invoke(adUnitKey, info, revenue);
+        void IDaroIosEventSink.Preloaded(string adUnitKey, DaroAdInfo info) =>
+            _onAdPreloaded?.Invoke(adUnitKey, info);
+        void IDaroIosEventSink.FailedToPreload(string adUnitKey, DaroAdLoadError error) =>
+            _onAdFailedToPreload?.Invoke(adUnitKey, error);
 
         void IDaroIosEventSink.SdkInitialized()
         {
@@ -368,6 +382,7 @@ namespace Daro.Internal
         // Defined in SDK/Plugins/iOS/DaroUnityBannerAd.mm. No IsReady — banner
         // is an always-on overlay with no "ready" notion separate from load.
         [DllImport(DLL)] private static extern void DaroUnity_CreateBanner(string adUnitKey);
+        [DllImport(DLL)] private static extern void DaroUnity_PreloadBanner(string adUnitKey, int sizeOrdinal);
         [DllImport(DLL)] private static extern void DaroUnity_LoadBanner(string adUnitKey, int sizeOrdinal);
         [DllImport(DLL)] private static extern void DaroUnity_ShowBanner(string adUnitKey);
         [DllImport(DLL)] private static extern void DaroUnity_HideBanner(string adUnitKey);

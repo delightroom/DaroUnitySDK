@@ -93,6 +93,13 @@ namespace Daro.Internal
             DaroUnity_NativeAd_Load(_handleId, iconWidth, iconHeight);
         }
 
+        public void Preload()
+        {
+            DaroLog.Verbose("Native", $"Handle[iOS].Preload adUnit='{_adUnitKey}/h{_handleId}' disposed={_disposed}");
+            if (_disposed) return;
+            DaroUnity_NativeAd_Preload(_handleId);
+        }
+
         public bool SupportsNativeMedia => true;
         public void SetMediaScreenRect(Rect rect, bool visible, bool touchEnabled)
         {
@@ -262,6 +269,21 @@ namespace Daro.Internal
                     Safely(() => handle._sink.OnAdFailedToLoad(err));
                     break;
                 }
+                case "adPreloaded":
+                {
+                    var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
+                    Safely(() => handle._sink.OnAdPreloaded(info));
+                    break;
+                }
+                case "adFailedToPreload":
+                {
+                    var raw = DaroJsonHelpers.GetJsonInt   (eventJson, "errorCode");
+                    var msg = DaroJsonHelpers.GetJsonString(eventJson, "errorMessage") ?? string.Empty;
+                    var err = new DaroAdLoadError(
+                        DaroAdErrorCodeMapper.ToLoadErrorCode(raw), msg, adUnitKey, raw);
+                    Safely(() => handle._sink.OnAdFailedToPreload(err));
+                    break;
+                }
                 case "adImpression":
                 {
                     var info = DaroIOSEventDispatcher.ReadAdInfo(eventJson, DaroAdFormat.Native, adUnitKey);
@@ -330,6 +352,8 @@ namespace Daro.Internal
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Load(
             int handleId, int iconWidth, int iconHeight);
+
+        [DllImport(DLL)] private static extern void DaroUnity_NativeAd_Preload(int handleId);
 
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_NotifyVisible(int handleId);
         [DllImport(DLL)] private static extern void DaroUnity_NativeAd_NotifyHidden (int handleId);
