@@ -123,7 +123,7 @@ If you still see a code-signing error:
 
 ### SafeDK errors during an Android Release build
 
-If a Release build fails in a `safedk*` or `process...Manifest` task with a Configuration Cache error, open **Daro > Integration Manager** and select **Enabled** for **Android > SafeDK Configuration Cache Workaround**, then export/build Android again. The SDK uses Android SDK **2.0.2** and Gradle plugin **2.0.3**. The exported `gradle.properties` contains `daro.safedkConfigurationCacheWorkaround=true`.
+If a Release build fails in a `safedk*` or `process...Manifest` task with a Configuration Cache error, open **Daro > Integration Manager** and select **Enabled** for **Android > SafeDK Configuration Cache Workaround**, then export/build Android again. The SDK uses Android SDK **2.1.2-rc.1** and Gradle plugin **2.0.5**. The exported `gradle.properties` contains `daro.safedkConfigurationCacheWorkaround=true`.
 
 **Disabled** writes `false`. **Preserve existing setting** leaves the current Gradle value intact; it does not undo a previous explicit choice. New and existing Settings assets default to preserving the current value. This setting does not change the global Configuration Cache flag or iOS configuration.
 
